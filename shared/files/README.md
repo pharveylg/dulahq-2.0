@@ -28,7 +28,11 @@ trust a key passed from the client.
 
 - `membership_export_requests.export_file_id` (Club Manager) — once a
   club/guardian's export is generated, the file lives here.
-- Media albums — planned, not built yet (see `shared/media`).
+- `public.media` (Club Manager, added 2026-08-27) — club photo gallery.
+  Confirmed via the Cloudflare API that the `dula-hq-2-0-files` bucket
+  exists (created 2026-08-20) and verified end-to-end (upload, signed-URL
+  fetch, delete) against it — this superseded the "no bucket confirmed
+  created" note that used to be here.
 
 ## Required environment variables
 

@@ -136,30 +136,38 @@ type-check) before being handed over — it compiles cleanly. Sign in with
 an existing Dula HQ account (this app doesn't create new ones — see
 `docs/club-manager-design.md` for why).
 
-**What's built so far (as of 2026-08-27): club setup, staff management,
-player/guardian registration.**
+**What's built so far (as of 2026-08-27): the whole Club Manager core
+list except messaging.**
 - `/clubs` — list clubs (org-scoped via `clubs.org_id`, added 2026-08-27
   — see "Tenant fencing fix" in `docs/club-manager-design.md`); an org
   admin or platform admin sees a "New club" button; platform admins also
   see demo-data load/wipe controls
 - `/clubs/new` — create a club, picking which organization it belongs to
 - `/clubs/[clubId]` — rename the club, link existing (unclaimed) teams to
-  it, add/remove staff by email lookup, and for coach/team_manager roles,
-  assign/unassign them to specific linked teams (via the existing
-  `user_assigned_teams` table)
+  it, add/remove staff by email lookup, assign/unassign coach/
+  team_manager staff to specific linked teams (via the existing
+  `user_assigned_teams` table), schedule/view trips, post/pin/delete
+  announcements, upload/delete club photos
+- `/clubs/[clubId]/trips/[tripId]` — a trip's passengers (any player on
+  any of the club's teams) and transportation entries
 - `/clubs/[clubId]/teams/[teamId]` — a linked team's roster: add/remove
-  players, add/remove guardians per player (any `club_staff` role, not
-  just `club_admin` — required a follow-up RLS migration,
-  `club_manager_player_guardian_write_access`, since the original
-  players/guardians/player_guardians policies only allowed the platform
-  admin or Tournament Manager's own separate team-role mechanism to
-  write)
+  players; per player — guardians, fee charges + payments, and
+  membership periods; schedule/cancel/complete training sessions
+- `/clubs/[clubId]/teams/[teamId]/training/[sessionId]` — per-player
+  attendance for one training session
 
-**Not built yet:** training/attendance, fees, trips, announcements,
-media, messaging. Unlike players/guardians, `training_sessions`/
-`fee_charges`/`trips`/`announcements` already have club-staff-scoped
-write RLS from the original Club Manager migration — no schema
-prerequisite blocks building their UI next.
+Five of six new-table-adjacent RLS gaps found while building this were
+the same shape: a table only had SELECT (or platform-admin-only) policies,
+so no ordinary club_admin/coach could actually use the feature —
+`club_manager_player_guardian_write_access`, `club_manager_payments_write_access`,
+`club_manager_trips_write_access`, `club_manager_announcements_write_access`,
+plus the original `club_manager_tenant_fencing`. `training_sessions`/
+`attendance`/`memberships` already had correct club-staff-scoped RLS from
+the original migration — no fix needed there. `media` is a new table
+(`club_manager_media`), since none existed for it at all.
+
+**Not built:** messaging — scoped separately (2026-08-27), see the Status
+table below for why.
 
 ## Running the RLS test suite
 
@@ -192,8 +200,9 @@ npm run test:rls
 | Component | Status |
 |---|---|
 | Tournament Manager (`dula-hq` `index.html`) — real usage is `platform_admins`/`org_members`/`organizations`/`tournaments`, with per-tournament data as JSONB in `tournaments.data` | Live in production — pre-existing, not built by this repo. `teams`/`players`/`matches`/`referees` tables exist but are unused (0 rows). |
-| Club Manager — schema, RLS | **Live in production** — `supabase/migrations/20260820032053-20260820032148`, tenant-fenced by `club_manager_tenant_fencing` (2026-08-27) |
-| Club Manager — application code (UI, API routes) | Club setup, staff management, player/guardian registration built. Training/attendance, fees, trips, announcements, media, messaging not started. |
-| Shared Platform Services — Tenancy | **Exists**: `organizations`/`org_members`/`platform_admins`, live since 2026-07-12, used by `dula-hq`'s multi-tenant login/provisioning. Identity is the existing `public.users`/`auth.users` email-matching pattern (a second, separate identity path from org membership — see `docs/club-manager-design.md`). The rest of Platform Services (Subscriptions/Entitlements/Billing/Notifications/Messaging/Media/Files) is not built. |
+| Club Manager — schema, RLS | **Live in production**, as of 2026-08-27: original `supabase/migrations/20260820032053-20260820032148`, plus that day's follow-ups — `club_manager_tenant_fencing`, `club_manager_player_guardian_write_access`, `club_manager_payments_write_access`, `club_manager_trips_write_access`, `club_manager_announcements_write_access`, `club_manager_media` (new table). Five of those six fixed tables that had read-only or platform-admin-only RLS — no path for an ordinary club_admin/coach to actually use the feature. `memberships` was the one table that already had correct club-staff RLS from the original migration. |
+| Club Manager — application code (UI, API routes) | **Built (2026-08-27): club setup, staff management, player/guardian registration, training/attendance, fees/payments, membership periods, trips (passengers + transportation), announcements, club photo gallery (R2-backed).** Not built: messaging — scoped separately, see below. |
+| Shared Platform Services — Tenancy | **Exists**: `organizations`/`org_members`/`platform_admins`, live since 2026-07-12, used by `dula-hq`'s multi-tenant login/provisioning. Identity is the existing `public.users`/`auth.users` email-matching pattern (a second, separate identity path from org membership — see `docs/club-manager-design.md`). Subscriptions/Entitlements/Billing/Notifications not built. |
+| Shared Platform Services — Files/Media | **Live**: `shared/files/lib/r2.ts` against the real `dula-hq-2-0-files` R2 bucket (confirmed existing via the Cloudflare API, contrary to this table's earlier claim), backing `public.media` (Club Manager's photo gallery) and ready for `membership_export_requests.export_file_id`. |
+| Shared Platform Services — Messaging | Not built. Deliberately scoped separately (2026-08-27) — no schema exists at all, and `architecture-overview.md`'s design (auto-managed channel membership as players move age groups / join tournaments / join trips, real-time delivery) is a genuine subsystem, not a same-shaped extension of an existing table like everything else built this session. |
 | Club Manager ↔ Tournament Manager integration | Not built. Deliberately deferred — see "Integration decision" above. |
-| Cloudflare R2 (Files) | Helper code (`shared/files/lib/r2.ts`) written; no metadata table in Postgres yet, no bucket confirmed created |
