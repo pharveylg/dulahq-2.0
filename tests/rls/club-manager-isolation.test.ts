@@ -23,6 +23,12 @@
  * docs/club-manager-design.md's "Testing strategy" section). Create a
  * branch via the Supabase MCP `create_branch` tool (or the dashboard)
  * and point SUPABASE_URL/keys at the branch, never at production.
+ *
+ * 2026-08-27: clubs.org_id is now NOT NULL (see "Tenant fencing fix" in
+ * club-manager-design.md) -- fixtures below create two throwaway
+ * organizations and assign clubA/clubB to them, and a new describe block
+ * exercises the org-scoped RLS that migration added (clubs readable
+ * within org / org admin can insert clubs / a different org can't).
  */
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
@@ -33,6 +39,8 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+let orgA: { id: string };
+let orgB: { id: string };
 let clubA: { id: string };
 let clubB: { id: string };
 let categoryId: string; // teams.category_id is NOT NULL; needs a value, doesn't need to reference a real category for these tests
@@ -46,6 +54,7 @@ let coachA1Client: ReturnType<typeof createClient>;
 let clubAdminAClient: ReturnType<typeof createClient>;
 let clubStaffBClient: ReturnType<typeof createClient>;
 let guardianOfA1Client: ReturnType<typeof createClient>;
+let orgAdminAClient: ReturnType<typeof createClient>;
 
 /**
  * Creates BOTH the auth.users row and the matching public.users row --
@@ -82,9 +91,23 @@ async function signInAs(email: string) {
 beforeAll(async () => {
   categoryId = crypto.randomUUID(); // teams.category_id has no FK in the live schema; any uuid satisfies NOT NULL
 
-  const { data: cA } = await adminClient.from('clubs').insert({ name: 'RLS Test Club A' }).select().single();
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const { data: oA } = await adminClient
+    .from('organizations')
+    .insert({ slug: `rls-test-org-a-${suffix}`, name: 'RLS Test Org A' })
+    .select()
+    .single();
+  orgA = oA;
+  const { data: oB } = await adminClient
+    .from('organizations')
+    .insert({ slug: `rls-test-org-b-${suffix}`, name: 'RLS Test Org B' })
+    .select()
+    .single();
+  orgB = oB;
+
+  const { data: cA } = await adminClient.from('clubs').insert({ name: 'RLS Test Club A', org_id: orgA.id }).select().single();
   clubA = cA;
-  const { data: cB } = await adminClient.from('clubs').insert({ name: 'RLS Test Club B' }).select().single();
+  const { data: cB } = await adminClient.from('clubs').insert({ name: 'RLS Test Club B', org_id: orgB.id }).select().single();
   clubB = cB;
 
   const { data: tA1 } = await adminClient
@@ -133,6 +156,15 @@ beforeAll(async () => {
   const clubAdminA = await createTestUser('admin-a@rls-test.local', 'audience');
   const clubStaffB = await createTestUser('admin-b@rls-test.local', 'audience');
   const guardianA1 = await createTestUser('guardian-a1@rls-test.local', 'audience');
+  // org_members role, not public.users.role -- this is the org-system's
+  // own admin concept, separate from and not implied by users.role.
+  const orgAdminA = await createTestUser('org-admin-a@rls-test.local', 'audience');
+  await adminClient.from('org_members').insert({
+    org_id: orgA.id,
+    email: 'org-admin-a@rls-test.local',
+    user_id: orgAdminA.publicUser.id,
+    role: 'admin',
+  });
 
   // Coach A1 is assigned to Team A1 via the EXISTING user_assigned_teams
   // mechanism -- this is what makes is_assigned_to_team() true for them.
@@ -163,6 +195,7 @@ beforeAll(async () => {
   clubAdminAClient = await signInAs('admin-a@rls-test.local');
   clubStaffBClient = await signInAs('admin-b@rls-test.local');
   guardianOfA1Client = await signInAs('guardian-a1@rls-test.local');
+  orgAdminAClient = await signInAs('org-admin-a@rls-test.local');
 });
 
 afterAll(async () => {
@@ -172,6 +205,7 @@ afterAll(async () => {
   await adminClient.from('players').delete().in('id', [playerA1.id, playerA2.id, playerB.id]);
   await adminClient.from('teams').delete().in('id', [teamA1.id, teamA2.id]);
   await adminClient.from('clubs').delete().in('id', [clubA.id, clubB.id]);
+  await adminClient.from('organizations').delete().in('id', [orgA.id, orgB.id]);
 
   const { data: users } = await adminClient.auth.admin.listUsers();
   for (const email of [
@@ -179,6 +213,7 @@ afterAll(async () => {
     'admin-a@rls-test.local',
     'admin-b@rls-test.local',
     'guardian-a1@rls-test.local',
+    'org-admin-a@rls-test.local',
   ]) {
     await adminClient.from('users').delete().eq('email', email); // public.users row
     const u = users.users.find((u) => u.email === email);
@@ -195,6 +230,50 @@ describe('club-level isolation: clubs / club_staff', () => {
   it('club_admin at Club B CANNOT see Club A staff roster', async () => {
     const { data } = await clubStaffBClient.from('club_staff').select('*').eq('club_id', clubA.id);
     expect(data).toHaveLength(0);
+  });
+});
+
+describe('org-level fencing: clubs.org_id (added 2026-08-27)', () => {
+  it('org admin of Org A CAN insert a club into Org A', async () => {
+    const { data, error } = await orgAdminAClient
+      .from('clubs')
+      .insert({ name: 'Org A New Club', org_id: orgA.id })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    expect(data?.org_id).toBe(orgA.id);
+    if (data) await adminClient.from('clubs').delete().eq('id', data.id);
+  });
+
+  it('org admin of Org A CANNOT insert a club into Org B', async () => {
+    const { data, error } = await orgAdminAClient
+      .from('clubs')
+      .insert({ name: 'Should Not Exist', org_id: orgB.id })
+      .select();
+    expect(data === null || data.length === 0).toBe(true);
+    // Either RLS blocks the insert outright (error) or blocks the
+    // subsequent select of the inserted row -- both are an effective
+    // block; only a genuinely-successful cross-org insert should fail
+    // this test.
+    if (!error) {
+      const { data: leaked } = await adminClient.from('clubs').select('id').eq('name', 'Should Not Exist').eq('org_id', orgB.id);
+      expect(leaked).toHaveLength(0);
+    }
+  });
+
+  it('org admin of Org A CAN read Club A (own org)', async () => {
+    const { data } = await orgAdminAClient.from('clubs').select('*').eq('id', clubA.id);
+    expect(data).toHaveLength(1);
+  });
+
+  it('org admin of Org A CANNOT read Club B (different org, not club staff there)', async () => {
+    const { data } = await orgAdminAClient.from('clubs').select('*').eq('id', clubB.id);
+    expect(data).toHaveLength(0);
+  });
+
+  it('club_admin of Club B can still read Club B even without any org_members row (club_staff fallback)', async () => {
+    const { data } = await clubStaffBClient.from('clubs').select('*').eq('id', clubB.id);
+    expect(data).toHaveLength(1);
   });
 });
 

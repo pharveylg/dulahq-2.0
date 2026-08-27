@@ -1,17 +1,36 @@
+/* Ported from the live Dula HQ ("dula-hq" repo, index.html) light
+   "sporty" theme -- same token values, angular clip-path buttons,
+   Oswald headings/buttons, Inter body. Kept the variable *names* this
+   app already used (--bg, --accent, etc.) rather than renaming to
+   Dula HQ's (--n3, --navacc, etc.), so no component files needed to
+   change -- only what these tokens point to. */
 :root {
-  --bg: #14171B;
-  --surface: #1B1F24;
-  --surface-raised: #21262D;
-  --border: #2B3038;
-  --text: #ECEEF1;
-  --text-muted: #9BA3AE;
-  --accent: #3F8F5F;
-  --accent-hover: #4CA36E;
-  --warn: #C98A3B;
-  --danger: #C9573B;
+  --bg: #F1F5F9;
+  --surface: #FFFFFF;
+  --surface-raised: #F1F5F9;
+  --border: #E2E8F0;
+  --text: #0F172A;
+  --text-muted: #64748B;
+  --accent: #15803D;
+  --accent-hover: #1C9A4B;
+  --accent-soft: rgba(22, 163, 74, .12);
+  --accent-soft-border: rgba(22, 163, 74, .35);
+  --on-accent: #fff;
+  --warn: #a35a06;
+  --warn-soft: rgba(217, 119, 6, .1);
+  --warn-soft-border: rgba(217, 119, 6, .3);
+  --danger: #DC2626;
+  --danger-soft: rgba(220, 38, 38, .1);
+  --danger-soft-border: rgba(220, 38, 38, .3);
+  --blue: #2563eb;
+  --blue-soft: rgba(37, 99, 235, .08);
+  --blue-soft-border: rgba(37, 99, 235, .25);
   --radius: 8px;
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --shadow: 0 4px 15px rgba(0, 0, 0, .04), 0 8px 24px rgba(0, 0, 0, .03);
+  --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-heading: 'Oswald', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color-scheme: light;
 }
 
 * {
@@ -36,6 +55,11 @@ input, select, button, textarea {
   color: inherit;
 }
 
+h1, h2, h3, .brand {
+  font-family: var(--font-heading);
+  letter-spacing: .02em;
+}
+
 .container {
   max-width: 760px;
   margin: 0 auto;
@@ -45,6 +69,7 @@ input, select, button, textarea {
 .top-nav {
   border-bottom: 1px solid var(--border);
   padding: 16px 0;
+  background: var(--surface);
 }
 
 .top-nav .container {
@@ -55,8 +80,7 @@ input, select, button, textarea {
 
 .brand {
   font-weight: 700;
-  letter-spacing: -0.01em;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .brand .accent {
@@ -79,7 +103,6 @@ input, select, button, textarea {
 .page-header h1 {
   font-size: 22px;
   font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
 .page-header p.subtitle {
@@ -92,31 +115,42 @@ input, select, button, textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 16px;
-  border-radius: var(--radius);
+  padding: 9px 18px;
+  border-radius: 0;
   border: 1px solid var(--border);
-  background: var(--surface-raised);
+  background: var(--surface);
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .03em;
   text-decoration: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: transform .15s ease, background .15s ease, box-shadow .15s ease, border-color .15s ease;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
 }
 
 .btn:hover {
-  border-color: #3A4149;
+  border-color: #CBD5E1;
+  color: var(--text);
 }
 
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0B120D;
+  color: var(--on-accent);
   font-weight: 600;
+  box-shadow: 0 4px 10px var(--accent-soft-border);
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  box-shadow: 0 4px 15px var(--accent-soft-border);
+  transform: translateY(-1px);
+  color: var(--on-accent);
 }
 
 .btn-full {
@@ -129,6 +163,7 @@ input, select, button, textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
+  box-shadow: var(--shadow);
 }
 
 .card + .card {
@@ -165,22 +200,23 @@ input, select, button, textarea {
 }
 
 .chip {
-  font-family: var(--font-mono);
+  font-family: var(--font-heading);
   font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: .03em;
   text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 3px 9px;
+  border-radius: 2px;
   border: 1px solid var(--border);
+  background: transparent;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.chip-club_admin { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.chip-club_admin { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft-border); }
 .chip-staff { color: var(--text-muted); }
-.chip-coach { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
-.chip-team_manager { color: #6C9BD1; border-color: #33445C; }
+.chip-coach { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-soft-border); }
+.chip-team_manager { color: var(--blue); background: var(--blue-soft); border-color: var(--blue-soft-border); }
 
 .form-group {
   margin-bottom: 16px;
@@ -197,17 +233,19 @@ input, select, button, textarea {
 .form-group input,
 .form-group select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface-raised);
+  color: var(--text);
   font-size: 14px;
 }
 
 .form-group input:focus,
 .form-group select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .form-row {
@@ -239,10 +277,10 @@ input, select, button, textarea {
 }
 
 .section-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-heading);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 10px;
@@ -254,8 +292,9 @@ input, select, button, textarea {
   font-size: 13px;
   margin-bottom: 16px;
   text-decoration: none;
+  font-weight: 500;
 }
 
 .back-link:hover {
-  color: var(--text);
+  color: var(--accent);
 }
