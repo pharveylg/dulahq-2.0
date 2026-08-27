@@ -136,18 +136,30 @@ type-check) before being handed over — it compiles cleanly. Sign in with
 an existing Dula HQ account (this app doesn't create new ones — see
 `docs/club-manager-design.md` for why).
 
-**What's built so far: Club setup + staff management.**
-- `/clubs` — list all clubs; platform admins see a "New club" button
-  (RLS-enforced: only the `admin` role can insert a club)
-- `/clubs/new` — create a club
+**What's built so far (as of 2026-08-27): club setup, staff management,
+player/guardian registration.**
+- `/clubs` — list clubs (org-scoped via `clubs.org_id`, added 2026-08-27
+  — see "Tenant fencing fix" in `docs/club-manager-design.md`); an org
+  admin or platform admin sees a "New club" button; platform admins also
+  see demo-data load/wipe controls
+- `/clubs/new` — create a club, picking which organization it belongs to
 - `/clubs/[clubId]` — rename the club, link existing (unclaimed) teams to
   it, add/remove staff by email lookup, and for coach/team_manager roles,
   assign/unassign them to specific linked teams (via the existing
   `user_assigned_teams` table)
+- `/clubs/[clubId]/teams/[teamId]` — a linked team's roster: add/remove
+  players, add/remove guardians per player (any `club_staff` role, not
+  just `club_admin` — required a follow-up RLS migration,
+  `club_manager_player_guardian_write_access`, since the original
+  players/guardians/player_guardians policies only allowed the platform
+  admin or Tournament Manager's own separate team-role mechanism to
+  write)
 
-**Not built yet:** guardian/player registration, training/attendance,
-fees, trips, announcements — this was scoped to club setup + staff
-management first, per your direction.
+**Not built yet:** training/attendance, fees, trips, announcements,
+media, messaging. Unlike players/guardians, `training_sessions`/
+`fee_charges`/`trips`/`announcements` already have club-staff-scoped
+write RLS from the original Club Manager migration — no schema
+prerequisite blocks building their UI next.
 
 ## Running the RLS test suite
 
@@ -181,7 +193,7 @@ npm run test:rls
 |---|---|
 | Tournament Manager (`dula-hq` `index.html`) — real usage is `platform_admins`/`org_members`/`organizations`/`tournaments`, with per-tournament data as JSONB in `tournaments.data` | Live in production — pre-existing, not built by this repo. `teams`/`players`/`matches`/`referees` tables exist but are unused (0 rows). |
 | Club Manager — schema, RLS | **Live in production** — `supabase/migrations/20260820032053-20260820032148`, tenant-fenced by `club_manager_tenant_fencing` (2026-08-27) |
-| Club Manager — application code (UI, API routes) | Not started |
+| Club Manager — application code (UI, API routes) | Club setup, staff management, player/guardian registration built. Training/attendance, fees, trips, announcements, media, messaging not started. |
 | Shared Platform Services — Tenancy | **Exists**: `organizations`/`org_members`/`platform_admins`, live since 2026-07-12, used by `dula-hq`'s multi-tenant login/provisioning. Identity is the existing `public.users`/`auth.users` email-matching pattern (a second, separate identity path from org membership — see `docs/club-manager-design.md`). The rest of Platform Services (Subscriptions/Entitlements/Billing/Notifications/Messaging/Media/Files) is not built. |
 | Club Manager ↔ Tournament Manager integration | Not built. Deliberately deferred — see "Integration decision" above. |
 | Cloudflare R2 (Files) | Helper code (`shared/files/lib/r2.ts`) written; no metadata table in Postgres yet, no bucket confirmed created |
