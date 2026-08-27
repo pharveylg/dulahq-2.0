@@ -46,6 +46,7 @@ let clubB: { id: string };
 let categoryId: string; // teams.category_id is NOT NULL; needs a value, doesn't need to reference a real category for these tests
 let teamA1: { id: string };
 let teamA2: { id: string };
+let teamB1: { id: string };
 let playerA1: { id: string };
 let playerA2: { id: string };
 let playerB: { id: string };
@@ -129,6 +130,7 @@ beforeAll(async () => {
     .insert({ name: 'Club B - U15', category_id: categoryId, club_id: clubB.id })
     .select()
     .single();
+  teamB1 = tB1;
 
   const { data: pA1 } = await adminClient
     .from('players')
@@ -146,7 +148,7 @@ beforeAll(async () => {
 
   const { data: pB } = await adminClient
     .from('players')
-    .insert({ name: 'Player B', team_id: tB1.id })
+    .insert({ name: 'Player B', team_id: teamB1.id })
     .select()
     .single();
   playerB = pB;
@@ -274,6 +276,49 @@ describe('org-level fencing: clubs.org_id (added 2026-08-27)', () => {
   it('club_admin of Club B can still read Club B even without any org_members row (club_staff fallback)', async () => {
     const { data } = await clubStaffBClient.from('clubs').select('*').eq('id', clubB.id);
     expect(data).toHaveLength(1);
+  });
+});
+
+describe('player/guardian write access via club_staff (added 2026-08-27)', () => {
+  it('club_staff of Club A CAN insert a player on Club A\'s own team', async () => {
+    const { data, error } = await coachA1Client
+      .from('players')
+      .insert({ team_id: teamA1.id, name: 'New Player A' })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    if (data) await adminClient.from('players').delete().eq('id', data.id);
+  });
+
+  it('club_staff of Club A CANNOT insert a player on Club B\'s team', async () => {
+    const { data, error } = await coachA1Client
+      .from('players')
+      .insert({ team_id: teamB1.id, name: 'Should Not Exist' })
+      .select();
+    expect(data === null || data.length === 0).toBe(true);
+    if (!error) {
+      const { data: leaked } = await adminClient.from('players').select('id').eq('team_id', teamB1.id).eq('name', 'Should Not Exist');
+      expect(leaked).toHaveLength(0);
+    }
+  });
+
+  it('club_staff of Club A can create a guardian and read it back immediately (no player link yet)', async () => {
+    const { data, error } = await clubAdminAClient
+      .from('guardians')
+      .insert({ name: 'New Guardian A' })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    expect(data?.name).toBe('New Guardian A');
+    if (data) await adminClient.from('guardians').delete().eq('id', data.id);
+  });
+
+  it('club_staff of Club A can link a guardian they created to Player A2', async () => {
+    const { data: guardian } = await clubAdminAClient.from('guardians').insert({ name: 'Linked Guardian A' }).select().single();
+    const { error } = await clubAdminAClient.from('player_guardians').insert({ player_id: playerA2.id, guardian_id: guardian.id });
+    expect(error).toBeNull();
+    await adminClient.from('player_guardians').delete().eq('guardian_id', guardian.id);
+    await adminClient.from('guardians').delete().eq('id', guardian.id);
   });
 });
 

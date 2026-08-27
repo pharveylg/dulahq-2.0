@@ -97,9 +97,10 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No teams linked yet.</p>
           )}
           {clubTeams?.map((t) => (
-            <div key={t.id} className="list-row">
+            <Link key={t.id} href={`/clubs/${club.id}/teams/${t.id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
               <span className="list-row-title">{t.name}</span>
-            </div>
+              <span className="chip">Roster →</span>
+            </Link>
           ))}
           {canManage && <LinkTeamForm clubId={club.id} unclaimedTeams={unclaimedTeams ?? []} />}
         </div>
