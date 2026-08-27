@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser, getClubCreatableOrgs } from '@/lib/supabase/server';
+import { createClient, getCurrentDulaUser, getClubCreatableOrgs, isPlatformAdmin } from '@/lib/supabase/server';
+import DemoDataControls from './DemoDataControls';
 
 export default async function ClubsPage() {
   const supabase = await createClient();
@@ -21,6 +22,11 @@ export default async function ClubsPage() {
   // public.users.role check, which knows nothing about orgs.
   const canCreateClub = (await getClubCreatableOrgs()).length > 0;
 
+  const platformAdmin = await isPlatformAdmin();
+  const { data: demoOrg } = platformAdmin
+    ? await supabase.from('organizations').select('id').eq('slug', 'dula-demo').maybeSingle()
+    : { data: null };
+
   return (
     <main className="page">
       <div className="container">
@@ -39,6 +45,8 @@ export default async function ClubsPage() {
             </Link>
           )}
         </div>
+
+        {platformAdmin && <DemoDataControls hasDemoData={!!demoOrg} />}
 
         {error && <p className="error-text">Couldn&apos;t load clubs: {error.message}</p>}
 

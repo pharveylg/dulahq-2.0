@@ -134,7 +134,7 @@ export default function PlayerRow({
               <div className="form-group" style={{ flex: 1, minWidth: 110 }}>
                 <select name="relationship" defaultValue="parent">
                   <option value="parent">Parent</option>
-                  <option value="guardian">Guardian</option>
+                  <option value="legal_guardian">Legal guardian</option>
                   <option value="other">Other</option>
                 </select>
               </div>
