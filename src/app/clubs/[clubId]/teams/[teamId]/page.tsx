@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import AddPlayerForm from './AddPlayerForm';
 import PlayerRow from './PlayerRow';
+import TrainingSessions from './TrainingSessions';
 
 export default async function TeamRosterPage({
   params,
@@ -68,6 +69,21 @@ export default async function TeamRosterPage({
     })),
   }));
 
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('training_sessions')
+    .select('id, starts_at, ends_at, status, notes, attendance(count)')
+    .eq('team_id', teamId)
+    .order('starts_at', { ascending: false });
+
+  const trainingSessions = (sessions ?? []).map((s: any) => ({
+    id: s.id,
+    starts_at: s.starts_at,
+    ends_at: s.ends_at,
+    status: s.status,
+    notes: s.notes,
+    attendanceTaken: s.attendance?.[0]?.count ?? 0,
+  }));
+
   return (
     <main className="page">
       <div className="container">
@@ -97,6 +113,12 @@ export default async function TeamRosterPage({
             </p>
           )}
         </div>
+
+        <div className="section-label" style={{ marginTop: 28 }}>
+          Training sessions ({trainingSessions.length})
+        </div>
+        {sessionsError && <p className="error-text">Couldn&apos;t load training sessions: {sessionsError.message}</p>}
+        <TrainingSessions clubId={clubId} teamId={teamId} sessions={trainingSessions} canManage={canManage} />
       </div>
     </main>
   );
