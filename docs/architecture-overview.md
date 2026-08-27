@@ -1,5 +1,27 @@
 # Dula HQ 2.0 — Architecture Overview
 
+> **⚠️ Second correction (2026-08-27), superseding the note below:** a
+> direct query of the live project found `organizations`/`org_members`/
+> `platform_admins` **do exist** and predate Club Manager by over a
+> month (`initial_dulahq_schema`, 2026-07-12, vs Club Manager's
+> migrations on 2026-08-20). The claim below — "no tenant tables at all"
+> — was wrong when written, not just later invalidated.
+>
+> What's actually true: `dula-hq`'s live app (`index.html`) uses exactly
+> that org/tenant model — every `sb.from(...)` call in it targets
+> `platform_admins`, `org_members`, `organizations`, or `tournaments`,
+> never `teams`/`players`/`matches`/`referees` directly. Those relational
+> tables exist in the schema (and are what Club Manager was built
+> against) but hold 0 rows — the live app stores all tournament data as
+> one JSONB blob per row in `tournaments.data`. Club Manager's `clubs`
+> table had no tenant scoping at all until a 2026-08-27 fix
+> (`club_manager_tenant_fencing`) added `org_id` and fenced its RLS.
+>
+> The product-boundary/Platform-Services sections below are still a
+> reasonable planning reference. For current, verified schema state, see
+> `club-manager-design.md` and the "Second correction" note in
+> `../README.md`.
+
 ## 1. Product structure
 
 ```
@@ -150,9 +172,42 @@ duplication.
 | Media | Photo/video storage, albums, tagging |
 | Files | Document storage (waivers, medical forms, etc.) |
 
-Note: in the `dula-hq` repo's existing Phase 1 build, **Identity** and
-**Tenancy** already exist in early form (`auth.users`, `tenants`,
-`tenant_users`). The rest of this list is not built yet.
+Note: **Identity** and **Tenancy** already exist and are live — but as
+two separate, non-integrated mechanisms. Tenancy is `organizations`/
+`org_members`/`platform_admins` (email-matched against
+`auth.jwt() ->> 'email'`), used by `dula-hq`'s multi-tenant login and by
+`tournaments.org_id`. Identity for Club Manager is the older
+`public.users`/`auth.users` email-matching pattern
+(`current_user_role()`, `current_dula_user_id()`), which predates the org
+system and has no `org_id` of its own. The two aren't unified — a
+`public.users.role='admin'` row isn't scoped to any organization. Club
+Manager's `clubs` table now carries `org_id` directly (see
+`club-manager-design.md`) as the bridge until/unless the two identity
+paths are consolidated. The rest of Platform Services
+(Subscriptions/Entitlements/Billing/Notifications/Messaging/Media/Files)
+is not built yet.
+
+### Hosting & storage decision
+
+- **Database + Auth: Supabase** (free tier), unchanged — RLS-based tenant
+  isolation is the security model everything else depends on, and
+  Cloudflare's native database (D1, SQLite) doesn't support Postgres-style
+  row-level security. Moving off Supabase would mean rebuilding tenant
+  isolation in application code — a materially riskier model, not
+  attempted here.
+- **Files + Media storage: Cloudflare R2** (free tier — 10GB, no egress
+  fees), replacing Supabase Storage. See `shared/files/README.md` for the
+  rationale and usage. This swap doesn't touch the database/RLS at all,
+  since object storage is independent of Postgres.
+- **Hosting: Cloudflare Pages** (free tier), replacing Vercel for the
+  frontend. Next.js is supported via the `@cloudflare/next-on-pages`
+  adapter.
+
+This keeps the whole platform on free tiers across both providers while
+preserving the RLS-based security model already built. The `dula-hq`
+repo's hosting (currently Vercel) migrating to Cloudflare Pages is a
+separate, not-yet-done follow-up — this decision applies going forward
+for `dula-hq-2.0`.
 
 ## 5. Integration principles
 
@@ -174,6 +229,16 @@ Club Manager → Integration/API Layer → Tournament Manager
 
 This lets either product evolve independently — Tournament Manager can
 change its internal schema without breaking Club Manager, and vice versa.
+
+**Formally adopted 2026-08-27** as the resolution to the `teams`/`players`
+mismatch described in the correction note at the top of this doc: Club
+Manager keeps its own relational schema rather than being pointed at
+Tournament Manager's unused `teams`/`players` tables or forcing
+Tournament Manager's live JSONB-blob sync engine to populate them.
+Integration is a not-yet-built, explicit sync step (a club's roster
+becoming a tournament registration, and results/participation flowing
+back), going through this Integration/API layer — never a direct FK or
+shared table between the two schemas.
 
 ## 6. Entity ownership
 

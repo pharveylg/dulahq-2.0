@@ -1,0 +1,19 @@
+# Cloudflare Pages configuration.
+#
+# Next.js on Cloudflare Pages runs via the @cloudflare/next-on-pages
+# adapter, which is added once application code (Next.js app) lives in
+# this repo -- see README's "Cloudflare Pages hosting" section for the
+# build command that goes with this.
+
+name = "dula-hq-2-0"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# R2 bucket binding -- lets Worker/Pages Functions code (if used instead
+# of the S3-compatible API in shared/files/lib/r2.ts) access R2 directly
+# without going through the S3-compatible endpoint. Optional: the S3 SDK
+# approach works from any environment (including local dev), this
+# binding is only useful for code running ON Cloudflare's platform.
+[[r2_buckets]]
+binding = "FILES_BUCKET"
+bucket_name = "dula-hq-2-0-files"

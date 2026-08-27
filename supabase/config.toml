@@ -1,0 +1,19 @@
+project_id = "zytyakbgwaegvftblkcn" # "Dula HQ" -- the real, shared project. Not a placeholder.
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+
+[auth.email]
+enable_confirmations = false

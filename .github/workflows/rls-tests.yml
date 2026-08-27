@@ -1,0 +1,68 @@
+name: RLS Isolation Tests
+
+# KNOWN GAP: this workflow currently cannot succeed as written. A fresh
+# `supabase start` instance only has the 3 Club Manager migrations in
+# this repo -- it's missing the 5 pre-existing production migrations
+# (initial_dulahq_schema, enable_rls_all_tables, etc.) that create
+# users/teams/players/etc., which Club Manager's migrations depend on.
+# We don't have those as files (they were applied to the live project by
+# some other means before this repo existed) -- only what's live, via
+# direct database inspection.
+#
+# Until that gap is closed (either by obtaining/reconstructing the
+# original 5 migrations as files, or switching this workflow to test
+# against a Supabase branch of the real project instead of a from-scratch
+# local instance), this workflow will fail on foreign-key errors when
+# Club Manager's migrations try to reference tables that don't exist yet.
+# Left in place as a marker of the gap rather than deleted silently.
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "tests/rls/**"
+      - ".github/workflows/rls-tests.yml"
+  push:
+    branches: [main]
+
+jobs:
+  rls-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Apply migrations
+        run: supabase db reset
+
+      - name: Extract local Supabase credentials
+        id: creds
+        run: |
+          supabase status -o json > status.json
+          echo "url=$(jq -r '.API_URL' status.json)" >> "$GITHUB_OUTPUT"
+          echo "anon_key=$(jq -r '.ANON_KEY' status.json)" >> "$GITHUB_OUTPUT"
+          echo "service_key=$(jq -r '.SERVICE_ROLE_KEY' status.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Run RLS isolation test suites
+        env:
+          SUPABASE_URL: ${{ steps.creds.outputs.url }}
+          SUPABASE_ANON_KEY: ${{ steps.creds.outputs.anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.creds.outputs.service_key }}
+        run: npm run test:rls
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop

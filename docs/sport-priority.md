@@ -1,5 +1,18 @@
 # Sport Priority
 
+> **Note:** this document's priority ordering is unaffected by the
+> tenant-model correction (see `club-manager-design.md`) — it's still the
+> plan for which sport gets built first. **There is no `sports` table in
+> the live Dula HQ schema** — verified directly via
+> `information_schema.tables` on 2026-08-27 (zero tables match `%sport%`).
+> Sport identity currently lives implicitly inside `tournaments.data`
+> JSON, not as a lookup table. The paragraph further below claiming the
+> `sports` table "currently has exactly what `dula-hq` originally
+> created: Tennis, Pickleball, Basketball, Football" is **wrong** and
+> contradicts this note — disregard it; it's a leftover from an earlier,
+> unverified draft. This doc remains the planning reference for build
+> order; it just isn't backed by any live `sports` table.
+
 ## Priority order
 
 1. **Football** — primary. First sport module built for both Tournament
@@ -14,6 +27,13 @@ This supersedes the earlier priority order (Tennis ⭐⭐⭐⭐⭐ / Pickleball
 ⭐⭐⭐⭐⭐ / Basketball ⭐⭐⭐⭐) from the original Dula HQ spec. Nothing is
 dropped — Tennis and Pickleball remain in scope — but Football now leads,
 and Basketball moves from mid-priority to last.
+
+**This is a planning priority, not a schema change.** There is no
+`sports` table in the shared Supabase project at all (see correction note
+at the top of this doc) — sport identity isn't tracked as a lookup table
+today for any sport, including Football. Volleyball and Futsal (or any
+other sport) get their own schema representation added when work on them
+actually starts, not speculatively ahead of that.
 
 ## What this changes in practice
 
