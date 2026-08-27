@@ -48,7 +48,9 @@ export default async function TeamRosterPage({
   const { data: players, error: playersError } = await supabase
     .from('players')
     .select(
-      'id, name, jersey, position, age, player_guardians(id, relationship, is_primary_contact, guardians(id, name, contact_info))'
+      'id, name, jersey, position, age,' +
+      ' player_guardians(id, relationship, is_primary_contact, guardians(id, name, contact_info)),' +
+      ' fee_charges(id, fee_type, amount, currency, status, due_date, payments(id, amount, method, paid_at))'
     )
     .eq('team_id', teamId)
     .order('name');
@@ -66,6 +68,15 @@ export default async function TeamRosterPage({
       relationship: pg.relationship,
       isPrimaryContact: pg.is_primary_contact,
       contactInfo: pg.guardians?.contact_info ?? null,
+    })),
+    fees: (p.fee_charges ?? []).map((fc: any) => ({
+      id: fc.id,
+      feeType: fc.fee_type,
+      amount: Number(fc.amount),
+      currency: fc.currency,
+      status: fc.status,
+      dueDate: fc.due_date,
+      payments: (fc.payments ?? []).map((pay: any) => ({ ...pay, amount: Number(pay.amount) })),
     })),
   }));
 

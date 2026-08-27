@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { removePlayer, addGuardian, removeGuardianLink } from './actions';
+import PlayerFees from './PlayerFees';
 
 type Guardian = {
   linkId: string;
@@ -12,6 +13,16 @@ type Guardian = {
   contactInfo: { phone?: string | null; email?: string | null } | null;
 };
 
+type FeeCharge = {
+  id: string;
+  feeType: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'overdue' | 'refunded';
+  dueDate: string | null;
+  payments: { id: string; amount: number; method: string | null; paid_at: string }[];
+};
+
 type Player = {
   id: string;
   name: string;
@@ -19,6 +30,7 @@ type Player = {
   position: string | null;
   age: string | null;
   guardians: Guardian[];
+  fees: FeeCharge[];
 };
 
 export default function PlayerRow({
@@ -36,6 +48,7 @@ export default function PlayerRow({
   const [error, setError] = useState<string | null>(null);
   const [showGuardians, setShowGuardians] = useState(player.guardians.length > 0);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
+  const [showFees, setShowFees] = useState(false);
 
   function handleRemovePlayer() {
     setError(null);
@@ -79,6 +92,9 @@ export default function PlayerRow({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowGuardians((v) => !v)}>
             {player.guardians.length} guardian{player.guardians.length === 1 ? '' : 's'}
+          </button>
+          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowFees((v) => !v)}>
+            {player.fees.length} fee{player.fees.length === 1 ? '' : 's'}
           </button>
           {canManage && (
             <button className="btn" onClick={handleRemovePlayer} disabled={pending} style={{ fontSize: 12 }}>
@@ -150,6 +166,10 @@ export default function PlayerRow({
             </form>
           )}
         </div>
+      )}
+
+      {showFees && (
+        <PlayerFees clubId={clubId} teamId={teamId} playerId={player.id} charges={player.fees} canManage={canManage} />
       )}
 
       {error && <p className="error-text" style={{ marginTop: 0 }}>{error}</p>}
