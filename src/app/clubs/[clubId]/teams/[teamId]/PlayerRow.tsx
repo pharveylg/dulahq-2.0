@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { removePlayer, addGuardian, removeGuardianLink } from './actions';
 import PlayerFees from './PlayerFees';
+import PlayerMembership from './PlayerMembership';
 
 type Guardian = {
   linkId: string;
@@ -31,6 +32,7 @@ type Player = {
   age: string | null;
   guardians: Guardian[];
   fees: FeeCharge[];
+  memberships: { id: string; periodStart: string; periodEnd: string | null; status: string }[];
 };
 
 export default function PlayerRow({
@@ -49,6 +51,7 @@ export default function PlayerRow({
   const [showGuardians, setShowGuardians] = useState(player.guardians.length > 0);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
   const [showFees, setShowFees] = useState(false);
+  const [showMembership, setShowMembership] = useState(false);
 
   function handleRemovePlayer() {
     setError(null);
@@ -95,6 +98,9 @@ export default function PlayerRow({
           </button>
           <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowFees((v) => !v)}>
             {player.fees.length} fee{player.fees.length === 1 ? '' : 's'}
+          </button>
+          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowMembership((v) => !v)}>
+            Membership
           </button>
           {canManage && (
             <button className="btn" onClick={handleRemovePlayer} disabled={pending} style={{ fontSize: 12 }}>
@@ -170,6 +176,10 @@ export default function PlayerRow({
 
       {showFees && (
         <PlayerFees clubId={clubId} teamId={teamId} playerId={player.id} charges={player.fees} canManage={canManage} />
+      )}
+
+      {showMembership && (
+        <PlayerMembership clubId={clubId} teamId={teamId} playerId={player.id} memberships={player.memberships} canManage={canManage} />
       )}
 
       {error && <p className="error-text" style={{ marginTop: 0 }}>{error}</p>}

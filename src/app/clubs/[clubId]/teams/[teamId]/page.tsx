@@ -50,7 +50,8 @@ export default async function TeamRosterPage({
     .select(
       'id, name, jersey, position, age,' +
       ' player_guardians(id, relationship, is_primary_contact, guardians(id, name, contact_info)),' +
-      ' fee_charges(id, fee_type, amount, currency, status, due_date, payments(id, amount, method, paid_at))'
+      ' fee_charges(id, fee_type, amount, currency, status, due_date, payments(id, amount, method, paid_at)),' +
+      ' memberships(id, period_start, period_end, status)'
     )
     .eq('team_id', teamId)
     .order('name');
@@ -77,6 +78,12 @@ export default async function TeamRosterPage({
       status: fc.status,
       dueDate: fc.due_date,
       payments: (fc.payments ?? []).map((pay: any) => ({ ...pay, amount: Number(pay.amount) })),
+    })),
+    memberships: (p.memberships ?? []).map((m: any) => ({
+      id: m.id,
+      periodStart: m.period_start,
+      periodEnd: m.period_end,
+      status: m.status,
     })),
   }));
 
