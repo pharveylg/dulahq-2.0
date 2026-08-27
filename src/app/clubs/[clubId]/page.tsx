@@ -7,6 +7,8 @@ import LinkTeamForm from './LinkTeamForm';
 import StaffRow from './StaffRow';
 import Trips from './Trips';
 import Announcements from './Announcements';
+import MediaGallery from './MediaGallery';
+import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ clubId: string }> }) {
   const { clubId } = await params;
@@ -106,6 +108,24 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     createdAt: a.created_at,
   }));
 
+  const { data: mediaRows } = await supabase
+    .from('media')
+    .select('id, r2_key, file_name, caption')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false });
+
+  // Signed URLs are generated server-side per request rather than stored
+  // -- R2 objects aren't public, and a signed URL expires in an hour
+  // (see shared/files/lib/r2.ts), so caching one wouldn't stay valid.
+  const mediaItems = await Promise.all(
+    (mediaRows ?? []).map(async (m) => ({
+      id: m.id,
+      url: await getDownloadUrl(m.r2_key),
+      fileName: m.file_name,
+      caption: m.caption,
+    }))
+  );
+
   return (
     <main className="page">
       <div className="container">
@@ -167,6 +187,11 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           Announcements ({announcements.length})
         </div>
         <Announcements clubId={club.id} announcements={announcements} teams={clubTeams ?? []} canManage={canManageWide} />
+
+        <div className="section-label" style={{ marginTop: 28 }}>
+          Photos ({mediaItems.length})
+        </div>
+        <MediaGallery clubId={club.id} items={mediaItems} canManage={canManageWide} />
       </div>
     </main>
   );
