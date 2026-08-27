@@ -4,10 +4,11 @@ import { useActionState } from 'react';
 import Link from 'next/link';
 import { createClub } from './actions';
 
+type Org = { id: string; name: string };
 type ActionState = { error?: string };
 const initialState: ActionState = {};
 
-export default function NewClubForm() {
+export default function NewClubForm({ orgs }: { orgs: Org[] }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(async (_prev, formData) => {
     const result = await createClub(formData);
     return result ?? {};
@@ -26,6 +27,24 @@ export default function NewClubForm() {
             <label htmlFor="name">Club name</label>
             <input id="name" name="name" type="text" required autoFocus />
           </div>
+          {orgs.length === 1 ? (
+            <input type="hidden" name="org_id" value={orgs[0].id} />
+          ) : (
+            <div className="form-group">
+              <label htmlFor="org_id">Organization</label>
+              <select id="org_id" name="org_id" required defaultValue="">
+                <option value="" disabled>Choose an organization…</option>
+                {orgs.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {orgs.length === 1 && (
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: -8, marginBottom: 16 }}>
+              Organization: {orgs[0].name}
+            </p>
+          )}
           {state?.error && <p className="error-text">{state.error}</p>}
           <button type="submit" className="btn btn-primary btn-full" disabled={pending}>
             {pending ? 'Creating…' : 'Create club'}

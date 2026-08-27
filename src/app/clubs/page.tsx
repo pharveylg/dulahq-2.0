@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { createClient, getCurrentDulaUser, getClubCreatableOrgs } from '@/lib/supabase/server';
 
 export default async function ClubsPage() {
   const supabase = await createClient();
@@ -9,12 +9,17 @@ export default async function ClubsPage() {
 
   const dulaUser = await getCurrentDulaUser();
 
+  // clubs' own RLS ("clubs readable within org") already scopes this list
+  // to the caller's org(s) + platform admin -- no extra filtering needed
+  // here, it's just reflecting what the DB already restricted.
   const { data: clubs, error } = await supabase
     .from('clubs')
-    .select('id, name, created_at, club_staff(count), teams(count)')
+    .select('id, name, created_at, organizations(name), club_staff(count), teams(count)')
     .order('created_at', { ascending: false });
 
-  const canCreateClub = dulaUser?.role === 'admin';
+  // Same set the clubs.org_id insert RLS allows -- not the legacy
+  // public.users.role check, which knows nothing about orgs.
+  const canCreateClub = (await getClubCreatableOrgs()).length > 0;
 
   return (
     <main className="page">
@@ -43,7 +48,7 @@ export default async function ClubsPage() {
             {canCreateClub ? (
               <Link href="/clubs/new" className="btn btn-primary">Create the first club</Link>
             ) : (
-              <p style={{ fontSize: 13 }}>Only a platform admin can create the first club.</p>
+              <p style={{ fontSize: 13 }}>You need to be an admin of an organization (or a platform admin) to create a club.</p>
             )}
           </div>
         )}
@@ -60,7 +65,7 @@ export default async function ClubsPage() {
                 <div className="list-row-main">
                   <div className="list-row-title">{club.name}</div>
                   <div className="list-row-meta">
-                    {club.club_staff?.[0]?.count ?? 0} staff · {club.teams?.[0]?.count ?? 0} teams
+                    {club.organizations?.name ?? 'Unknown org'} · {club.club_staff?.[0]?.count ?? 0} staff · {club.teams?.[0]?.count ?? 0} teams
                   </div>
                 </div>
                 <span className="chip">View →</span>

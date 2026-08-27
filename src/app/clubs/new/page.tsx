@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { createClient, getCurrentDulaUser, getClubCreatableOrgs } from '@/lib/supabase/server';
 import NewClubForm from './NewClubForm';
 
 export default async function NewClubPage() {
@@ -27,17 +27,23 @@ export default async function NewClubPage() {
     );
   }
 
-  if (dulaUser.role !== 'admin') {
+  // Gate on the same set of orgs the clubs.org_id insert RLS actually
+  // allows (platform admin, or org admin via org_members) -- not the
+  // legacy public.users.role check, which knows nothing about orgs.
+  const orgs = await getClubCreatableOrgs();
+
+  if (orgs.length === 0) {
     return (
       <main className="page">
         <div className="container" style={{ maxWidth: 480 }}>
           <p className="error-text">
-            Only a platform admin can create a club. Your role is &quot;{dulaUser.role}&quot;.
+            You need to be an admin of at least one organization (or a
+            platform admin) to create a club.
           </p>
         </div>
       </main>
     );
   }
 
-  return <NewClubForm />;
+  return <NewClubForm orgs={orgs} />;
 }
