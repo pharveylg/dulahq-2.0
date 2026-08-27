@@ -5,6 +5,8 @@ import EditNameForm from './EditNameForm';
 import AddStaffForm from './AddStaffForm';
 import LinkTeamForm from './LinkTeamForm';
 import StaffRow from './StaffRow';
+import Trips from './Trips';
+import Announcements from './Announcements';
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ clubId: string }> }) {
   const { clubId } = await params;
@@ -43,6 +45,9 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     : { data: null };
 
   const canManage = dulaUser?.role === 'admin' || myStaffRow?.role === 'club_admin';
+  // Trips/announcements RLS is scoped to any club_staff role (is_club_staff),
+  // not just club_admin -- matches the roster page's broader canManage.
+  const canManageWide = dulaUser?.role === 'admin' || !!myStaffRow;
 
   const { data: staffRows } = await supabase
     .from('club_staff')
@@ -78,6 +83,28 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     list.push(a.team_id);
     assignedTeamIdsByUser.set(a.user_id, list);
   }
+
+  const { data: trips } = await supabase
+    .from('trips')
+    .select('id, name, purpose, starts_at, ends_at')
+    .eq('club_id', clubId)
+    .order('starts_at', { ascending: false });
+
+  const { data: announcementRows } = await supabase
+    .from('announcements')
+    .select('id, title, body, audience, pinned, created_at, teams(name)')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false });
+
+  const announcements = (announcementRows ?? []).map((a: any) => ({
+    id: a.id,
+    title: a.title,
+    body: a.body,
+    audience: a.audience,
+    teamName: a.teams?.name ?? null,
+    pinned: a.pinned,
+    createdAt: a.created_at,
+  }));
 
   return (
     <main className="page">
@@ -130,6 +157,16 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             Only club staff or a platform admin can manage this club.
           </p>
         )}
+
+        <div className="section-label" style={{ marginTop: 28 }}>
+          Trips ({trips?.length ?? 0})
+        </div>
+        <Trips clubId={club.id} trips={trips ?? []} canManage={canManageWide} />
+
+        <div className="section-label" style={{ marginTop: 28 }}>
+          Announcements ({announcements.length})
+        </div>
+        <Announcements clubId={club.id} announcements={announcements} teams={clubTeams ?? []} canManage={canManageWide} />
       </div>
     </main>
   );
