@@ -1,0 +1,296 @@
+<title>Club Manager Architecture</title>
+<style>
+  :root {
+    --bg: #EAEEF9;
+    --page-edge: #DCE3F5;
+    --surface: #FFFFFF;
+    --border: #C7D0E8;
+    --border-strong: #A9B6DC;
+    --text: #1B2440;
+    --text-muted: #5C6690;
+    --hub: #EEF1FB;
+    --hub-border: #7C89C4;
+    --flow: #D6247E;
+    --flow-soft: #F9D9E9;
+    --db: #E4ECFB;
+    --db-border: #6C86C9;
+    --route: #E9F5EE;
+    --route-border: #3F9463;
+    --accent: #1B2A6B;
+    --shadow: 0 2px 4px rgba(27, 36, 64, .05), 0 14px 32px rgba(27, 36, 64, .07);
+    --font-heading: 'Oswald', sans-serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161A2C; --page-edge: #10131F; --surface: #1E2340;
+      --border: #33395C; --border-strong: #454C78;
+      --text: #E7EAF7; --text-muted: #9AA1C7;
+      --hub: #232951; --hub-border: #6C79C4;
+      --flow: #F272AE; --flow-soft: rgba(242,114,174,.14);
+      --db: #202650; --db-border: #7E97E6;
+      --route: #1C3324; --route-border: #4CAF77;
+      --accent: #AEB8F5;
+      --shadow: 0 2px 4px rgba(0,0,0,.35), 0 16px 34px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161A2C; --page-edge: #10131F; --surface: #1E2340;
+    --border: #33395C; --border-strong: #454C78;
+    --text: #E7EAF7; --text-muted: #9AA1C7;
+    --hub: #232951; --hub-border: #6C79C4;
+    --flow: #F272AE; --flow-soft: rgba(242,114,174,.14);
+    --db: #202650; --db-border: #7E97E6;
+    --route: #1C3324; --route-border: #4CAF77;
+    --accent: #AEB8F5;
+    --shadow: 0 2px 4px rgba(0,0,0,.35), 0 16px 34px rgba(0,0,0,.45);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page-edge); color: var(--text); font-family: var(--font-body); line-height: 1.5; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  header.top { margin-bottom: 22px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+  h1 { font-family: var(--font-heading); font-size: 27px; font-weight: 700; letter-spacing: .01em; margin: 4px 0 8px; text-wrap: balance; }
+  .lede { color: var(--text-muted); font-size: 13.5px; max-width: 72ch; }
+
+  figure { margin: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 20px 20px 14px; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { font-size: 12.5px; color: var(--text-muted); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); max-width: 90ch; }
+  figcaption b { color: var(--text); font-weight: 600; }
+
+  text { font-family: var(--font-body); fill: currentColor; }
+  .mono { font-family: var(--font-mono); }
+  .heading { font-family: var(--font-heading); font-weight: 600; letter-spacing: .015em; }
+  .group-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+  .flow-label { font-family: var(--font-mono); font-size: 10px; fill: var(--flow); font-weight: 600; }
+  .pill-text { font-family: var(--font-mono); font-size: 10.5px; }
+  .note { font-size: 10px; fill: var(--text-muted); }
+
+  footer { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 16px; font-family: var(--font-mono); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">Dula HQ 2.0 — Club Manager</span>
+    <h1>System Flow</h1>
+    <p class="lede">Backend systems on the left, the Club Manager application as the hub, frontend routes on the right — data flows labeled in magenta, structure grouped the way the systems actually separate.</p>
+  </header>
+
+  <figure>
+    <svg viewBox="0 0 1180 760" role="img" aria-label="Hub and spoke diagram. Left: Supabase Postgres grouped into Club Manager tables, Tournament Manager tables, and Cloudflare R2 storage. Center: the Club Manager hub, with Server Components and Server Actions as twin pillars around four modules -- Roster, Finance, Activities, Communication -- above a route resolver bar and below an RLS policy bar and identity bar. Right: the six frontend routes, connected up to a club staff and coaches icon. Below the hub, a dashed connection to the pre-existing Tournament Manager index.html app, labeled with a planned, not-built registration request flow. Magenta dashed arrows carry labeled flows between each side and the hub.">
+      <defs>
+        <marker id="flowArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--flow)"/>
+        </marker>
+        <marker id="plainArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- ================= LEFT: BACKEND SYSTEMS ================= -->
+      <rect x="16" y="46" width="248" height="600" rx="4" fill="none" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="5 4"/>
+      <rect x="30" y="30" width="180" height="26" rx="4" fill="var(--surface)" stroke="var(--flow)" stroke-width="1.3"/>
+      <text x="120" y="47" text-anchor="middle" class="group-label" fill="var(--flow)">Supabase Postgres</text>
+
+      <!-- sub-group: club manager tables -->
+      <rect x="34" y="72" width="212" height="230" rx="6" fill="var(--db)" stroke="var(--db-border)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="46" y="92" class="group-label" fill="var(--db-border)" font-size="10">CLUB MANAGER TABLES</text>
+      <g class="pill-text">
+        <rect x="46" y="102" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="91" y="118" text-anchor="middle">clubs</text>
+        <rect x="144" y="102" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="189" y="118" text-anchor="middle">teams</text>
+        <rect x="46" y="132" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="91" y="148" text-anchor="middle">players</text>
+        <rect x="144" y="132" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="189" y="148" text-anchor="middle">club_staff</text>
+
+        <rect x="46" y="168" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="91" y="184" text-anchor="middle">Roster</text>
+        <rect x="144" y="168" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="189" y="184" text-anchor="middle">Finance</text>
+        <rect x="46" y="198" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="91" y="214" text-anchor="middle">Activities</text>
+        <rect x="144" y="198" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="189" y="214" text-anchor="middle" font-size="9.5">Communication</text>
+      </g>
+      <text x="46" y="242" class="note">4 pills above = 13 tables:</text>
+      <text x="46" y="255" class="note">guardians, fee_charges, payments,</text>
+      <text x="46" y="267" class="note">memberships, training_sessions,</text>
+      <text x="46" y="279" class="note">attendance, trips, trip_passengers,</text>
+      <text x="46" y="291" class="note">trip_transportation, announcements, media</text>
+
+      <!-- sub-group: tournament manager tables -->
+      <rect x="34" y="316" width="212" height="118" rx="6" fill="var(--db)" stroke="var(--db-border)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="46" y="336" class="group-label" fill="var(--db-border)" font-size="10">TOURNAMENT MANAGER TABLES</text>
+      <g class="pill-text">
+        <rect x="46" y="346" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="91" y="362" text-anchor="middle" font-size="9">organizations</text>
+        <rect x="144" y="346" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="189" y="362" text-anchor="middle" font-size="9">org_members</text>
+        <rect x="46" y="376" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="91" y="392" text-anchor="middle" font-size="9">platform_admins</text>
+        <rect x="144" y="376" width="90" height="24" rx="12" fill="var(--surface)" stroke="var(--border-strong)"/>
+        <text x="189" y="392" text-anchor="middle" font-size="9">tournaments</text>
+      </g>
+      <text x="46" y="424" class="note" font-style="italic">tournaments.data = one JSONB blob/row</text>
+
+      <!-- sub-group: storage -->
+      <rect x="34" y="450" width="212" height="80" rx="6" fill="var(--db)" stroke="var(--db-border)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="46" y="470" class="group-label" fill="var(--db-border)" font-size="10">STORAGE</text>
+      <rect x="46" y="480" width="188" height="34" rx="8" fill="var(--surface)" stroke="var(--border-strong)"/>
+      <text x="140" y="498" text-anchor="middle" class="pill-text">Cloudflare R2 — dula-hq-2-0-files</text>
+
+      <!-- sub-group: identity -->
+      <rect x="34" y="544" width="212" height="86" rx="6" fill="var(--db)" stroke="var(--db-border)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="46" y="564" class="group-label" fill="var(--db-border)" font-size="10">IDENTITY</text>
+      <text x="46" y="584" class="note">no auth.uid() relationship —</text>
+      <text x="46" y="597" class="note">session email matched against</text>
+      <text x="46" y="610" class="mono note" fill="var(--text)">public.users.email</text>
+
+      <!-- ================= CENTER: CLUB MANAGER HUB ================= -->
+      <rect x="330" y="46" width="520" height="560" rx="8" fill="var(--surface)" stroke="var(--hub-border)" stroke-width="1.6"/>
+      <text x="590" y="82" text-anchor="middle" class="heading" font-size="19" letter-spacing="6">C L U B &#160; M A N A G E R</text>
+      <line x1="360" y1="98" x2="820" y2="98" stroke="var(--hub-border)" stroke-width="1"/>
+      <text x="590" y="114" text-anchor="middle" class="mono note">dula-hq-2.0 · Next.js App Router</text>
+
+      <!-- route resolver bar -->
+      <rect x="360" y="132" width="460" height="34" rx="6" fill="var(--hub)" stroke="var(--hub-border)" stroke-width="1"/>
+      <text x="590" y="153" text-anchor="middle" class="mono" font-size="11">Route Resolver — /clubs/[clubId]/...</text>
+
+      <!-- twin pillars + module grid -->
+      <rect x="360" y="180" width="70" height="270" rx="6" fill="var(--hub)" stroke="var(--hub-border)" stroke-width="1"/>
+      <text x="395" y="204" text-anchor="middle" class="heading" font-size="11">Server</text>
+      <text x="395" y="219" text-anchor="middle" class="heading" font-size="11">Components</text>
+      <text x="395" y="238" text-anchor="middle" class="note" font-style="italic">reads</text>
+      <text x="395" y="420" text-anchor="middle" class="note">RLS-scoped</text>
+      <text x="395" y="433" text-anchor="middle" class="note">per request</text>
+
+      <rect x="750" y="180" width="70" height="270" rx="6" fill="var(--hub)" stroke="var(--hub-border)" stroke-width="1"/>
+      <text x="785" y="204" text-anchor="middle" class="heading" font-size="11">Server</text>
+      <text x="785" y="219" text-anchor="middle" class="heading" font-size="11">Actions</text>
+      <text x="785" y="238" text-anchor="middle" class="note" font-style="italic">writes</text>
+      <text x="785" y="420" text-anchor="middle" class="note">RLS-scoped</text>
+      <text x="785" y="433" text-anchor="middle" class="note">per request</text>
+
+      <!-- module 2x2 grid -->
+      <rect x="446" y="180" width="288" height="60" rx="6" fill="var(--route)" stroke="var(--route-border)" stroke-width="1.1"/>
+      <text x="590" y="207" text-anchor="middle" class="heading" font-size="12" fill="var(--route-border)">Roster</text>
+      <text x="590" y="223" text-anchor="middle" class="note">players · guardians</text>
+
+      <rect x="446" y="252" width="288" height="60" rx="6" fill="var(--route)" stroke="var(--route-border)" stroke-width="1.1"/>
+      <text x="590" y="279" text-anchor="middle" class="heading" font-size="12" fill="var(--route-border)">Finance</text>
+      <text x="590" y="295" text-anchor="middle" class="note">fee_charges · payments · membership</text>
+
+      <rect x="446" y="324" width="288" height="60" rx="6" fill="var(--route)" stroke="var(--route-border)" stroke-width="1.1"/>
+      <text x="590" y="351" text-anchor="middle" class="heading" font-size="12" fill="var(--route-border)">Activities</text>
+      <text x="590" y="367" text-anchor="middle" class="note">training · attendance · trips</text>
+
+      <rect x="446" y="396" width="288" height="46" rx="6" fill="var(--route)" stroke="var(--route-border)" stroke-width="1.1"/>
+      <text x="590" y="418" text-anchor="middle" class="heading" font-size="12" fill="var(--route-border)">Communication</text>
+      <text x="590" y="434" text-anchor="middle" class="note">announcements · photos</text>
+
+      <!-- policy bar -->
+      <rect x="360" y="466" width="460" height="34" rx="6" fill="var(--hub)" stroke="var(--hub-border)" stroke-width="1"/>
+      <text x="590" y="487" text-anchor="middle" class="mono" font-size="11">RLS Policy — is_club_staff() / is_org_admin() / is_platform_admin()</text>
+
+      <!-- tenancy bar -->
+      <rect x="360" y="510" width="460" height="34" rx="6" fill="var(--hub)" stroke="var(--hub-border)" stroke-width="1"/>
+      <text x="590" y="531" text-anchor="middle" class="mono" font-size="11">Multi-tenancy — clubs.org_id fencing</text>
+
+      <!-- realtime / planned bar -->
+      <rect x="360" y="554" width="460" height="34" rx="6" fill="none" stroke="var(--border-strong)" stroke-width="1.1" stroke-dasharray="4 3"/>
+      <text x="590" y="575" text-anchor="middle" class="mono note" font-style="italic">Messaging (Realtime) — scoped, not built</text>
+
+      <!-- ================= RIGHT: FRONTEND ROUTES ================= -->
+      <rect x="916" y="46" width="248" height="380" rx="4" fill="none" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="5 4"/>
+      <rect x="970" y="30" width="180" height="26" rx="4" fill="var(--surface)" stroke="var(--flow)" stroke-width="1.3"/>
+      <text x="1060" y="47" text-anchor="middle" class="group-label" fill="var(--flow)">Frontend Routes</text>
+
+      <g class="pill-text">
+        <rect x="932" y="72" width="216" height="32" rx="8" fill="var(--route)" stroke="var(--route-border)"/>
+        <text x="1040" y="92" text-anchor="middle">/clubs</text>
+
+        <rect x="932" y="112" width="216" height="32" rx="8" fill="var(--route)" stroke="var(--route-border)"/>
+        <text x="1040" y="132" text-anchor="middle">/clubs/new</text>
+
+        <rect x="932" y="152" width="216" height="32" rx="8" fill="var(--route)" stroke="var(--route-border)"/>
+        <text x="1040" y="172" text-anchor="middle" font-size="9.5">/clubs/[clubId]</text>
+
+        <rect x="932" y="192" width="216" height="32" rx="8" fill="var(--route)" stroke="var(--route-border)"/>
+        <text x="1040" y="212" text-anchor="middle" font-size="9">/clubs/[clubId]/trips/[tripId]</text>
+
+        <rect x="932" y="232" width="216" height="32" rx="8" fill="var(--route)" stroke="var(--route-border)"/>
+        <text x="1040" y="252" text-anchor="middle" font-size="9">/clubs/[clubId]/teams/[teamId]</text>
+
+        <rect x="932" y="272" width="216" height="40" rx="8" fill="var(--route)" stroke="var(--route-border)"/>
+        <text x="1040" y="288" text-anchor="middle" font-size="8.3">/clubs/[clubId]/teams/[teamId]/</text>
+        <text x="1040" y="300" text-anchor="middle" font-size="8.3">training/[sessionId]</text>
+      </g>
+      <text x="932" y="332" class="note">guardians · fees · membership</text>
+      <text x="932" y="345" class="note">render inline on the roster page,</text>
+      <text x="932" y="358" class="note">not separate routes</text>
+
+      <!-- people icon -->
+      <g transform="translate(1000,382)">
+        <circle cx="0" cy="0" r="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M-11,20 Q0,4 11,20" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <circle cx="22" cy="4" r="8" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".7"/>
+        <path d="M12,22 Q22,10 32,22" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".7"/>
+      </g>
+      <text x="1040" y="440" text-anchor="middle" class="note">Club staff &amp; coaches</text>
+
+      <!-- ================= EXTERNAL: index.html icon (bottom) ================= -->
+      <rect x="446" y="662" width="288" height="72" rx="8" fill="var(--db)" stroke="var(--db-border)" stroke-width="1.3"/>
+      <text x="590" y="686" text-anchor="middle" class="heading" font-size="12" fill="var(--db-border)">index.html</text>
+      <text x="590" y="702" text-anchor="middle" class="note">Tournament Manager</text>
+      <text x="590" y="716" text-anchor="middle" class="note" font-style="italic">pre-existing, single-page app</text>
+
+      <!-- ================= FLOW ARROWS: LEFT <-> HUB ================= -->
+      <line x1="246" y1="180" x2="358" y2="196" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="252" y="176" class="flow-label">Read Query</text>
+
+      <line x1="358" y1="220" x2="246" y2="204" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="252" y="236" class="flow-label">Row Data</text>
+
+      <line x1="246" y1="260" x2="358" y2="410" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="256" y="290" class="flow-label">Write Query</text>
+
+      <line x1="358" y1="430" x2="246" y2="280" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="200" y="330" class="flow-label">Confirm</text>
+
+      <line x1="246" y1="490" x2="358" y2="470" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="252" y="480" class="flow-label">Upload</text>
+
+      <line x1="358" y1="484" x2="246" y2="504" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="252" y="520" class="flow-label">Signed URL</text>
+
+      <!-- ================= FLOW ARROWS: HUB <-> RIGHT ================= -->
+      <line x1="932" y1="88" x2="822" y2="148" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="838" y="120" class="flow-label">Page Request</text>
+
+      <line x1="822" y1="160" x2="932" y2="128" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="840" y="150" class="flow-label">Rendered HTML</text>
+
+      <line x1="932" y1="200" x2="822" y2="400" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="838" y="270" class="flow-label">Form Submit</text>
+
+      <line x1="822" y1="420" x2="932" y2="260" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="838" y="340" class="flow-label">Redirect</text>
+
+      <!-- ================= FLOW: HUB <-> index.html ================= -->
+      <line x1="560" y1="606" x2="560" y2="660" stroke="currentColor" stroke-width="1.3" marker-end="url(#plainArrow)"/>
+      <text x="480" y="638" class="note mono">shared organizations.id</text>
+
+      <line x1="640" y1="660" x2="640" y2="606" stroke="var(--flow)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#flowArrow)"/>
+      <text x="648" y="638" class="flow-label">Registration Request</text>
+      <text x="648" y="650" class="note" font-style="italic">planned, not built</text>
+    </svg>
+    <figcaption><b>How to read it:</b> the dashed magenta lines are live data flows, labeled by what actually moves — a query in, rows back; a form submit, a redirect back. The solid black line between the hub and <span class="mono">index.html</span> is the one relationship that's real today (both apps hang off the same <span class="mono">organizations</span> row); the magenta dashed one below it is the cross-module registration bridge that's scoped but not yet built.</figcaption>
+  </figure>
+
+  <footer>generated 2026-08-27 · companion to the Club Manager Test Plan</footer>
+</div>
