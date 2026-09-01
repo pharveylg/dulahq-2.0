@@ -72,6 +72,14 @@ export async function loadDemoData() {
     .insert({ club_id: club.id, user_id: demoStaffUser.id, role: 'coach' });
   if (clubStaffError) return { error: friendlyError(clubStaffError) };
 
+  // As of the RBAC narrowing (2026-08-29), a coach without a team
+  // assignment has no access to anything -- assign the demo coach to
+  // U12 so the demo actually demonstrates the coach role, not a locked-out one.
+  const { error: assignError } = await supabase
+    .from('user_assigned_teams')
+    .insert({ user_id: demoStaffUser.id, team_id: u12.id });
+  if (assignError) return { error: friendlyError(assignError) };
+
   const u12Players = [
     { name: 'Mateo Santos', jersey: '7', position: 'Forward', age: '11' },
     { name: 'Liam Cruz', jersey: '4', position: 'Defender', age: '12' },
@@ -164,6 +172,7 @@ export async function wipeDemoData() {
   }
 
   if (clubIds.length) await supabase.from('club_staff').delete().in('club_id', clubIds);
+  if (teamIds.length) await supabase.from('user_assigned_teams').delete().in('team_id', teamIds);
   await supabase.from('users').delete().eq('email', DEMO_STAFF_EMAIL);
 
   if (teamIds.length) await supabase.from('teams').delete().in('id', teamIds);

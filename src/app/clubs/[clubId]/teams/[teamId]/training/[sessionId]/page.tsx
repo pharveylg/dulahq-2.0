@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/server';
 import AttendanceRow from './AttendanceRow';
 
 export default async function SessionAttendancePage({
@@ -12,8 +12,6 @@ export default async function SessionAttendancePage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-
-  const dulaUser = await getCurrentDulaUser();
 
   const { data: team } = await supabase.from('teams').select('id, name, club_id').eq('id', teamId).maybeSingle();
   if (!team || team.club_id !== clubId) notFound();
@@ -35,10 +33,9 @@ export default async function SessionAttendancePage({
   }
   if (!session || session.team_id !== teamId) notFound();
 
-  const { data: myStaffRow } = dulaUser
-    ? await supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle()
-    : { data: null };
-  const canManage = dulaUser?.role === 'admin' || !!myStaffRow;
+  const access = await getClubAccess(clubId);
+  const assignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
+  const canManage = access.isClubAdmin || assignedTeamIds.includes(teamId);
 
   const { data: players } = await supabase.from('players').select('id, name').eq('team_id', teamId).order('name');
   const { data: attendanceRows } = await supabase

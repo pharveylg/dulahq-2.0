@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { createClient, getClubAccess } from '@/lib/supabase/server';
 import PassengerList from './PassengerList';
 import TransportationList from './TransportationList';
 
@@ -13,8 +13,6 @@ export default async function TripDetailPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-
-  const dulaUser = await getCurrentDulaUser();
 
   const { data: club } = await supabase.from('clubs').select('id, name').eq('id', clubId).maybeSingle();
   if (!club) notFound();
@@ -36,10 +34,12 @@ export default async function TripDetailPage({
   }
   if (!trip || trip.club_id !== clubId) notFound();
 
-  const { data: myStaffRow } = dulaUser
-    ? await supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle()
-    : { data: null };
-  const canManage = dulaUser?.role === 'admin' || !!myStaffRow;
+  // Trips are deliberately NOT scoped to assigned teams (RBAC Phase 1
+  // audit flagged this: trips are inherently multi-team by design, and the
+  // RBAC doc's role tables never mention them) -- any club staff can manage
+  // any trip, same as before.
+  const access = await getClubAccess(clubId);
+  const canManage = access.isStaff;
 
   // Every player on any team linked to this club is eligible to be a
   // passenger -- trips aren't team-scoped, they're club-wide.

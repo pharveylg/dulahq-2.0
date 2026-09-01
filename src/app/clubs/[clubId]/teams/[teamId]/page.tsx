@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/server';
 import AddPlayerForm from './AddPlayerForm';
 import PlayerRow from './PlayerRow';
 import TrainingSessions from './TrainingSessions';
@@ -14,8 +14,6 @@ export default async function TeamRosterPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-
-  const dulaUser = await getCurrentDulaUser();
 
   const { data: club } = await supabase.from('clubs').select('id, name').eq('id', clubId).maybeSingle();
   if (!club) notFound();
@@ -37,13 +35,15 @@ export default async function TeamRosterPage({
   }
   if (!team || team.club_id !== clubId) notFound();
 
-  // Any club_staff role (not just club_admin) can manage players/guardians
-  // -- matches the RLS added for players/guardians/player_guardians, which
-  // gates on is_club_staff(), not is_club_admin().
-  const { data: myStaffRow } = dulaUser
-    ? await supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle()
-    : { data: null };
-  const canManage = dulaUser?.role === 'admin' || !!myStaffRow;
+  // RBAC Phase 1 (rbac_phase1_narrow_coach_to_assigned_teams): a club_admin
+  // (or platform admin) can manage any team; every other club_staff role is
+  // scoped to teams they're specifically assigned to via user_assigned_teams
+  // -- matches exactly what the RLS on players/guardians/fee_charges/
+  // memberships/training_sessions/attendance now enforces, so this page
+  // never shows an edit control the database would then reject.
+  const access = await getClubAccess(clubId);
+  const assignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
+  const canManage = access.isClubAdmin || assignedTeamIds.includes(teamId);
 
   const { data: players, error: playersError } = await supabase
     .from('players')
@@ -112,6 +112,17 @@ export default async function TeamRosterPage({
             <h1>{team.name}</h1>
             <p className="subtitle">{rosterPlayers.length} player{rosterPlayers.length === 1 ? '' : 's'}</p>
           </div>
+          <span className="chip">
+            {access.isPlatformAdmin
+              ? 'Platform admin'
+              : access.isClubAdmin
+                ? 'Club admin'
+                : canManage
+                  ? `${access.role?.replace('_', ' ')} — assigned`
+                  : access.role
+                    ? `${access.role.replace('_', ' ')} — not assigned here`
+                    : 'No access here'}
+          </span>
         </div>
 
         {playersError && <p className="error-text">Couldn&apos;t load the roster: {playersError.message}</p>}
@@ -127,7 +138,9 @@ export default async function TeamRosterPage({
             <AddPlayerForm clubId={clubId} teamId={teamId} />
           ) : (
             <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-              Only club staff or a platform admin can manage this roster.
+              {access.isStaff
+                ? 'You can manage teams you’re assigned to — ask a club admin to assign you to this one.'
+                : 'Only club staff or a platform admin can manage this roster.'}
             </p>
           )}
         </div>

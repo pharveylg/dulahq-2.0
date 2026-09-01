@@ -114,3 +114,61 @@ export async function getClubCreatableOrgs() {
     .map((m: any) => m.organizations)
     .filter(Boolean);
 }
+
+export type ClubRole = 'club_admin' | 'staff' | 'coach' | 'team_manager';
+
+export type ClubAccess = {
+  /** Signed in but has no club_staff row here and isn't a platform admin. */
+  isSignedIn: boolean;
+  isPlatformAdmin: boolean;
+  role: ClubRole | null;
+  /** club_admin or platform admin -- unrestricted within this club, per RBAC Phase 1. */
+  isClubAdmin: boolean;
+  /** Any club_staff role, or platform admin -- can see the club exists and manage assigned teams. */
+  isStaff: boolean;
+};
+
+/**
+ * Resolves this session's effective access at ONE club, mirroring exactly
+ * what the RLS layer now enforces (rbac_phase1_narrow_coach_to_assigned_teams):
+ * platform admin and club_admin are club-wide; every other club_staff role
+ * (coach/team_manager/staff) is scoped to getAssignedTeamIds() below, not
+ * the whole club. Used so pages don't show an edit control that RLS would
+ * then silently reject -- the UI decision and the database decision read
+ * from the same two facts (is_club_admin, is_assigned_to_team), not two
+ * separately-maintained rules that can drift apart.
+ */
+export async function getClubAccess(clubId: string): Promise<ClubAccess> {
+  const dulaUser = await getCurrentDulaUser();
+  const platformAdmin = await isPlatformAdmin();
+
+  if (!dulaUser) return { isSignedIn: false, isPlatformAdmin: platformAdmin, role: null, isClubAdmin: platformAdmin, isStaff: platformAdmin };
+
+  const supabase = await createClient();
+  const { data } = await supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle();
+  const role = (data?.role as ClubRole | undefined) ?? null;
+
+  return {
+    isSignedIn: true,
+    isPlatformAdmin: platformAdmin,
+    role,
+    isClubAdmin: platformAdmin || role === 'club_admin',
+    isStaff: platformAdmin || !!role,
+  };
+}
+
+/**
+ * Team ids this session is specifically assigned to (public.user_assigned_teams)
+ * -- the same table is_assigned_to_team() reads on the database side. A
+ * club_admin/platform admin's access doesn't depend on this list at all
+ * (they're club-wide); it only matters for scoping a coach/team_manager/staff
+ * member's view down to the teams RLS will actually let them touch.
+ */
+export async function getAssignedTeamIds(): Promise<string[]> {
+  const dulaUser = await getCurrentDulaUser();
+  if (!dulaUser) return [];
+
+  const supabase = await createClient();
+  const { data } = await supabase.from('user_assigned_teams').select('team_id').eq('user_id', dulaUser.id);
+  return (data ?? []).map((r) => r.team_id);
+}

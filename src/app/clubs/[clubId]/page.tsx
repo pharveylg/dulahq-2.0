@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/server';
 import EditNameForm from './EditNameForm';
 import AddStaffForm from './AddStaffForm';
 import LinkTeamForm from './LinkTeamForm';
@@ -15,8 +15,6 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-
-  const dulaUser = await getCurrentDulaUser();
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
@@ -35,21 +33,13 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   }
   if (!club) notFound();
 
-  // Is the current user club_admin here (or a platform admin)? Purely
-  // for UI gating -- RLS is still the real enforcement.
-  const { data: myStaffRow } = dulaUser
-    ? await supabase
-        .from('club_staff')
-        .select('role')
-        .eq('club_id', clubId)
-        .eq('user_id', dulaUser.id)
-        .maybeSingle()
-    : { data: null };
-
-  const canManage = dulaUser?.role === 'admin' || myStaffRow?.role === 'club_admin';
-  // Trips/announcements RLS is scoped to any club_staff role (is_club_staff),
-  // not just club_admin -- matches the roster page's broader canManage.
-  const canManageWide = dulaUser?.role === 'admin' || !!myStaffRow;
+  // access.isClubAdmin gates club-wide actions (rename, staff, link teams,
+  // any-audience announcements); access.isStaff gates the broader "any
+  // club_staff role" actions RLS still allows unscoped (trips, media).
+  const access = await getClubAccess(clubId);
+  const canManage = access.isClubAdmin;
+  const canManageWide = access.isStaff;
+  const myAssignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
 
   const { data: staffRows } = await supabase
     .from('club_staff')
@@ -94,7 +84,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const { data: announcementRows } = await supabase
     .from('announcements')
-    .select('id, title, body, audience, pinned, created_at, teams(name)')
+    .select('id, title, body, audience, team_id, pinned, created_at, teams(name)')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -103,6 +93,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     title: a.title,
     body: a.body,
     audience: a.audience,
+    teamId: a.team_id,
     teamName: a.teams?.name ?? null,
     pinned: a.pinned,
     createdAt: a.created_at,
@@ -136,6 +127,9 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             <h1>{club.name}</h1>
             {canManage && <EditNameForm clubId={club.id} initialName={club.name} />}
           </div>
+          <span className="chip">
+            {access.isPlatformAdmin ? 'Platform admin' : access.role ? access.role.replace('_', ' ') : 'No access here'}
+          </span>
         </div>
 
         <div className="section-label">Teams ({clubTeams?.length ?? 0})</div>
@@ -174,7 +168,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           <AddStaffForm clubId={club.id} />
         ) : (
           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-            Only club staff or a platform admin can manage this club.
+            Only a club admin or a platform admin can manage club settings and staff.
           </p>
         )}
 
@@ -186,7 +180,14 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
         <div className="section-label" style={{ marginTop: 28 }}>
           Announcements ({announcements.length})
         </div>
-        <Announcements clubId={club.id} announcements={announcements} teams={clubTeams ?? []} canManage={canManageWide} />
+        <Announcements
+          clubId={club.id}
+          announcements={announcements}
+          teams={clubTeams ?? []}
+          canManage={canManageWide}
+          isClubAdmin={access.isClubAdmin}
+          assignedTeamIds={myAssignedTeamIds}
+        />
 
         <div className="section-label" style={{ marginTop: 28 }}>
           Photos ({mediaItems.length})
