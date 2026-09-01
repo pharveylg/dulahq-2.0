@@ -132,17 +132,29 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           </span>
         </div>
 
-        <div className="section-label">Teams ({clubTeams?.length ?? 0})</div>
+        <div className="section-label">
+          {access.isClubAdmin ? `Teams (${clubTeams?.length ?? 0})` : `My teams (${myAssignedTeamIds.length} of ${clubTeams?.length ?? 0})`}
+        </div>
         <div className="card">
           {(!clubTeams || clubTeams.length === 0) && (
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No teams linked yet.</p>
           )}
-          {clubTeams?.map((t) => (
-            <Link key={t.id} href={`/clubs/${club.id}/teams/${t.id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
-              <span className="list-row-title">{t.name}</span>
-              <span className="chip">Roster →</span>
-            </Link>
-          ))}
+          {[...(clubTeams ?? [])]
+            .sort((a, b) => {
+              if (access.isClubAdmin) return 0;
+              return Number(myAssignedTeamIds.includes(b.id)) - Number(myAssignedTeamIds.includes(a.id));
+            })
+            .map((t) => {
+              const assigned = access.isClubAdmin || myAssignedTeamIds.includes(t.id);
+              return (
+                <Link key={t.id} href={`/clubs/${club.id}/teams/${t.id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <span className="list-row-title">{t.name}</span>
+                  <span className="chip" style={assigned ? undefined : { color: 'var(--text-muted)' }}>
+                    {assigned ? 'Roster →' : 'Not assigned →'}
+                  </span>
+                </Link>
+              );
+            })}
           {canManage && <LinkTeamForm clubId={club.id} unclaimedTeams={unclaimedTeams ?? []} />}
         </div>
 

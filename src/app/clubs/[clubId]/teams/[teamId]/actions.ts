@@ -89,3 +89,65 @@ export async function removeGuardianLink(clubId: string, teamId: string, playerG
   revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
   return { success: true };
 }
+
+/**
+ * Marks a guardian as invited so they can self-claim an account at
+ * /guardian-signup (RBAC Phase 3) -- doesn't send an email itself, that's
+ * Supabase Auth's own signup-confirmation email once they actually sign
+ * up. This step just flips the flag that lets the claim policies on
+ * guardians recognize them ("account_status = 'invited'").
+ */
+export async function inviteGuardian(clubId: string, teamId: string, guardianId: string, email: string) {
+  if (!email?.trim()) return { error: 'This guardian needs an email on file before they can be invited.' };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('guardians')
+    .update({ account_status: 'invited', invited_at: new Date().toISOString() })
+    .eq('id', guardianId);
+
+  if (error) return { error: friendlyError(error) };
+  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  return { success: true };
+}
+
+/**
+ * Links an existing Dula HQ account to this player (RBAC Phase 4) --
+ * staff/guardian-initiated by email lookup, the same pattern as
+ * AddStaffForm's addStaff, deliberately NOT a public player-signup route.
+ * Building self-service signup for a player means deciding a minor-consent
+ * policy, which isn't an engineering call -- this sidesteps that
+ * entirely by requiring the account to already exist and an adult
+ * (staff or the linked guardian) to do the linking.
+ */
+export async function linkPlayerAccount(clubId: string, teamId: string, playerId: string, formData: FormData) {
+  const email = (formData.get('email') as string)?.trim().toLowerCase();
+  if (!email) return { error: 'Email is required.' };
+
+  const supabase = await createClient();
+
+  const { data: existingUser, error: lookupError } = await supabase
+    .from('users')
+    .select('id, name')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (lookupError) return { error: friendlyError(lookupError) };
+  if (!existingUser) {
+    return { error: `No existing Dula HQ account found for ${email}. They need to sign up (or be added as staff/guardian) first.` };
+  }
+
+  const { error: linkError } = await supabase.from('players').update({ user_id: existingUser.id }).eq('id', playerId);
+  if (linkError) return { error: friendlyError(linkError) };
+
+  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  return { success: true };
+}
+
+export async function unlinkPlayerAccount(clubId: string, teamId: string, playerId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('players').update({ user_id: null }).eq('id', playerId);
+  if (error) return { error: friendlyError(error) };
+  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  return { success: true };
+}

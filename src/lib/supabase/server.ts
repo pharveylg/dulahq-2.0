@@ -172,3 +172,48 @@ export async function getAssignedTeamIds(): Promise<string[]> {
   const { data } = await supabase.from('user_assigned_teams').select('team_id').eq('user_id', dulaUser.id);
   return (data ?? []).map((r) => r.team_id);
 }
+
+/**
+ * Completes a guardian's self-claim (RBAC Phase 3) for the CURRENT
+ * session, if one is pending: creates their public.users row if it
+ * doesn't exist yet, then links guardians.user_id and flips
+ * account_status to 'active'. Safe to call on every authenticated page
+ * load -- it's a no-op once getCurrentDulaUser() already finds a row,
+ * so call it only when that's null (see root layout). Doing the claim
+ * this way, rather than from a specific post-confirmation redirect page,
+ * sidesteps not knowing where Supabase's confirmation-email link lands --
+ * this project's Auth redirect URL was set up for the original DulaHQ
+ * app, not this one, and changing it would affect both.
+ */
+export async function claimPendingGuardianInvite() {
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser?.email) return;
+
+  // No email filter needed here -- "guardian can see own pending invite"
+  // RLS already restricts this to exactly the caller's own row (matches
+  // lower(contact_info->>'email') against their own JWT email), so
+  // whatever comes back is guaranteed to be theirs. Filtering again here
+  // with .ilike() would be both redundant and wrong -- ILIKE treats `_`
+  // as a single-character wildcard, so it would over-match real emails
+  // like "john_doe@example.com".
+  const { data: invite } = await supabase
+    .from('guardians')
+    .select('id')
+    .eq('account_status', 'invited')
+    .maybeSingle();
+  if (!invite) return;
+
+  let { data: dulaUser } = await supabase.from('users').select('id').eq('email', authUser.email).maybeSingle();
+  if (!dulaUser) {
+    const { data: created } = await supabase
+      .from('users')
+      .insert({ email: authUser.email, name: authUser.email.split('@')[0], role: 'audience' })
+      .select('id')
+      .single();
+    dulaUser = created;
+  }
+  if (!dulaUser) return;
+
+  await supabase.from('guardians').update({ user_id: dulaUser.id, account_status: 'active' }).eq('id', invite.id);
+}

@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 
-export default function LoginPage() {
+export default function GuardianSignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [checkEmail, setCheckEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -18,7 +19,7 @@ export default function LoginPage() {
     setError(null);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
       setError(error.message);
@@ -26,15 +27,43 @@ export default function LoginPage() {
       return;
     }
 
-    router.push('/clubs');
-    router.refresh();
+    if (data.session) {
+      // Email confirmation isn't required for this project -- claim the
+      // invite right away (the root layout does this automatically on
+      // next page load, but redirecting straight to /clubs feels better
+      // than a blank intermediate step).
+      router.push('/clubs');
+      router.refresh();
+      return;
+    }
+
+    // Confirmation required -- the root layout completes the claim the
+    // next time they load any page with a confirmed session.
+    setCheckEmail(true);
+    setLoading(false);
+  }
+
+  if (checkEmail) {
+    return (
+      <main className="page">
+        <div className="container" style={{ maxWidth: 360 }}>
+          <div className="page-header" style={{ marginBottom: 24 }}>
+            <h1>Check your email</h1>
+          </div>
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+            We sent a confirmation link to <b style={{ color: 'var(--text)' }}>{email}</b>. Click it, then come back
+            here — your account will be linked to your invite automatically.
+          </p>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="page">
       <div className="container" style={{ maxWidth: 360 }}>
         <div className="page-header" style={{ marginBottom: 24 }}>
-          <h1>Sign in</h1>
+          <h1>Create your account</h1>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -52,6 +81,7 @@ export default function LoginPage() {
             <input
               id="password"
               type="password"
+              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -59,16 +89,12 @@ export default function LoginPage() {
           </div>
           {error && <p className="error-text">{error}</p>}
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-          This app doesn't create staff accounts — sign in with an existing
-          Dula HQ login. Staff accounts are still managed the same way the
-          rest of the app already handles them.
-        </p>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 8 }}>
-          Invited as a guardian? <Link href="/guardian-signup">Create your account</Link>.
+          Use the email your club invited — this only works if a club has already added you as a
+          guardian and invited you. Already have an account? <Link href="/login">Sign in</Link>.
         </p>
       </div>
     </main>

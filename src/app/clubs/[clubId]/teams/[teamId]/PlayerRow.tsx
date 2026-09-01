@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { removePlayer, addGuardian, removeGuardianLink } from './actions';
+import { removePlayer, addGuardian, removeGuardianLink, inviteGuardian, linkPlayerAccount, unlinkPlayerAccount } from './actions';
 import PlayerFees from './PlayerFees';
 import PlayerMembership from './PlayerMembership';
 
@@ -12,6 +12,7 @@ type Guardian = {
   relationship: string;
   isPrimaryContact: boolean;
   contactInfo: { phone?: string | null; email?: string | null } | null;
+  accountStatus: 'no_account' | 'invited' | 'active';
 };
 
 type FeeCharge = {
@@ -30,6 +31,7 @@ type Player = {
   jersey: string | null;
   position: string | null;
   age: string | null;
+  linkedAccount: { name: string | null; email: string | null } | null;
   guardians: Guardian[];
   fees: FeeCharge[];
   memberships: { id: string; periodStart: string; periodEnd: string | null; status: string }[];
@@ -52,11 +54,37 @@ export default function PlayerRow({
   const [showAddGuardian, setShowAddGuardian] = useState(false);
   const [showFees, setShowFees] = useState(false);
   const [showMembership, setShowMembership] = useState(false);
+  const [showLinkAccount, setShowLinkAccount] = useState(false);
 
   function handleRemovePlayer() {
     setError(null);
     startTransition(async () => {
       const result = await removePlayer(clubId, teamId, player.id);
+      if (result?.error) setError(result.error);
+    });
+  }
+
+  function handleLinkAccount(formData: FormData) {
+    setError(null);
+    startTransition(async () => {
+      const result = await linkPlayerAccount(clubId, teamId, player.id, formData);
+      if (result?.error) setError(result.error);
+      else setShowLinkAccount(false);
+    });
+  }
+
+  function handleUnlinkAccount() {
+    setError(null);
+    startTransition(async () => {
+      const result = await unlinkPlayerAccount(clubId, teamId, player.id);
+      if (result?.error) setError(result.error);
+    });
+  }
+
+  function handleInviteGuardian(guardianId: string, email: string | null | undefined) {
+    setError(null);
+    startTransition(async () => {
+      const result = await inviteGuardian(clubId, teamId, guardianId, email ?? '');
       if (result?.error) setError(result.error);
     });
   }
@@ -102,6 +130,9 @@ export default function PlayerRow({
           <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowMembership((v) => !v)}>
             Membership
           </button>
+          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowLinkAccount((v) => !v)}>
+            {player.linkedAccount ? 'Linked' : 'Account'}
+          </button>
           {canManage && (
             <button className="btn" onClick={handleRemovePlayer} disabled={pending} style={{ fontSize: 12 }}>
               Remove
@@ -125,16 +156,31 @@ export default function PlayerRow({
                   {g.contactInfo?.phone ? ` · ${g.contactInfo.phone}` : ''}
                   {g.contactInfo?.email ? ` · ${g.contactInfo.email}` : ''}
                 </span>
+                {g.accountStatus !== 'no_account' && (
+                  <span className="chip" style={{ marginLeft: 6, fontSize: 10 }}>{g.accountStatus}</span>
+                )}
               </span>
-              {canManage && (
-                <button
-                  onClick={() => handleRemoveGuardian(g.linkId)}
-                  disabled={pending}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
-                >
-                  Remove
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {canManage && g.accountStatus === 'no_account' && (
+                  <button
+                    onClick={() => handleInviteGuardian(g.guardianId, g.contactInfo?.email)}
+                    disabled={pending || !g.contactInfo?.email}
+                    title={g.contactInfo?.email ? undefined : 'Add an email first'}
+                    style={{ background: 'none', border: 'none', cursor: g.contactInfo?.email ? 'pointer' : 'not-allowed', color: 'var(--accent)', fontSize: 12 }}
+                  >
+                    Invite
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    onClick={() => handleRemoveGuardian(g.linkId)}
+                    disabled={pending}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
           ))}
 
@@ -180,6 +226,51 @@ export default function PlayerRow({
 
       {showMembership && (
         <PlayerMembership clubId={clubId} teamId={teamId} playerId={player.id} memberships={player.memberships} canManage={canManage} />
+      )}
+
+      {showLinkAccount && (
+        <div style={{ paddingLeft: 2 }}>
+          {player.linkedAccount ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 13 }}>
+                Linked to {player.linkedAccount.name ?? player.linkedAccount.email}
+                {player.linkedAccount.email && player.linkedAccount.name && (
+                  <span style={{ color: 'var(--text-muted)' }}> · {player.linkedAccount.email}</span>
+                )}
+              </span>
+              {canManage && (
+                <button
+                  onClick={handleUnlinkAccount}
+                  disabled={pending}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
+                >
+                  Unlink
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
+                No player account linked yet.
+              </p>
+              {canManage && (
+                <form action={handleLinkAccount} className="form-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+                  <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
+                    <input name="email" type="email" placeholder="Their Dula HQ email" required />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={pending} style={{ fontSize: 12 }}>
+                    {pending ? 'Linking…' : 'Link'}
+                  </button>
+                </form>
+              )}
+              {canManage && (
+                <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 6 }}>
+                  They need an existing Dula HQ account first (e.g. their own guardian account).
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {error && <p className="error-text" style={{ marginTop: 0 }}>{error}</p>}
