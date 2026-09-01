@@ -39,7 +39,7 @@ export default async function RootLayout({
       <body>
         <nav className="top-nav">
           <div className="container">
-            <Link href="/clubs" className="brand">
+            <Link href="/" className="brand">
               Dula HQ <span className="accent">2.0</span>
             </Link>
             {authUser && (

@@ -30,9 +30,9 @@ export default function GuardianSignupPage() {
     if (data.session) {
       // Email confirmation isn't required for this project -- claim the
       // invite right away (the root layout does this automatically on
-      // next page load, but redirecting straight to /clubs feels better
-      // than a blank intermediate step).
-      router.push('/clubs');
+      // next page load) and land through the role router, which sends a
+      // freshly-claimed guardian to /guardian.
+      router.push('/');
       router.refresh();
       return;
     }
