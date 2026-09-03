@@ -24,6 +24,7 @@ export default function Tabs({
   return (
     <div
       role="tablist"
+      className="scroll-clean"
       style={{
         display: 'flex',
         gap: 4,

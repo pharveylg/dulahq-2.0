@@ -56,6 +56,47 @@ html, body {
   color: var(--text);
   font-family: var(--font-ui);
   line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Thin, buttonless scrollbars everywhere -- the chunky OS default with
+   arrow buttons was showing up wherever content merely brushed its
+   container edge, which reads as broken rather than intentional. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* A horizontally-scrollable strip (tab bars) with no visible track --
+   still swipeable/draggable when it genuinely overflows a narrow
+   viewport, but doesn't paint a scrollbar for it. */
+.scroll-clean {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scroll-clean::-webkit-scrollbar {
+  display: none;
 }
 
 a {
@@ -77,10 +118,35 @@ h1, h2, h3, .brand {
   color: var(--accent);
 }
 
+/* Mobile-first, then widen in real steps rather than staying pinned to
+   a phone-width column on every screen -- 768px roughly matches a 10"
+   tablet portrait, 1024px a 10" tablet landscape / small laptop, 1440px
+   a normal desktop monitor. Content that genuinely wants to stay narrow
+   (forms, empty-state messages) overrides max-width inline as before. */
 .container {
-  max-width: 760px;
+  max-width: 640px;
   margin: 0 auto;
   padding: 0 20px;
+}
+
+@media (min-width: 768px) {
+  .container {
+    max-width: 900px;
+    padding: 0 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1180px;
+    padding: 0 40px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .container {
+    max-width: 1320px;
+  }
 }
 
 .top-nav {
