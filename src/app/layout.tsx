@@ -3,6 +3,7 @@ import Link from 'next/link';
 import './globals.css';
 import { getCurrentDulaUser, claimPendingGuardianInvite } from '@/lib/supabase/server';
 import { createClient } from '@/lib/supabase/server';
+import NavActions from './NavActions';
 
 export const metadata: Metadata = {
   title: 'Dula HQ 2.0 — Club Manager',
@@ -42,14 +43,17 @@ export default async function RootLayout({
             <Link href="/" className="brand">
               Dula HQ <span className="accent">2.0</span>
             </Link>
-            {authUser && (
-              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                {dulaUser?.name ?? authUser.email}
-                {dulaUser?.role && (
-                  <span className="chip" style={{ marginLeft: 8 }}>{dulaUser.role}</span>
-                )}
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {authUser && (
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  {dulaUser?.name ?? authUser.email}
+                  {dulaUser?.role && (
+                    <span className="chip" style={{ marginLeft: 8 }}>{dulaUser.role}</span>
+                  )}
+                </span>
+              )}
+              <NavActions signedIn={!!authUser} />
+            </div>
           </div>
         </nav>
         {children}

@@ -5,6 +5,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 
+// Demo-only quick logins -- passwords were set once via the Supabase
+// Admin API (never entered by hand, never stored in the DB in plaintext).
+// Remove this block before any real club onboarding.
+const TEST_PASSWORD = 'DemoPass123!';
+const TEST_ACCOUNTS = [
+  { label: 'Club manager', email: 'test-manager@dulahq-2-0-test.local' },
+  { label: 'Coach', email: 'test-coach@dulahq-2-0-test.local' },
+  { label: 'Parent / guardian', email: 'test-parent@dulahq-2-0-test.local' },
+  { label: 'Player', email: 'test-player@dulahq-2-0-test.local' },
+];
+
 function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,13 +24,12 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doSignIn(signInEmail: string, signInPassword: string) {
     setLoading(true);
     setError(null);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email: signInEmail, password: signInPassword });
 
     if (error) {
       setError(error.message);
@@ -35,6 +45,11 @@ function LoginForm() {
     const target = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/';
     router.push(target);
     router.refresh();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await doSignIn(email, password);
   }
 
   return (
@@ -77,6 +92,25 @@ function LoginForm() {
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 8 }}>
           Invited as a guardian? <Link href="/guardian-signup">Create your account</Link>.
         </p>
+
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>Test accounts (demo only)</div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            One click signs in as that role against the Riverside FC demo data.
+          </p>
+          {TEST_ACCOUNTS.map((acct) => (
+            <button
+              key={acct.email}
+              type="button"
+              className="btn"
+              style={{ width: '100%', marginBottom: 6, textAlign: 'left', fontSize: 12.5 }}
+              disabled={loading}
+              onClick={() => doSignIn(acct.email, TEST_PASSWORD)}
+            >
+              {acct.label} <span style={{ color: 'var(--text-muted)' }}>— {acct.email}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </main>
   );
