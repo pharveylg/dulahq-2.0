@@ -24,8 +24,16 @@ export default async function Home() {
     return notLinked();
   }
 
-  const { data: staffRow } = await supabase.from('club_staff').select('id').eq('user_id', dulaUser.id).limit(1).maybeSingle();
-  if (staffRow) redirect('/clubs');
+  // A staff member (any role) with access to exactly one club shouldn't
+  // have to pick it from a list of one -- land them straight on that
+  // club's dashboard. Anyone with more than one club (or none yet) still
+  // goes to /clubs, since there's a real choice to make there.
+  const { data: staffRows } = await supabase.from('club_staff').select('club_id, clubs(slug)').eq('user_id', dulaUser.id);
+  if (staffRows && staffRows.length > 0) {
+    const distinctClubs = [...new Map(staffRows.map((s: any) => [s.club_id, s.clubs?.slug])).entries()];
+    if (distinctClubs.length === 1 && distinctClubs[0][1]) redirect(`/clubs/${distinctClubs[0][1]}`);
+    redirect('/clubs');
+  }
 
   const { data: orgRow } = await supabase.from('org_members').select('org_id').ilike('email', authUser.email!).limit(1).maybeSingle();
   if (orgRow) redirect('/clubs');

@@ -54,6 +54,7 @@ export default function PlayerDetailPanel({
   teamSlug,
   player,
   canManage,
+  canManageFees,
 }: {
   clubId: string;
   teamId: string;
@@ -61,6 +62,7 @@ export default function PlayerDetailPanel({
   teamSlug: string;
   player: Player;
   canManage: boolean;
+  canManageFees: boolean;
 }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [pending, startTransition] = useTransition();
@@ -161,7 +163,7 @@ export default function PlayerDetailPanel({
       )}
 
       {activeTab === 'fees' && (
-        <PlayerFees clubId={clubId} teamId={teamId} playerId={player.id} charges={player.fees} canManage={canManage} />
+        <PlayerFees clubId={clubId} teamId={teamId} playerId={player.id} charges={player.fees} canManage={canManageFees} />
       )}
 
       {activeTab === 'membership' && (

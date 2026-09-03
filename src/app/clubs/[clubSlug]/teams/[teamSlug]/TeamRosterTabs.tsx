@@ -24,6 +24,7 @@ export default function TeamRosterTabs({
   players,
   sessions,
   canManage,
+  canManageFees,
 }: {
   clubId: string;
   teamId: string;
@@ -32,6 +33,7 @@ export default function TeamRosterTabs({
   players: Player[];
   sessions: Session[];
   canManage: boolean;
+  canManageFees: boolean;
 }) {
   const [topTab, setTopTab] = useState('roster');
   const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '');
@@ -48,12 +50,13 @@ export default function TeamRosterTabs({
 
       {topTab === 'roster' && (
         <>
+          {canManage && <AddPlayerForm clubId={clubId} teamId={teamId} />}
           {players.length === 0 ? (
-            <div className="card empty-state">
+            <div className="card empty-state" style={{ marginTop: canManage ? 16 : 0 }}>
               <p>No players yet.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: canManage ? 16 : 0 }}>
               <div style={{ width: 220, flexShrink: 0 }}>
                 <VerticalTabList
                   items={players.map((p) => ({
@@ -75,13 +78,13 @@ export default function TeamRosterTabs({
                       teamSlug={teamSlug}
                       player={selectedPlayer}
                       canManage={canManage}
+                      canManageFees={canManageFees}
                     />
                   </Reveal>
                 )}
               </div>
             </div>
           )}
-          {canManage && <AddPlayerForm clubId={clubId} teamId={teamId} />}
         </>
       )}
 

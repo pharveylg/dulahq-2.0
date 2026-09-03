@@ -45,6 +45,10 @@ export default async function TeamRosterPage({
   const access = await getClubAccess(clubId);
   const assignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
   const canManage = access.isClubAdmin || assignedTeamIds.includes(teamId);
+  // Fees specifically are also settable by a plain 'staff' club_staff
+  // member, not just club_admin or the assigned coach -- matches
+  // widen_fee_management_to_staff_role.
+  const canManageFees = canManage || access.role === 'staff';
 
   const { data: players, error: playersError } = await supabase
     .from('players')
@@ -140,6 +144,7 @@ export default async function TeamRosterPage({
           players={rosterPlayers}
           sessions={trainingSessions}
           canManage={canManage}
+          canManageFees={canManageFees}
         />
 
         {!canManage && (

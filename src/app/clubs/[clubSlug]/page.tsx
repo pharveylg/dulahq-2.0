@@ -10,6 +10,9 @@ import Announcements from './Announcements';
 import MediaGallery from './MediaGallery';
 import ClubDashboardStats from './ClubDashboardStats';
 import ClubPageTabs from './ClubPageTabs';
+import Finances from './Finances';
+import Reports from './Reports';
+import Meetings from './Meetings';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ clubSlug: string }> }) {
@@ -46,6 +49,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   const access = await getClubAccess(clubId);
   const canManage = access.isClubAdmin;
   const canManageWide = access.isStaff;
+  const canManageFinances = access.isClubAdmin || access.role === 'staff';
   const myAssignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
 
   // club_staff has two FKs into users (user_id, created_by) -- the embed
@@ -194,6 +198,121 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     };
   }
 
+  // Meetings + action items -- club-wide staff tool, visible/manageable
+  // by any club_staff role (unlike fees, which are admin/staff-only).
+  const { data: meetingRows } = await supabase
+    .from('meetings')
+    .select('id, title, meeting_date, location, notes, status, meeting_action_items(id, description, due_date, status)')
+    .eq('club_id', clubId)
+    .order('meeting_date', { ascending: false });
+
+  const meetings = (meetingRows ?? []).map((m: any) => ({
+    id: m.id,
+    title: m.title,
+    meetingDate: m.meeting_date,
+    location: m.location,
+    notes: m.notes,
+    status: m.status,
+    actionItems: (m.meeting_action_items ?? []).map((a: any) => ({
+      id: a.id,
+      description: a.description,
+      dueDate: a.due_date,
+      status: a.status,
+    })),
+  }));
+
+  // Finances + Reports (club_admin/staff only -- club-wide financial
+  // detail isn't meaningful scoped to a single assigned team).
+  let financesData: { feeCharges: any[]; expenses: any[] } | null = null;
+  let reportsData: { teams: any[]; financials: { collected: number; outstanding: number; expenses: number; currency: string } } | null = null;
+
+  if (canManageFinances) {
+    const { data: allFeeCharges } = await supabase
+      .from('fee_charges')
+      .select('id, fee_type, amount, currency, status, due_date, players(name)')
+      .eq('club_id', clubId)
+      .order('due_date');
+
+    const feeCharges = (allFeeCharges ?? []).map((f: any) => ({
+      id: f.id,
+      playerName: f.players?.name ?? 'Unknown',
+      feeType: f.fee_type,
+      amount: Number(f.amount),
+      currency: f.currency,
+      status: f.status,
+      dueDate: f.due_date,
+    }));
+
+    const { data: expenseRows } = await supabase
+      .from('expenses')
+      .select('id, description, category, amount, currency, expense_date')
+      .eq('club_id', clubId)
+      .order('expense_date', { ascending: false });
+
+    const expenses = (expenseRows ?? []).map((e: any) => ({
+      id: e.id,
+      description: e.description,
+      category: e.category,
+      amount: Number(e.amount),
+      currency: e.currency,
+      expenseDate: e.expense_date,
+    }));
+
+    financesData = { feeCharges, expenses };
+
+    const collected = feeCharges.filter((f) => f.status === 'paid').reduce((sum, f) => sum + f.amount, 0);
+    const outstanding = feeCharges.filter((f) => f.status !== 'paid').reduce((sum, f) => sum + f.amount, 0);
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+    const teamIds = (clubTeams ?? []).map((t) => t.id);
+    const { data: teamPlayers } = teamIds.length
+      ? await supabase.from('players').select('id, team_id').in('team_id', teamIds)
+      : { data: [] };
+    const playerIdsByTeam = new Map<string, string[]>();
+    for (const p of teamPlayers ?? []) {
+      const list = playerIdsByTeam.get(p.team_id) ?? [];
+      list.push(p.id);
+      playerIdsByTeam.set(p.team_id, list);
+    }
+    const allPlayerIds = (teamPlayers ?? []).map((p) => p.id);
+
+    const thirtyDaysAgoR = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: reportAttendance } = teamIds.length
+      ? await supabase
+          .from('attendance')
+          .select('player_id, status, training_sessions!inner(team_id, starts_at)')
+          .in('training_sessions.team_id', teamIds)
+          .gte('training_sessions.starts_at', thirtyDaysAgoR)
+      : { data: [] };
+    const { data: reportEvaluations } = allPlayerIds.length
+      ? await supabase.from('player_evaluations').select('player_id').in('player_id', allPlayerIds)
+      : { data: [] };
+    const { data: reportGoals } = allPlayerIds.length
+      ? await supabase.from('development_goals').select('player_id, status').in('player_id', allPlayerIds)
+      : { data: [] };
+
+    const teams = (clubTeams ?? []).map((t) => {
+      const teamPlayerIds = new Set(playerIdsByTeam.get(t.id) ?? []);
+      const teamAttendance = (reportAttendance ?? []).filter((a: any) => teamPlayerIds.has(a.player_id) && !['injured', 'suspended'].includes(a.status));
+      const teamAttended = teamAttendance.filter((a: any) => a.status === 'present' || a.status === 'late').length;
+      const teamGoals = (reportGoals ?? []).filter((g) => teamPlayerIds.has(g.player_id));
+      return {
+        teamId: t.id,
+        teamName: t.name,
+        playerCount: teamPlayerIds.size,
+        attendancePct: teamAttendance.length ? Math.round((teamAttended / teamAttendance.length) * 100) : null,
+        evaluationsCount: (reportEvaluations ?? []).filter((e) => teamPlayerIds.has(e.player_id)).length,
+        activeGoals: teamGoals.filter((g) => !['achieved', 'archived'].includes(g.status)).length,
+        goalsNeedingAttention: teamGoals.filter((g) => g.status === 'needs_attention').length,
+      };
+    });
+
+    reportsData = {
+      teams,
+      financials: { collected, outstanding, expenses: totalExpenses, currency: feeCharges[0]?.currency ?? 'USD' },
+    };
+  }
+
   // Signed URLs are generated server-side per request rather than stored
   // -- R2 objects aren't public, and a signed URL expires in an hour
   // (see shared/files/lib/r2.ts), so caching one wouldn't stay valid.
@@ -235,6 +354,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             trips: trips?.length ?? 0,
             announcements: announcements.length,
             photos: mediaItems.length,
+            meetings: meetings.length,
           }}
           dashboardSlot={dashboard && (
             <ClubDashboardStats teamCount={clubTeams?.length ?? 0} staffCount={staffRows?.length ?? 0} dashboard={dashboard} />
@@ -293,6 +413,18 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                   Only a club admin or a platform admin can manage club settings and staff.
                 </p>
               )}
+            </>
+          }
+          financesSlot={financesData && (
+            <Finances clubId={club.id} feeCharges={financesData.feeCharges} expenses={financesData.expenses} canManage={canManageFinances} />
+          )}
+          reportsSlot={reportsData && (
+            <Reports teams={reportsData.teams} financials={reportsData.financials} />
+          )}
+          meetingsSlot={
+            <>
+              <div className="section-label">Meetings ({meetings.length})</div>
+              <Meetings clubId={club.id} meetings={meetings} canManage={canManageWide} />
             </>
           }
           tripsSlot={
