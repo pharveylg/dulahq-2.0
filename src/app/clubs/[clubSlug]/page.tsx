@@ -8,6 +8,7 @@ import StaffRow from './StaffRow';
 import Trips from './Trips';
 import Announcements from './Announcements';
 import MediaGallery from './MediaGallery';
+import ClubDashboardStats from './ClubDashboardStats';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ clubSlug: string }> }) {
@@ -46,9 +47,12 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   const canManageWide = access.isStaff;
   const myAssignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
 
-  const { data: staffRows } = await supabase
+  // club_staff has two FKs into users (user_id, created_by) -- the embed
+  // must be disambiguated with !user_id or PostgREST rejects the whole
+  // query as ambiguous, which silently produced an empty staffRows here.
+  const { data: staffRows, error: staffError } = await supabase
     .from('club_staff')
-    .select('id, role, user_id, users(name, email)')
+    .select('id, role, user_id, users!user_id(name, email)')
     .eq('club_id', clubId)
     .order('role');
 
@@ -225,69 +229,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
         {dashboard && (
           <>
             <div className="section-label">Dashboard</div>
-            <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, marginBottom: 20 }}>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>{clubTeams?.length ?? 0}</div>
-                <div className="list-row-meta">Teams</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>{dashboard.playerCount}</div>
-                <div className="list-row-meta">Players</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>{staffRows?.length ?? 0}</div>
-                <div className="list-row-meta">Staff</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>
-                  {dashboard.attendancePct30d !== null ? `${dashboard.attendancePct30d}%` : '—'}
-                </div>
-                <div className="list-row-meta">Attendance (30d)</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>{dashboard.activeGoals}</div>
-                <div className="list-row-meta">Active goals</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: dashboard.goalsNeedingAttention > 0 ? 'var(--warn)' : undefined }}>
-                  {dashboard.goalsNeedingAttention}
-                </div>
-                <div className="list-row-meta">Goals needing attention</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: dashboard.playersWithoutEvaluation > 0 ? 'var(--warn)' : undefined }}>
-                  {dashboard.playersWithoutEvaluation}
-                </div>
-                <div className="list-row-meta">Never evaluated</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: dashboard.pendingInvites.length > 0 ? 'var(--warn)' : undefined }}>
-                  {dashboard.pendingInvites.length}
-                </div>
-                <div className="list-row-meta">Pending guardian invites</div>
-              </div>
-              {dashboard.outstandingFees.map((f) => (
-                <div key={f.currency}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warn)' }}>{f.currency} {f.total.toFixed(2)}</div>
-                  <div className="list-row-meta">Outstanding ({f.count} charge{f.count === 1 ? '' : 's'})</div>
-                </div>
-              ))}
-            </div>
-
-            {dashboard.pendingInvites.length > 0 && (
-              <details style={{ marginBottom: 20 }}>
-                <summary style={{ fontSize: 12.5, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  {dashboard.pendingInvites.length} guardian invite{dashboard.pendingInvites.length === 1 ? '' : 's'} awaiting acceptance
-                </summary>
-                <div className="card" style={{ marginTop: 8 }}>
-                  {dashboard.pendingInvites.map((inv, i) => (
-                    <div key={i} className="list-row" style={{ padding: '6px 0' }}>
-                      <span style={{ fontSize: 13 }}>{inv.guardianName} — {inv.playerName}</span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
+            <ClubDashboardStats teamCount={clubTeams?.length ?? 0} staffCount={staffRows?.length ?? 0} dashboard={dashboard} />
           </>
         )}
 
@@ -320,6 +262,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
         <div className="section-label" style={{ marginTop: 28 }}>
           Staff ({staffRows?.length ?? 0})
         </div>
+        {staffError && <p className="error-text">Couldn&apos;t load staff: {staffError.message}</p>}
         <div className="card">
           {(!staffRows || staffRows.length === 0) && (
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No staff added yet.</p>

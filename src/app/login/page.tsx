@@ -4,6 +4,8 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import Reveal from '@/components/motion/Reveal';
+import Spotlight from '@/components/motion/Spotlight';
 
 // Demo-only quick logins -- passwords were set once via the Supabase
 // Admin API (never entered by hand, never stored in the DB in plaintext).
@@ -53,37 +55,42 @@ function LoginForm() {
   }
 
   return (
-    <main className="page">
-      <div className="container" style={{ maxWidth: 360 }}>
-        <div className="page-header" style={{ marginBottom: 24 }}>
-          <h1>Sign in</h1>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+    <main className="page" style={{ position: 'relative', overflow: 'hidden' }}>
+      <Spotlight />
+      <div className="container" style={{ maxWidth: 360, position: 'relative' }}>
+        <Reveal>
+          <div className="page-header" style={{ marginBottom: 24 }}>
+            <h1>Sign in</h1>
           </div>
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+        </Reveal>
+        <Reveal index={1}>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            {error && <p className="error-text">{error}</p>}
+            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        </Reveal>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
           This app doesn't create staff accounts — sign in with an existing
           Dula HQ login. Staff accounts are still managed the same way the
@@ -93,24 +100,27 @@ function LoginForm() {
           Invited as a guardian? <Link href="/guardian-signup">Create your account</Link>.
         </p>
 
-        <div className="card" style={{ marginTop: 24 }}>
-          <div className="section-label" style={{ marginBottom: 8 }}>Test accounts (demo only)</div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-            One click signs in as that role against the Riverside FC demo data.
-          </p>
-          {TEST_ACCOUNTS.map((acct) => (
-            <button
-              key={acct.email}
-              type="button"
-              className="btn"
-              style={{ width: '100%', marginBottom: 6, textAlign: 'left', fontSize: 12.5 }}
-              disabled={loading}
-              onClick={() => doSignIn(acct.email, TEST_PASSWORD)}
-            >
-              {acct.label} <span style={{ color: 'var(--text-muted)' }}>— {acct.email}</span>
-            </button>
-          ))}
-        </div>
+        <Reveal index={2}>
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="section-label" style={{ marginBottom: 8 }}>Test accounts (demo only)</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              One click signs in as that role against the Riverside FC demo data.
+            </p>
+            {TEST_ACCOUNTS.map((acct, i) => (
+              <Reveal key={acct.email} index={3 + i}>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ width: '100%', marginBottom: 6, textAlign: 'left', fontSize: 12.5 }}
+                  disabled={loading}
+                  onClick={() => doSignIn(acct.email, TEST_PASSWORD)}
+                >
+                  {acct.label} <span style={{ color: 'var(--text-muted)' }}>— {acct.email}</span>
+                </button>
+              </Reveal>
+            ))}
+          </div>
+        </Reveal>
       </div>
     </main>
   );

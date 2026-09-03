@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient, getCurrentDulaUser, getClubCreatableOrgs, isPlatformAdmin } from '@/lib/supabase/server';
 import DemoDataControls from './DemoDataControls';
+import ClubList from './ClubList';
 
 export default async function ClubsPage() {
   const supabase = await createClient();
@@ -69,24 +70,16 @@ export default async function ClubsPage() {
         )}
 
         {clubs && clubs.length > 0 && (
-          <div className="card">
-            {clubs.map((club: any) => (
-              <Link
-                key={club.id}
-                href={`/clubs/${club.slug}`}
-                className="list-row"
-                style={{ textDecoration: 'none', color: 'inherit' }}
-              >
-                <div className="list-row-main">
-                  <div className="list-row-title">{club.name}</div>
-                  <div className="list-row-meta">
-                    {club.organizations?.name ?? 'Unknown org'} · {club.club_staff?.[0]?.count ?? 0} staff · {club.teams?.[0]?.count ?? 0} teams
-                  </div>
-                </div>
-                <span className="chip">View →</span>
-              </Link>
-            ))}
-          </div>
+          <ClubList
+            clubs={clubs.map((club: any) => ({
+              id: club.id,
+              slug: club.slug,
+              name: club.name,
+              orgName: club.organizations?.name ?? 'Unknown org',
+              staffCount: club.club_staff?.[0]?.count ?? 0,
+              teamCount: club.teams?.[0]?.count ?? 0,
+            }))}
+          />
         )}
       </div>
     </main>
