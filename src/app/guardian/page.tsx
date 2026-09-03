@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import SlotTabs from '@/components/motion/SlotTabs';
 
 export default async function GuardianHomePage() {
   const supabase = await createClient();
@@ -85,7 +86,7 @@ export default async function GuardianHomePage() {
         .limit(20)
     : { data: [] };
 
-  const { data: announcements } = teamIds.length
+  const { data: teamAnnouncements } = teamIds.length
     ? await supabase
         .from('announcements')
         .select('id, title, body, audience, team_id, pinned, created_at, clubs(name)')
@@ -94,6 +95,22 @@ export default async function GuardianHomePage() {
         .order('created_at', { ascending: false })
         .limit(8)
     : { data: [] };
+
+  // Club-wide and 'guardians'-audience announcements are also RLS-visible
+  // to a guardian now (fix_announcements_visibility_gap) -- merge them in
+  // alongside the team-scoped ones rather than only showing the latter.
+  const { data: clubAnnouncements } = clubIds.length
+    ? await supabase
+        .from('announcements')
+        .select('id, title, body, audience, team_id, pinned, created_at, clubs(name)')
+        .in('audience', ['club', 'guardians'])
+        .in('club_id', clubIds)
+        .order('created_at', { ascending: false })
+        .limit(8)
+    : { data: [] };
+
+  const announcements = [...(teamAnnouncements ?? []), ...(clubAnnouncements ?? [])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const sessionsByTeam = new Map<string, any[]>();
   for (const s of upcomingSessions ?? []) {
@@ -136,95 +153,103 @@ export default async function GuardianHomePage() {
           </div>
         )}
 
-        {children.map((child: any) => {
-          const sessions = sessionsByTeam.get(child.team_id) ?? [];
-          const outstandingFees = feesByPlayer.get(child.id) ?? [];
-          const childGoals = goalsByPlayer.get(child.id) ?? [];
-          const childFeedback = feedbackByPlayer.get(child.id) ?? [];
-          return (
-            <div key={child.id} className="card" style={{ marginBottom: 16 }}>
-              <div className="section-label" style={{ marginBottom: 4 }}>{child.name}</div>
-              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14 }}>
-                {child.teams?.name ?? 'No team'} · {child.teams?.clubs?.name ?? ''}
-                {child.jersey ? ` · #${child.jersey}` : ''}
-              </p>
+        {children.length > 0 && (
+          <SlotTabs
+            layoutId="guardian-home-tabs"
+            tabs={[
+              ...children.map((c: any) => ({ id: c.id, label: c.name })),
+              { id: 'announcements', label: 'Announcements', badge: announcements.length },
+            ]}
+            slots={{
+              ...Object.fromEntries(
+                children.map((child: any) => {
+                  const sessions = sessionsByTeam.get(child.team_id) ?? [];
+                  const outstandingFees = feesByPlayer.get(child.id) ?? [];
+                  const childGoals = goalsByPlayer.get(child.id) ?? [];
+                  const childFeedback = feedbackByPlayer.get(child.id) ?? [];
+                  return [
+                    child.id,
+                    <div key={child.id} className="card">
+                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14 }}>
+                        {child.teams?.name ?? 'No team'} · {child.teams?.clubs?.name ?? ''}
+                        {child.jersey ? ` · #${child.jersey}` : ''}
+                      </p>
 
-              <div className="section-label" style={{ fontSize: 11 }}>Upcoming training</div>
-              {sessions.length === 0 && <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 12 }}>Nothing scheduled.</p>}
-              {sessions.map((s) => (
-                <div key={s.id} className="list-row" style={{ padding: '6px 0' }}>
-                  <span style={{ fontSize: 13 }}>
-                    {new Date(s.starts_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                    {' · '}
-                    {new Date(s.starts_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))}
-
-              {outstandingFees.length > 0 && (
-                <>
-                  <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Outstanding fees</div>
-                  {outstandingFees.map((f) => (
-                    <div key={f.id} className="list-row" style={{ padding: '6px 0' }}>
-                      <span style={{ fontSize: 13 }}>{f.fee_type} — {f.currency} {Number(f.amount).toFixed(2)}</span>
-                      <span className="chip" style={{ color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' }}>{f.status}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {childGoals.length > 0 && (
-                <>
-                  <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Development</div>
-                  {childGoals.map((g) => {
-                    const progress = g.starting_level && g.target_level && g.target_level !== g.starting_level && g.current_level != null
-                      ? Math.max(0, Math.min(100, Math.round(((g.current_level - g.starting_level) / (g.target_level - g.starting_level)) * 100)))
-                      : null;
-                    return (
-                      <div key={g.id} style={{ padding: '6px 0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                          <span>{g.title}{g.development_skills?.name ? ` — ${g.development_skills.name}` : ''}</span>
-                          <span className="chip" style={{ fontSize: 10 }}>{g.status.replace('_', ' ')}</span>
+                      <div className="section-label" style={{ fontSize: 11 }}>Upcoming training</div>
+                      {sessions.length === 0 && <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 12 }}>Nothing scheduled.</p>}
+                      {sessions.map((s) => (
+                        <div key={s.id} className="list-row" style={{ padding: '6px 0' }}>
+                          <span style={{ fontSize: 13 }}>
+                            {new Date(s.starts_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {' · '}
+                            {new Date(s.starts_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                          </span>
                         </div>
-                        {progress !== null && (
-                          <div style={{ height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
-                            <div style={{ height: '100%', width: `${progress}%`, background: 'var(--accent)' }} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+                      ))}
 
-              {childFeedback.length > 0 && (
-                <>
-                  <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Coach feedback</div>
-                  {childFeedback.map((f) => (
-                    <div key={f.id} style={{ padding: '4px 0' }}>
-                      <p style={{ fontSize: 13, margin: 0 }}>&ldquo;{f.note}&rdquo;</p>
-                      <div className="list-row-meta">{new Date(f.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+                      {outstandingFees.length > 0 && (
+                        <>
+                          <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Outstanding fees</div>
+                          {outstandingFees.map((f) => (
+                            <div key={f.id} className="list-row" style={{ padding: '6px 0' }}>
+                              <span style={{ fontSize: 13 }}>{f.fee_type} — {f.currency} {Number(f.amount).toFixed(2)}</span>
+                              <span className="chip" style={{ color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' }}>{f.status}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+
+                      {childGoals.length > 0 && (
+                        <>
+                          <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Development</div>
+                          {childGoals.map((g: any) => {
+                            const progress = g.starting_level && g.target_level && g.target_level !== g.starting_level && g.current_level != null
+                              ? Math.max(0, Math.min(100, Math.round(((g.current_level - g.starting_level) / (g.target_level - g.starting_level)) * 100)))
+                              : null;
+                            return (
+                              <div key={g.id} style={{ padding: '6px 0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                  <span>{g.title}{g.development_skills?.name ? ` — ${g.development_skills.name}` : ''}</span>
+                                  <span className="chip" style={{ fontSize: 10 }}>{g.status.replace('_', ' ')}</span>
+                                </div>
+                                {progress !== null && (
+                                  <div className="progress-track" style={{ height: 5, marginTop: 4 }}><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {childFeedback.length > 0 && (
+                        <>
+                          <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Coach feedback</div>
+                          {childFeedback.map((f: any) => (
+                            <div key={f.id} style={{ padding: '4px 0' }}>
+                              <p style={{ fontSize: 13, margin: 0 }}>&ldquo;{f.note}&rdquo;</p>
+                              <div className="list-row-meta">{new Date(f.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>,
+                  ];
+                })
+              ),
+              announcements: (
+                <div className="card">
+                  {announcements.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nothing posted yet.</p>}
+                  {announcements.map((a: any) => (
+                    <div key={a.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                      <div className="list-row-title">{a.pinned && '📌 '}{a.title}</div>
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{a.body}</p>
+                      <div className="list-row-meta">{a.clubs?.name} · {new Date(a.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
                     </div>
                   ))}
-                </>
-              )}
-            </div>
-          );
-        })}
-
-        {(announcements ?? []).length > 0 && (
-          <>
-            <div className="section-label" style={{ marginTop: 8 }}>Announcements</div>
-            <div className="card">
-              {announcements!.map((a: any) => (
-                <div key={a.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-                  <div className="list-row-title">{a.pinned && '📌 '}{a.title}</div>
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{a.body}</p>
-                  <div className="list-row-meta">{a.clubs?.name} · {new Date(a.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
                 </div>
-              ))}
-            </div>
-          </>
+              ),
+            }}
+          />
         )}
       </div>
     </main>

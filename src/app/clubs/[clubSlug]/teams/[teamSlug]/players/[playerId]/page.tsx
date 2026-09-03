@@ -6,6 +6,7 @@ import Evaluations from './Evaluations';
 import Goals from './Goals';
 import Notes from './Notes';
 import Timeline from './Timeline';
+import SlotTabs from '@/components/motion/SlotTabs';
 
 export default async function PlayerDevelopmentPage({
   params,
@@ -115,24 +116,38 @@ export default async function PlayerDevelopmentPage({
 
         <ProfileForm player={player as any} canManage={canManage} />
 
-        <div className="section-label" style={{ marginTop: 24 }}>Development goals</div>
-        <Goals playerId={playerId} teamId={teamId} clubId={clubId} goals={(goals ?? []) as any} skills={skills} canManage={canManage} />
-
-        <div className="section-label" style={{ marginTop: 24 }}>Evaluations</div>
-        <Evaluations
-          playerId={playerId}
-          teamId={teamId}
-          clubId={clubId}
-          evaluations={(evaluations ?? []).map((e) => ({ ...e, ratings: ratingsByEvaluation.get(e.id) ?? [] }))}
-          skills={skills}
-          canManage={canManage}
-        />
-
-        <div className="section-label" style={{ marginTop: 24 }}>Coach notes &amp; feedback</div>
-        <Notes playerId={playerId} teamId={teamId} clubId={clubId} notes={notes ?? []} canManage={canManage} />
-
-        <div className="section-label" style={{ marginTop: 24 }}>Development timeline</div>
-        <Timeline evaluations={evaluations ?? []} goals={goals ?? []} notes={notes ?? []} />
+        <div style={{ marginTop: 24 }}>
+          <SlotTabs
+            layoutId="player-dev-tabs"
+            tabs={[
+              { id: 'goals', label: 'Goals', badge: (goals ?? []).filter((g) => !['achieved', 'archived'].includes(g.status)).length },
+              { id: 'evaluations', label: 'Evaluations', badge: (evaluations ?? []).length },
+              { id: 'notes', label: 'Notes', badge: (notes ?? []).length },
+              { id: 'timeline', label: 'Timeline' },
+            ]}
+            slots={{
+              goals: (
+                <Goals playerId={playerId} teamId={teamId} clubId={clubId} goals={(goals ?? []) as any} skills={skills} canManage={canManage} />
+              ),
+              evaluations: (
+                <Evaluations
+                  playerId={playerId}
+                  teamId={teamId}
+                  clubId={clubId}
+                  evaluations={(evaluations ?? []).map((e) => ({ ...e, ratings: ratingsByEvaluation.get(e.id) ?? [] }))}
+                  skills={skills}
+                  canManage={canManage}
+                />
+              ),
+              notes: (
+                <Notes playerId={playerId} teamId={teamId} clubId={clubId} notes={notes ?? []} canManage={canManage} />
+              ),
+              timeline: (
+                <Timeline evaluations={evaluations ?? []} goals={goals ?? []} notes={notes ?? []} />
+              ),
+            }}
+          />
+        </div>
       </div>
     </main>
   );

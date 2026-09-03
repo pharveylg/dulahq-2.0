@@ -9,6 +9,7 @@ import Trips from './Trips';
 import Announcements from './Announcements';
 import MediaGallery from './MediaGallery';
 import ClubDashboardStats from './ClubDashboardStats';
+import ClubPageTabs from './ClubPageTabs';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ clubSlug: string }> }) {
@@ -226,87 +227,100 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           </Link>
         )}
 
-        {dashboard && (
-          <>
-            <div className="section-label">Dashboard</div>
+        <ClubPageTabs
+          hasDashboard={!!dashboard}
+          counts={{
+            teams: clubTeams?.length ?? 0,
+            staff: staffRows?.length ?? 0,
+            trips: trips?.length ?? 0,
+            announcements: announcements.length,
+            photos: mediaItems.length,
+          }}
+          dashboardSlot={dashboard && (
             <ClubDashboardStats teamCount={clubTeams?.length ?? 0} staffCount={staffRows?.length ?? 0} dashboard={dashboard} />
-          </>
-        )}
-
-        <div className="section-label">
-          {access.isClubAdmin ? `Teams (${clubTeams?.length ?? 0})` : `My teams (${myAssignedTeamIds.length} of ${clubTeams?.length ?? 0})`}
-        </div>
-        <div className="card">
-          {(!clubTeams || clubTeams.length === 0) && (
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No teams linked yet.</p>
           )}
-          {[...(clubTeams ?? [])]
-            .sort((a, b) => {
-              if (access.isClubAdmin) return 0;
-              return Number(myAssignedTeamIds.includes(b.id)) - Number(myAssignedTeamIds.includes(a.id));
-            })
-            .map((t) => {
-              const assigned = access.isClubAdmin || myAssignedTeamIds.includes(t.id);
-              return (
-                <Link key={t.id} href={`/clubs/${club.slug}/teams/${t.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
-                  <span className="list-row-title">{t.name}</span>
-                  <span className="chip" style={assigned ? undefined : { color: 'var(--text-muted)' }}>
-                    {assigned ? 'Roster →' : 'Not assigned →'}
-                  </span>
-                </Link>
-              );
-            })}
-          {canManage && <LinkTeamForm clubId={club.id} unclaimedTeams={unclaimedTeams ?? []} />}
-        </div>
-
-        <div className="section-label" style={{ marginTop: 28 }}>
-          Staff ({staffRows?.length ?? 0})
-        </div>
-        {staffError && <p className="error-text">Couldn&apos;t load staff: {staffError.message}</p>}
-        <div className="card">
-          {(!staffRows || staffRows.length === 0) && (
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No staff added yet.</p>
-          )}
-          {staffRows?.map((s: any) => (
-            <StaffRow
-              key={s.id}
-              clubId={club.id}
-              staff={s}
-              clubTeams={clubTeams ?? []}
-              assignedTeamIds={assignedTeamIdsByUser.get(s.user_id) ?? []}
-            />
-          ))}
-        </div>
-
-        {canManage ? (
-          <AddStaffForm clubId={club.id} />
-        ) : (
-          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-            Only a club admin or a platform admin can manage club settings and staff.
-          </p>
-        )}
-
-        <div className="section-label" style={{ marginTop: 28 }}>
-          Trips ({trips?.length ?? 0})
-        </div>
-        <Trips clubId={club.id} clubSlug={club.slug} trips={trips ?? []} canManage={canManageWide} />
-
-        <div className="section-label" style={{ marginTop: 28 }}>
-          Announcements ({announcements.length})
-        </div>
-        <Announcements
-          clubId={club.id}
-          announcements={announcements}
-          teams={clubTeams ?? []}
-          canManage={canManageWide}
-          isClubAdmin={access.isClubAdmin}
-          assignedTeamIds={myAssignedTeamIds}
+          teamsSlot={
+            <>
+              <div className="section-label">
+                {access.isClubAdmin ? `Teams (${clubTeams?.length ?? 0})` : `My teams (${myAssignedTeamIds.length} of ${clubTeams?.length ?? 0})`}
+              </div>
+              <div className="card">
+                {(!clubTeams || clubTeams.length === 0) && (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No teams linked yet.</p>
+                )}
+                {[...(clubTeams ?? [])]
+                  .sort((a, b) => {
+                    if (access.isClubAdmin) return 0;
+                    return Number(myAssignedTeamIds.includes(b.id)) - Number(myAssignedTeamIds.includes(a.id));
+                  })
+                  .map((t) => {
+                    const assigned = access.isClubAdmin || myAssignedTeamIds.includes(t.id);
+                    return (
+                      <Link key={t.id} href={`/clubs/${club.slug}/teams/${t.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <span className="list-row-title">{t.name}</span>
+                        <span className="chip" style={assigned ? undefined : { color: 'var(--text-muted)' }}>
+                          {assigned ? 'Roster →' : 'Not assigned →'}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                {canManage && <LinkTeamForm clubId={club.id} unclaimedTeams={unclaimedTeams ?? []} />}
+              </div>
+            </>
+          }
+          staffSlot={
+            <>
+              <div className="section-label">Staff ({staffRows?.length ?? 0})</div>
+              {staffError && <p className="error-text">Couldn&apos;t load staff: {staffError.message}</p>}
+              <div className="card">
+                {(!staffRows || staffRows.length === 0) && (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No staff added yet.</p>
+                )}
+                {staffRows?.map((s: any) => (
+                  <StaffRow
+                    key={s.id}
+                    clubId={club.id}
+                    staff={s}
+                    clubTeams={clubTeams ?? []}
+                    assignedTeamIds={assignedTeamIdsByUser.get(s.user_id) ?? []}
+                  />
+                ))}
+              </div>
+              {canManage ? (
+                <AddStaffForm clubId={club.id} />
+              ) : (
+                <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
+                  Only a club admin or a platform admin can manage club settings and staff.
+                </p>
+              )}
+            </>
+          }
+          tripsSlot={
+            <>
+              <div className="section-label">Trips ({trips?.length ?? 0})</div>
+              <Trips clubId={club.id} clubSlug={club.slug} trips={trips ?? []} canManage={canManageWide} />
+            </>
+          }
+          announcementsSlot={
+            <>
+              <div className="section-label">Announcements ({announcements.length})</div>
+              <Announcements
+                clubId={club.id}
+                announcements={announcements}
+                teams={clubTeams ?? []}
+                canManage={canManageWide}
+                isClubAdmin={access.isClubAdmin}
+                assignedTeamIds={myAssignedTeamIds}
+              />
+            </>
+          }
+          photosSlot={
+            <>
+              <div className="section-label">Photos ({mediaItems.length})</div>
+              <MediaGallery clubId={club.id} items={mediaItems} canManage={canManageWide} />
+            </>
+          }
         />
-
-        <div className="section-label" style={{ marginTop: 28 }}>
-          Photos ({mediaItems.length})
-        </div>
-        <MediaGallery clubId={club.id} items={mediaItems} canManage={canManageWide} />
       </div>
     </main>
   );

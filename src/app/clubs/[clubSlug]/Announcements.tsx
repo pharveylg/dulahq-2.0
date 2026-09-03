@@ -19,7 +19,7 @@ type Team = { id: string; name: string };
 type ActionState = { error?: string };
 const initialState: ActionState = {};
 
-const AUDIENCES = ['club', 'team', 'players', 'guardians', 'coaches', 'staff', 'tournament_participants', 'trip_participants'];
+const AUDIENCES = ['club', 'team', 'players', 'guardians', 'coaches', 'staff'];
 
 function AnnouncementRow({
   clubId,

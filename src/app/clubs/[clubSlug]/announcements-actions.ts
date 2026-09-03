@@ -10,7 +10,7 @@ function friendlyError(error: { code?: string; message: string }) {
   return error.message;
 }
 
-const VALID_AUDIENCES = ['club', 'team', 'players', 'guardians', 'coaches', 'staff', 'tournament_participants', 'trip_participants'];
+const VALID_AUDIENCES = ['club', 'team', 'players', 'guardians', 'coaches', 'staff'];
 
 export async function createAnnouncement(clubId: string, formData: FormData) {
   const title = (formData.get('title') as string)?.trim();

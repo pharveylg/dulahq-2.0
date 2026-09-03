@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { removePlayer, addGuardian, removeGuardianLink, inviteGuardian, linkPlayerAccount, unlinkPlayerAccount } from './actions';
 import PlayerFees from './PlayerFees';
 import PlayerMembership from './PlayerMembership';
+import Tabs from '@/components/motion/Tabs';
 
 type Guardian = {
   linkId: string;
@@ -38,7 +39,15 @@ type Player = {
   memberships: { id: string; periodStart: string; periodEnd: string | null; status: string }[];
 };
 
-export default function PlayerRow({
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'development', label: 'Development' },
+  { id: 'fees', label: 'Fees' },
+  { id: 'membership', label: 'Membership' },
+  { id: 'family', label: 'Family' },
+];
+
+export default function PlayerDetailPanel({
   clubId,
   teamId,
   clubSlug,
@@ -53,13 +62,10 @@ export default function PlayerRow({
   player: Player;
   canManage: boolean;
 }) {
+  const [activeTab, setActiveTab] = useState('overview');
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [showGuardians, setShowGuardians] = useState(player.guardians.length > 0);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
-  const [showFees, setShowFees] = useState(false);
-  const [showMembership, setShowMembership] = useState(false);
-  const [showLinkAccount, setShowLinkAccount] = useState(false);
 
   function handleRemovePlayer() {
     setError(null);
@@ -74,7 +80,6 @@ export default function PlayerRow({
     startTransition(async () => {
       const result = await linkPlayerAccount(clubId, teamId, player.id, formData);
       if (result?.error) setError(result.error);
-      else setShowLinkAccount(false);
     });
   }
 
@@ -107,10 +112,7 @@ export default function PlayerRow({
     startTransition(async () => {
       const result = await addGuardian(clubId, teamId, player.id, formData);
       if (result?.error) setError(result.error);
-      else {
-        setShowAddGuardian(false);
-        setShowGuardians(true);
-      }
+      else setShowAddGuardian(false);
     });
   }
 
@@ -119,42 +121,63 @@ export default function PlayerRow({
     .join(' · ');
 
   return (
-    <div className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div className="list-row-main">
-          <div className="list-row-title">{player.name}</div>
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>{player.name}</div>
           {meta && <div className="list-row-meta">{meta}</div>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link href={`/clubs/${clubSlug}/teams/${teamSlug}/players/${player.id}`} className="btn" style={{ fontSize: 11.5, textDecoration: 'none' }}>
-            Development →
-          </Link>
-          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowGuardians((v) => !v)}>
-            {player.guardians.length} guardian{player.guardians.length === 1 ? '' : 's'}
+        {canManage && (
+          <button className="btn" onClick={handleRemovePlayer} disabled={pending} style={{ fontSize: 11.5 }}>
+            Remove player
           </button>
-          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowFees((v) => !v)}>
-            {player.fees.length} fee{player.fees.length === 1 ? '' : 's'}
-          </button>
-          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowMembership((v) => !v)}>
-            Membership
-          </button>
-          <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowLinkAccount((v) => !v)}>
-            {player.linkedAccount ? 'Linked' : 'Account'}
-          </button>
-          {canManage && (
-            <button className="btn" onClick={handleRemovePlayer} disabled={pending} style={{ fontSize: 12 }}>
-              Remove
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
-      {showGuardians && (
-        <div style={{ paddingLeft: 2 }}>
+      <Tabs
+        tabs={TABS.map((t) => t.id === 'fees' ? { ...t, badge: player.fees.filter((f) => f.status !== 'paid').length } : t)}
+        active={activeTab}
+        onChange={setActiveTab}
+        layoutId={`player-tabs-${player.id}`}
+      />
+
+      {activeTab === 'overview' && (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          {player.guardians.length} guardian{player.guardians.length === 1 ? '' : 's'} linked ·{' '}
+          {player.linkedAccount ? 'has a player account' : 'no player account yet'} ·{' '}
+          {player.fees.length} fee charge{player.fees.length === 1 ? '' : 's'}
+        </p>
+      )}
+
+      {activeTab === 'development' && (
+        <div>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+            Evaluations, development goals, coach notes, and the development timeline live on this player&apos;s full profile.
+          </p>
+          <Link href={`/clubs/${clubSlug}/teams/${teamSlug}/players/${player.id}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>
+            Open development profile →
+          </Link>
+        </div>
+      )}
+
+      {activeTab === 'fees' && (
+        <PlayerFees clubId={clubId} teamId={teamId} playerId={player.id} charges={player.fees} canManage={canManage} />
+      )}
+
+      {activeTab === 'membership' && (
+        <PlayerMembership clubId={clubId} teamId={teamId} playerId={player.id} memberships={player.memberships} canManage={canManage} />
+      )}
+
+      {activeTab === 'family' && (
+        <div>
+          <div className="section-label" style={{ fontSize: 11 }}>Guardians</div>
+          {player.guardians.length === 0 && (
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>No guardians linked yet.</p>
+          )}
           {player.guardians.map((g) => (
             <div
               key={g.linkId}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 0' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)' }}
             >
               <span style={{ fontSize: 13 }}>
                 {g.name}
@@ -193,17 +216,13 @@ export default function PlayerRow({
           ))}
 
           {canManage && !showAddGuardian && (
-            <button className="btn" style={{ fontSize: 11.5, marginTop: 6 }} onClick={() => setShowAddGuardian(true)}>
+            <button className="btn" style={{ fontSize: 11.5, marginTop: 8 }} onClick={() => setShowAddGuardian(true)}>
               + Add guardian
             </button>
           )}
 
           {canManage && showAddGuardian && (
-            <form
-              action={(fd) => handleAddGuardian(fd)}
-              className="form-row"
-              style={{ marginTop: 8, flexWrap: 'wrap' }}
-            >
+            <form action={handleAddGuardian} className="form-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
               <div className="form-group" style={{ flex: 2, minWidth: 130 }}>
                 <input name="name" placeholder="Guardian name" required />
               </div>
@@ -225,19 +244,8 @@ export default function PlayerRow({
               </button>
             </form>
           )}
-        </div>
-      )}
 
-      {showFees && (
-        <PlayerFees clubId={clubId} teamId={teamId} playerId={player.id} charges={player.fees} canManage={canManage} />
-      )}
-
-      {showMembership && (
-        <PlayerMembership clubId={clubId} teamId={teamId} playerId={player.id} memberships={player.memberships} canManage={canManage} />
-      )}
-
-      {showLinkAccount && (
-        <div style={{ paddingLeft: 2 }}>
+          <div className="section-label" style={{ fontSize: 11, marginTop: 20 }}>Player account</div>
           {player.linkedAccount ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={{ fontSize: 13 }}>
@@ -281,7 +289,7 @@ export default function PlayerRow({
         </div>
       )}
 
-      {error && <p className="error-text" style={{ marginTop: 0 }}>{error}</p>}
+      {error && <p className="error-text" style={{ marginTop: 12 }}>{error}</p>}
     </div>
   );
 }

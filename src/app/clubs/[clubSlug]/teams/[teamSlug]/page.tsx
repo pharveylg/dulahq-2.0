@@ -1,9 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/server';
-import AddPlayerForm from './AddPlayerForm';
-import PlayerRow from './PlayerRow';
-import TrainingSessions from './TrainingSessions';
+import TeamRosterTabs from './TeamRosterTabs';
 
 export default async function TeamRosterPage({
   params,
@@ -132,30 +130,25 @@ export default async function TeamRosterPage({
         </div>
 
         {playersError && <p className="error-text">Couldn&apos;t load the roster: {playersError.message}</p>}
-
-        <div className="card">
-          {rosterPlayers.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No players yet.</p>
-          )}
-          {rosterPlayers.map((p) => (
-            <PlayerRow key={p.id} clubId={clubId} teamId={teamId} clubSlug={clubSlug} teamSlug={teamSlug} player={p} canManage={canManage} />
-          ))}
-          {canManage ? (
-            <AddPlayerForm clubId={clubId} teamId={teamId} />
-          ) : (
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-              {access.isStaff
-                ? 'You can manage teams you’re assigned to — ask a club admin to assign you to this one.'
-                : 'Only club staff or a platform admin can manage this roster.'}
-            </p>
-          )}
-        </div>
-
-        <div className="section-label" style={{ marginTop: 28 }}>
-          Training sessions ({trainingSessions.length})
-        </div>
         {sessionsError && <p className="error-text">Couldn&apos;t load training sessions: {sessionsError.message}</p>}
-        <TrainingSessions clubId={clubId} teamId={teamId} clubSlug={clubSlug} teamSlug={teamSlug} sessions={trainingSessions} canManage={canManage} />
+
+        <TeamRosterTabs
+          clubId={clubId}
+          teamId={teamId}
+          clubSlug={clubSlug}
+          teamSlug={teamSlug}
+          players={rosterPlayers}
+          sessions={trainingSessions}
+          canManage={canManage}
+        />
+
+        {!canManage && (
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
+            {access.isStaff
+              ? 'You can manage teams you’re assigned to — ask a club admin to assign you to this one.'
+              : 'Only club staff or a platform admin can manage this roster.'}
+          </p>
+        )}
       </div>
     </main>
   );
