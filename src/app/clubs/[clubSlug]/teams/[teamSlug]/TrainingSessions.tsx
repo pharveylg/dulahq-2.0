@@ -11,11 +11,19 @@ type Session = {
   ends_at: string;
   status: 'scheduled' | 'cancelled' | 'completed';
   notes: string | null;
+  theme: string | null;
   attendanceTaken: number;
 };
 
 type ActionState = { error?: string; success?: boolean };
 const initialState: ActionState = {};
+
+const SESSION_THEMES = [
+  'Ball Mastery', 'Passing', 'Receiving', 'Dribbling', 'Finishing', 'Crossing',
+  'Defending', '1v1', 'Possession', 'Transition', 'Pressing', 'Build-up',
+  'Attacking', 'Defensive Shape', 'Set Pieces', 'Goalkeeping', 'Speed',
+  'Agility', 'Conditioning', 'Match Preparation',
+];
 
 function formatSession(startsAt: string, endsAt: string) {
   const start = new Date(startsAt);
@@ -43,7 +51,7 @@ function SessionRow({ clubId, teamId, clubSlug, teamSlug, session, canManage }: 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div className="list-row-main">
           <Link href={`/clubs/${clubSlug}/teams/${teamSlug}/training/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <div className="list-row-title">{formatSession(session.starts_at, session.ends_at)}</div>
+            <div className="list-row-title">{formatSession(session.starts_at, session.ends_at)}{session.theme ? ` — ${session.theme}` : ''}</div>
           </Link>
           <div className="list-row-meta">
             {session.attendanceTaken} recorded{session.notes ? ` · ${session.notes}` : ''}
@@ -115,6 +123,15 @@ export default function TrainingSessions({
           </div>
           <div className="form-group" style={{ flex: 1, minWidth: 110 }}>
             <input name="durationMinutes" type="number" min={15} step={15} defaultValue={60} placeholder="Minutes" />
+          </div>
+          <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
+            <select name="theme" defaultValue="">
+              <option value="">Theme (optional)</option>
+              {SESSION_THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ flex: 2, minWidth: 150 }}>
+            <input name="objective" placeholder="Objective (optional)" />
           </div>
           <div className="form-group" style={{ flex: 2, minWidth: 150 }}>
             <input name="notes" placeholder="Notes (optional)" />

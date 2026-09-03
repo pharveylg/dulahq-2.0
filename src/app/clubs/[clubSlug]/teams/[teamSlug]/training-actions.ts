@@ -14,6 +14,8 @@ export async function createSession(clubId: string, teamId: string, formData: Fo
   const startsAtLocal = formData.get('startsAt') as string; // "YYYY-MM-DDTHH:mm" from <input type="datetime-local">
   const durationMinutes = parseInt((formData.get('durationMinutes') as string) || '60', 10);
   const notes = (formData.get('notes') as string)?.trim() || null;
+  const theme = (formData.get('theme') as string)?.trim() || null;
+  const objective = (formData.get('objective') as string)?.trim() || null;
 
   if (!startsAtLocal) return { error: 'Start date/time is required.' };
   const startsAt = new Date(startsAtLocal);
@@ -27,6 +29,8 @@ export async function createSession(clubId: string, teamId: string, formData: Fo
     starts_at: startsAt.toISOString(),
     ends_at: endsAt.toISOString(),
     notes,
+    theme,
+    objective,
   });
 
   if (error) return { error: friendlyError(error) };

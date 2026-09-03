@@ -94,7 +94,7 @@ export default async function TeamRosterPage({
 
   const { data: sessions, error: sessionsError } = await supabase
     .from('training_sessions')
-    .select('id, starts_at, ends_at, status, notes, attendance(count)')
+    .select('id, starts_at, ends_at, status, notes, theme, attendance(count)')
     .eq('team_id', teamId)
     .order('starts_at', { ascending: false });
 
@@ -104,6 +104,7 @@ export default async function TeamRosterPage({
     ends_at: s.ends_at,
     status: s.status,
     notes: s.notes,
+    theme: s.theme,
     attendanceTaken: s.attendance?.[0]?.count ?? 0,
   }));
 
@@ -137,7 +138,7 @@ export default async function TeamRosterPage({
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No players yet.</p>
           )}
           {rosterPlayers.map((p) => (
-            <PlayerRow key={p.id} clubId={clubId} teamId={teamId} player={p} canManage={canManage} />
+            <PlayerRow key={p.id} clubId={clubId} teamId={teamId} clubSlug={clubSlug} teamSlug={teamSlug} player={p} canManage={canManage} />
           ))}
           {canManage ? (
             <AddPlayerForm clubId={clubId} teamId={teamId} />

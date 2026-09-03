@@ -67,6 +67,24 @@ export default async function GuardianHomePage() {
   // ones (audience='club' requires is_club_staff, which a guardian isn't).
   // Matches what's actually visible rather than requesting rows RLS
   // would just silently filter back out.
+  const { data: goals } = playerIds.length
+    ? await supabase
+        .from('development_goals')
+        .select('id, player_id, title, starting_level, target_level, current_level, status, development_skills(name)')
+        .in('player_id', playerIds)
+        .not('status', 'in', '(archived)')
+        .order('created_at', { ascending: false })
+    : { data: [] };
+
+  const { data: feedback } = playerIds.length
+    ? await supabase
+        .from('player_development_notes')
+        .select('id, player_id, note, created_at')
+        .in('player_id', playerIds)
+        .order('created_at', { ascending: false })
+        .limit(20)
+    : { data: [] };
+
   const { data: announcements } = teamIds.length
     ? await supabase
         .from('announcements')
@@ -89,6 +107,18 @@ export default async function GuardianHomePage() {
     list.push(f);
     feesByPlayer.set(f.player_id, list);
   }
+  const goalsByPlayer = new Map<string, any[]>();
+  for (const g of goals ?? []) {
+    const list = goalsByPlayer.get(g.player_id) ?? [];
+    list.push(g);
+    goalsByPlayer.set(g.player_id, list);
+  }
+  const feedbackByPlayer = new Map<string, any[]>();
+  for (const f of feedback ?? []) {
+    const list = feedbackByPlayer.get(f.player_id) ?? [];
+    list.push(f);
+    feedbackByPlayer.set(f.player_id, list);
+  }
 
   return (
     <main className="page">
@@ -109,6 +139,8 @@ export default async function GuardianHomePage() {
         {children.map((child: any) => {
           const sessions = sessionsByTeam.get(child.team_id) ?? [];
           const outstandingFees = feesByPlayer.get(child.id) ?? [];
+          const childGoals = goalsByPlayer.get(child.id) ?? [];
+          const childFeedback = feedbackByPlayer.get(child.id) ?? [];
           return (
             <div key={child.id} className="card" style={{ marginBottom: 16 }}>
               <div className="section-label" style={{ marginBottom: 4 }}>{child.name}</div>
@@ -136,6 +168,42 @@ export default async function GuardianHomePage() {
                     <div key={f.id} className="list-row" style={{ padding: '6px 0' }}>
                       <span style={{ fontSize: 13 }}>{f.fee_type} — {f.currency} {Number(f.amount).toFixed(2)}</span>
                       <span className="chip" style={{ color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' }}>{f.status}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {childGoals.length > 0 && (
+                <>
+                  <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Development</div>
+                  {childGoals.map((g) => {
+                    const progress = g.starting_level && g.target_level && g.target_level !== g.starting_level && g.current_level != null
+                      ? Math.max(0, Math.min(100, Math.round(((g.current_level - g.starting_level) / (g.target_level - g.starting_level)) * 100)))
+                      : null;
+                    return (
+                      <div key={g.id} style={{ padding: '6px 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span>{g.title}{g.development_skills?.name ? ` — ${g.development_skills.name}` : ''}</span>
+                          <span className="chip" style={{ fontSize: 10 }}>{g.status.replace('_', ' ')}</span>
+                        </div>
+                        {progress !== null && (
+                          <div style={{ height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
+                            <div style={{ height: '100%', width: `${progress}%`, background: 'var(--accent)' }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {childFeedback.length > 0 && (
+                <>
+                  <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Coach feedback</div>
+                  {childFeedback.map((f) => (
+                    <div key={f.id} style={{ padding: '4px 0' }}>
+                      <p style={{ fontSize: 13, margin: 0 }}>&ldquo;{f.note}&rdquo;</p>
+                      <div className="list-row-meta">{new Date(f.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
                     </div>
                   ))}
                 </>

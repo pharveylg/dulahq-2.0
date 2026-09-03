@@ -137,6 +137,12 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           </span>
         </div>
 
+        {access.isStaff && (
+          <Link href={`/clubs/${club.slug}/drills`} className="btn" style={{ display: 'inline-block', marginBottom: 20, textDecoration: 'none' }}>
+            Drill library →
+          </Link>
+        )}
+
         <div className="section-label">
           {access.isClubAdmin ? `Teams (${clubTeams?.length ?? 0})` : `My teams (${myAssignedTeamIds.length} of ${clubTeams?.length ?? 0})`}
         </div>

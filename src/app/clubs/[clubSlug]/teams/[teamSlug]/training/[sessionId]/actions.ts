@@ -10,7 +10,7 @@ function friendlyError(error: { code?: string; message: string }) {
   return error.message;
 }
 
-type AttendanceStatus = 'present' | 'absent' | 'excused' | 'late' | 'no_response';
+type AttendanceStatus = 'present' | 'absent' | 'excused' | 'late' | 'no_response' | 'injured' | 'suspended';
 
 /**
  * Upserts one player's attendance for this session -- attendance has a
@@ -34,6 +34,22 @@ export async function setAttendance(
       { onConflict: 'training_session_id,player_id' }
     );
 
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/clubs/[clubSlug]', 'layout');
+  return { success: true };
+}
+
+export async function attachDrill(sessionId: string, drillId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('session_drills').insert({ session_id: sessionId, drill_id: drillId });
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/clubs/[clubSlug]', 'layout');
+  return { success: true };
+}
+
+export async function detachDrill(sessionDrillId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('session_drills').delete().eq('id', sessionDrillId);
   if (error) return { error: friendlyError(error) };
   revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };

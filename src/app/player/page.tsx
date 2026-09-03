@@ -62,6 +62,38 @@ export default async function PlayerHomePage() {
         .limit(8)
     : { data: [] };
 
+  // RLS scopes these to whatever the coach has explicitly marked
+  // player-visible ('player' or 'player_and_parent') -- no client-side
+  // filter needed, the visibility check is already the database's.
+  const { data: goals } = await supabase
+    .from('development_goals')
+    .select('id, title, starting_level, target_level, current_level, status, target_date, development_skills(name)')
+    .eq('player_id', player.id)
+    .not('status', 'in', '(archived)')
+    .order('created_at', { ascending: false });
+
+  const { data: latestEvaluation } = await supabase
+    .from('player_evaluations')
+    .select('id, evaluation_date, period')
+    .eq('player_id', player.id)
+    .order('evaluation_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: latestRatings } = latestEvaluation
+    ? await supabase
+        .from('player_skill_ratings')
+        .select('rating, development_skills(name, category)')
+        .eq('evaluation_id', latestEvaluation.id)
+    : { data: [] };
+
+  const { data: feedback } = await supabase
+    .from('player_development_notes')
+    .select('id, note, created_at')
+    .eq('player_id', player.id)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
   const ATTENDANCE_STYLE: Record<string, React.CSSProperties> = {
     present: { color: 'var(--accent)', background: 'var(--accent-soft)', borderColor: 'var(--accent-soft-border)' },
     absent: { color: 'var(--danger)', background: 'var(--danger-soft)', borderColor: 'var(--danger-soft-border)' },
@@ -115,6 +147,62 @@ export default async function PlayerHomePage() {
             </div>
           ))}
         </div>
+
+        {(goals ?? []).length > 0 && (
+          <>
+            <div className="section-label" style={{ marginTop: 24 }}>My development</div>
+            <div className="card">
+              {goals!.map((g: any) => {
+                const progress = g.starting_level && g.target_level && g.target_level !== g.starting_level && g.current_level != null
+                  ? Math.max(0, Math.min(100, Math.round(((g.current_level - g.starting_level) / (g.target_level - g.starting_level)) * 100)))
+                  : null;
+                return (
+                  <div key={g.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="list-row-title">{g.title}{g.development_skills?.name ? ` — ${g.development_skills.name}` : ''}</span>
+                      <span className="chip">{g.status.replace('_', ' ')}</span>
+                    </div>
+                    {progress !== null && (
+                      <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${progress}%`, background: 'var(--accent)' }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {latestEvaluation && (latestRatings ?? []).length > 0 && (
+          <>
+            <div className="section-label" style={{ marginTop: 24 }}>
+              Latest evaluation — {new Date(latestEvaluation.evaluation_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </div>
+            <div className="card">
+              {latestRatings!.map((r: any, i: number) => (
+                <div key={i} className="list-row" style={{ padding: '6px 0' }}>
+                  <span style={{ fontSize: 13 }}>{r.development_skills?.name}</span>
+                  <span className="chip">{r.rating}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {(feedback ?? []).length > 0 && (
+          <>
+            <div className="section-label" style={{ marginTop: 24 }}>Coach feedback</div>
+            <div className="card">
+              {feedback!.map((f) => (
+                <div key={f.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+                  <p style={{ fontSize: 13, margin: 0 }}>&ldquo;{f.note}&rdquo;</p>
+                  <div className="list-row-meta">{new Date(f.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         {(fees ?? []).length > 0 && (
           <>

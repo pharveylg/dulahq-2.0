@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { removePlayer, addGuardian, removeGuardianLink, inviteGuardian, linkPlayerAccount, unlinkPlayerAccount } from './actions';
 import PlayerFees from './PlayerFees';
 import PlayerMembership from './PlayerMembership';
@@ -40,11 +41,15 @@ type Player = {
 export default function PlayerRow({
   clubId,
   teamId,
+  clubSlug,
+  teamSlug,
   player,
   canManage,
 }: {
   clubId: string;
   teamId: string;
+  clubSlug: string;
+  teamSlug: string;
   player: Player;
   canManage: boolean;
 }) {
@@ -121,6 +126,9 @@ export default function PlayerRow({
           {meta && <div className="list-row-meta">{meta}</div>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Link href={`/clubs/${clubSlug}/teams/${teamSlug}/players/${player.id}`} className="btn" style={{ fontSize: 11.5, textDecoration: 'none' }}>
+            Development →
+          </Link>
           <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setShowGuardians((v) => !v)}>
             {player.guardians.length} guardian{player.guardians.length === 1 ? '' : 's'}
           </button>

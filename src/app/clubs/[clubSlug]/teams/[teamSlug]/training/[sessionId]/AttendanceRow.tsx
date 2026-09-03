@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { setAttendance } from './actions';
 
-type Status = 'present' | 'absent' | 'excused' | 'late' | 'no_response';
+type Status = 'present' | 'absent' | 'excused' | 'late' | 'no_response' | 'injured' | 'suspended';
 
 const STATUS_OPTIONS: { value: Status; label: string }[] = [
   { value: 'no_response', label: 'No response' },
@@ -11,6 +11,8 @@ const STATUS_OPTIONS: { value: Status; label: string }[] = [
   { value: 'absent', label: 'Absent' },
   { value: 'excused', label: 'Excused' },
   { value: 'late', label: 'Late' },
+  { value: 'injured', label: 'Injured' },
+  { value: 'suspended', label: 'Suspended' },
 ];
 
 const STATUS_STYLE: Partial<Record<Status, React.CSSProperties>> = {
@@ -18,6 +20,8 @@ const STATUS_STYLE: Partial<Record<Status, React.CSSProperties>> = {
   absent: { color: 'var(--danger)', background: 'var(--danger-soft)', borderColor: 'var(--danger-soft-border)' },
   late: { color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' },
   excused: { color: 'var(--blue)', background: 'var(--blue-soft)', borderColor: 'var(--blue-soft-border)' },
+  injured: { color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' },
+  suspended: { color: 'var(--danger)', background: 'var(--danger-soft)', borderColor: 'var(--danger-soft-border)' },
 };
 
 export default function AttendanceRow({

@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/server';
 import AttendanceRow from './AttendanceRow';
+import SessionDrills from './SessionDrills';
 
 export default async function SessionAttendancePage({
   params,
@@ -23,7 +24,7 @@ export default async function SessionAttendancePage({
 
   const { data: session, error: sessionError } = await supabase
     .from('training_sessions')
-    .select('id, starts_at, ends_at, status, notes, team_id')
+    .select('id, starts_at, ends_at, status, notes, theme, objective, team_id')
     .eq('id', sessionId)
     .maybeSingle();
 
@@ -50,6 +51,13 @@ export default async function SessionAttendancePage({
 
   const statusByPlayer = new Map((attendanceRows ?? []).map((a) => [a.player_id, a.status]));
 
+  const { data: clubDrills } = await supabase.from('drills').select('id, name, category').eq('club_id', clubId).order('name');
+  const { data: attachedDrills } = await supabase
+    .from('session_drills')
+    .select('id, drill_id, drills(id, name, category)')
+    .eq('session_id', sessionId)
+    .order('sort_order');
+
   const start = new Date(session.starts_at);
   const dateStr = start.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const timeStr = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -61,14 +69,16 @@ export default async function SessionAttendancePage({
 
         <div className="page-header">
           <div>
-            <h1>Training — {dateStr}</h1>
+            <h1>Training — {dateStr}{session.theme ? `: ${session.theme}` : ''}</h1>
             <p className="subtitle">
               {timeStr} · <span className="chip">{session.status}</span>
               {session.notes ? ` · ${session.notes}` : ''}
             </p>
+            {session.objective && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{session.objective}</p>}
           </div>
         </div>
 
+        <div className="section-label">Attendance</div>
         <div className="card">
           {(!players || players.length === 0) && (
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No players on this team yet.</p>
@@ -86,6 +96,14 @@ export default async function SessionAttendancePage({
             />
           ))}
         </div>
+
+        <div className="section-label" style={{ marginTop: 24 }}>Drills</div>
+        <SessionDrills
+          sessionId={sessionId}
+          clubDrills={clubDrills ?? []}
+          attached={(attachedDrills ?? []).map((a: any) => ({ id: a.id, drillId: a.drill_id, name: a.drills?.name ?? 'Unknown', category: a.drills?.category ?? '' }))}
+          canManage={canManage}
+        />
       </div>
     </main>
   );
