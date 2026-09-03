@@ -34,7 +34,7 @@ export async function addFeeCharge(clubId: string, teamId: string, playerId: str
   });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -60,7 +60,7 @@ export async function recordPayment(clubId: string, teamId: string, feeChargeId:
   const { error: statusError } = await supabase.from('fee_charges').update({ status: 'paid' }).eq('id', feeChargeId);
   if (statusError) return { error: friendlyError(statusError) };
 
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -68,6 +68,6 @@ export async function updateFeeChargeStatus(clubId: string, teamId: string, feeC
   const supabase = await createClient();
   const { error } = await supabase.from('fee_charges').update({ status }).eq('id', feeChargeId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

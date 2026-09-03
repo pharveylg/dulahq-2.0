@@ -36,7 +36,7 @@ export async function addMembershipPeriod(clubId: string, teamId: string, player
   });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -45,6 +45,6 @@ export async function updateMembershipStatus(clubId: string, teamId: string, mem
   const supabase = await createClient();
   const { error } = await supabase.from('memberships').update({ status }).eq('id', membershipId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

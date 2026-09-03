@@ -7,15 +7,16 @@ import TransportationList from './TransportationList';
 export default async function TripDetailPage({
   params,
 }: {
-  params: Promise<{ clubId: string; tripId: string }>;
+  params: Promise<{ clubSlug: string; tripId: string }>;
 }) {
-  const { clubId, tripId } = await params;
+  const { clubSlug, tripId } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: club } = await supabase.from('clubs').select('id, name').eq('id', clubId).maybeSingle();
+  const { data: club } = await supabase.from('clubs').select('id, slug, name').eq('slug', clubSlug).maybeSingle();
   if (!club) notFound();
+  const clubId = club.id;
 
   const { data: trip, error: tripError } = await supabase
     .from('trips')
@@ -81,7 +82,7 @@ export default async function TripDetailPage({
   return (
     <main className="page">
       <div className="container">
-        <Link href={`/clubs/${clubId}`} className="back-link">← {club.name}</Link>
+        <Link href={`/clubs/${clubSlug}`} className="back-link">← {club.name}</Link>
 
         <div className="page-header">
           <div>

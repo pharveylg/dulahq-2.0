@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import Link from 'next/link';
 import { createClub } from './actions';
 
@@ -8,11 +8,17 @@ type Org = { id: string; name: string };
 type ActionState = { error?: string };
 const initialState: ActionState = {};
 
+function slugify(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 export default function NewClubForm({ orgs }: { orgs: Org[] }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(async (_prev, formData) => {
     const result = await createClub(formData);
     return result ?? {};
   }, initialState);
+  const [slug, setSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
 
   return (
     <main className="page">
@@ -25,7 +31,30 @@ export default function NewClubForm({ orgs }: { orgs: Org[] }) {
         <form action={formAction} className="card">
           <div className="form-group">
             <label htmlFor="name">Club name</label>
-            <input id="name" name="name" type="text" required autoFocus />
+            <input
+              id="name"
+              name="name"
+              type="text"
+              required
+              autoFocus
+              onChange={(e) => { if (!slugTouched) setSlug(slugify(e.target.value)); }}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="slug">URL slug</label>
+            <input
+              id="slug"
+              name="slug"
+              type="text"
+              required
+              pattern="[a-z0-9-]+"
+              title="lowercase letters, numbers, hyphens only"
+              value={slug}
+              onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
+            />
+            <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>
+              /clubs/{slug || '…'}
+            </p>
           </div>
           {orgs.length === 1 ? (
             <input type="hidden" name="org_id" value={orgs[0].id} />

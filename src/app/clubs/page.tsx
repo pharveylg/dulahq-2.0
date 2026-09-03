@@ -15,7 +15,7 @@ export default async function ClubsPage() {
   // here, it's just reflecting what the DB already restricted.
   const { data: clubs, error } = await supabase
     .from('clubs')
-    .select('id, name, created_at, organizations(name), club_staff(count), teams(count)')
+    .select('id, slug, name, created_at, organizations(name), club_staff(count), teams(count)')
     .order('created_at', { ascending: false });
 
   // Same set the clubs.org_id insert RLS allows -- not the legacy
@@ -39,11 +39,18 @@ export default async function ClubsPage() {
                 : 'Your account isn\u2019t linked to a Dula HQ user yet — ask an admin to add you.'}
             </p>
           </div>
-          {canCreateClub && (
-            <Link href="/clubs/new" className="btn btn-primary">
-              New club
-            </Link>
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {platformAdmin && (
+              <Link href="/clubs/platformconsole" className="btn">
+                Platform console
+              </Link>
+            )}
+            {canCreateClub && (
+              <Link href="/clubs/new" className="btn btn-primary">
+                New club
+              </Link>
+            )}
+          </div>
         </div>
 
         {platformAdmin && <DemoDataControls hasDemoData={!!demoOrg} />}
@@ -66,7 +73,7 @@ export default async function ClubsPage() {
             {clubs.map((club: any) => (
               <Link
                 key={club.id}
-                href={`/clubs/${club.id}`}
+                href={`/clubs/${club.slug}`}
                 className="list-row"
                 style={{ textDecoration: 'none', color: 'inherit' }}
               >

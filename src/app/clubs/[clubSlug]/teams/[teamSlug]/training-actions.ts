@@ -30,7 +30,7 @@ export async function createSession(clubId: string, teamId: string, formData: Fo
   });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -38,8 +38,8 @@ export async function updateSessionStatus(clubId: string, teamId: string, sessio
   const supabase = await createClient();
   const { error } = await supabase.from('training_sessions').update({ status }).eq('id', sessionId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}/training/${sessionId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -47,6 +47,6 @@ export async function deleteSession(clubId: string, teamId: string, sessionId: s
   const supabase = await createClient();
   const { error } = await supabase.from('training_sessions').delete().eq('id', sessionId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

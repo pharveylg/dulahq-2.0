@@ -22,7 +22,7 @@ export async function addPassenger(clubId: string, tripId: string, formData: For
     if (error.code === '23505') return { error: 'That player is already on this trip.' };
     return { error: friendlyError(error) };
   }
-  revalidatePath(`/clubs/${clubId}/trips/${tripId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -30,7 +30,7 @@ export async function removePassenger(clubId: string, tripId: string, passengerI
   const supabase = await createClient();
   const { error } = await supabase.from('trip_passengers').delete().eq('id', passengerId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/trips/${tripId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -48,7 +48,7 @@ export async function addTransportation(clubId: string, tripId: string, formData
   });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/trips/${tripId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -56,6 +56,6 @@ export async function removeTransportation(clubId: string, tripId: string, trans
   const supabase = await createClient();
   const { error } = await supabase.from('trip_transportation').delete().eq('id', transportId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/trips/${tripId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

@@ -8,20 +8,22 @@ import TrainingSessions from './TrainingSessions';
 export default async function TeamRosterPage({
   params,
 }: {
-  params: Promise<{ clubId: string; teamId: string }>;
+  params: Promise<{ clubSlug: string; teamSlug: string }>;
 }) {
-  const { clubId, teamId } = await params;
+  const { clubSlug, teamSlug } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: club } = await supabase.from('clubs').select('id, name').eq('id', clubId).maybeSingle();
+  const { data: club } = await supabase.from('clubs').select('id, slug, name').eq('slug', clubSlug).maybeSingle();
   if (!club) notFound();
+  const clubId = club.id;
 
   const { data: team, error: teamError } = await supabase
     .from('teams')
-    .select('id, name, club_id')
-    .eq('id', teamId)
+    .select('id, slug, name, club_id')
+    .eq('slug', teamSlug)
+    .eq('club_id', clubId)
     .maybeSingle();
 
   if (teamError) {
@@ -33,7 +35,8 @@ export default async function TeamRosterPage({
       </main>
     );
   }
-  if (!team || team.club_id !== clubId) notFound();
+  if (!team) notFound();
+  const teamId = team.id;
 
   // RBAC Phase 1 (rbac_phase1_narrow_coach_to_assigned_teams): a club_admin
   // (or platform admin) can manage any team; every other club_staff role is
@@ -107,7 +110,7 @@ export default async function TeamRosterPage({
   return (
     <main className="page">
       <div className="container">
-        <Link href={`/clubs/${clubId}`} className="back-link">← {club.name}</Link>
+        <Link href={`/clubs/${clubSlug}`} className="back-link">← {club.name}</Link>
 
         <div className="page-header">
           <div>
@@ -151,7 +154,7 @@ export default async function TeamRosterPage({
           Training sessions ({trainingSessions.length})
         </div>
         {sessionsError && <p className="error-text">Couldn&apos;t load training sessions: {sessionsError.message}</p>}
-        <TrainingSessions clubId={clubId} teamId={teamId} sessions={trainingSessions} canManage={canManage} />
+        <TrainingSessions clubId={clubId} teamId={teamId} clubSlug={clubSlug} teamSlug={teamSlug} sessions={trainingSessions} canManage={canManage} />
       </div>
     </main>
   );

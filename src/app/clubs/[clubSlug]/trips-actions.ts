@@ -34,6 +34,6 @@ export async function createTrip(clubId: string, formData: FormData) {
   });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

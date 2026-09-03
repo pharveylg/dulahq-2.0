@@ -11,7 +11,7 @@ const initialState: ActionState = {};
 
 const PURPOSES = ['training', 'tournament', 'camp', 'match', 'other'];
 
-export default function Trips({ clubId, trips, canManage }: { clubId: string; trips: Trip[]; canManage: boolean }) {
+export default function Trips({ clubId, clubSlug, trips, canManage }: { clubId: string; clubSlug: string; trips: Trip[]; canManage: boolean }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (_prev, formData) => (await createTrip(clubId, formData)) ?? {},
     initialState
@@ -21,7 +21,7 @@ export default function Trips({ clubId, trips, canManage }: { clubId: string; tr
     <div className="card">
       {trips.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No trips yet.</p>}
       {trips.map((t) => (
-        <Link key={t.id} href={`/clubs/${clubId}/trips/${t.id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Link key={t.id} href={`/clubs/${clubSlug}/trips/${t.id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
           <div className="list-row-main">
             <div className="list-row-title">{t.name}</div>
             <div className="list-row-meta">

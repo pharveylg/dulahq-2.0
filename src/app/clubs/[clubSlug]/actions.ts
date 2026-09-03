@@ -18,7 +18,7 @@ export async function updateClubName(clubId: string, formData: FormData) {
   const { error } = await supabase.from('clubs').update({ name }).eq('id', clubId);
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -60,7 +60,7 @@ export async function addStaff(clubId: string, formData: FormData) {
     return { error: friendlyError(insertError) };
   }
 
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -68,7 +68,7 @@ export async function removeStaff(clubId: string, staffId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from('club_staff').delete().eq('id', staffId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -79,21 +79,26 @@ export async function removeStaff(clubId: string, staffId: string) {
  */
 export async function linkTeam(clubId: string, formData: FormData) {
   const teamId = formData.get('teamId') as string;
+  const slug = (formData.get('slug') as string)?.trim().toLowerCase();
   if (!teamId) return { error: 'Choose a team.' };
+  if (!slug || !/^[a-z0-9-]+$/.test(slug)) return { error: 'Slug must be lowercase letters, numbers, and hyphens only.' };
 
   const supabase = await createClient();
   const { error, data } = await supabase
     .from('teams')
-    .update({ club_id: clubId })
+    .update({ club_id: clubId, slug })
     .eq('id', teamId)
     .select();
 
-  if (error) return { error: friendlyError(error) };
+  if (error) {
+    if (error.code === '23505') return { error: 'That slug is already used by another team in this club \u2014 pick another.' };
+    return { error: friendlyError(error) };
+  }
   if (!data || data.length === 0) {
     return { error: 'That team is already linked to a club, or doesn\u2019t exist.' };
   }
 
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -114,7 +119,7 @@ export async function assignStaffToTeam(clubId: string, formData: FormData) {
     return { error: friendlyError(error) };
   }
 
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -127,6 +132,6 @@ export async function unassignStaffFromTeam(clubId: string, userId: string, team
     .eq('team_id', teamId);
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

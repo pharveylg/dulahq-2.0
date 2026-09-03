@@ -22,7 +22,7 @@ export async function addPlayer(clubId: string, teamId: string, formData: FormDa
   const { error } = await supabase.from('players').insert({ team_id: teamId, name, jersey, position, age });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -30,7 +30,7 @@ export async function removePlayer(clubId: string, teamId: string, playerId: str
   const supabase = await createClient();
   const { error } = await supabase.from('players').delete().eq('id', playerId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -72,7 +72,7 @@ export async function addGuardian(clubId: string, teamId: string, playerId: stri
 
   if (linkError) return { error: friendlyError(linkError) };
 
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -86,7 +86,7 @@ export async function removeGuardianLink(clubId: string, teamId: string, playerG
   const supabase = await createClient();
   const { error } = await supabase.from('player_guardians').delete().eq('id', playerGuardianId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -107,7 +107,7 @@ export async function inviteGuardian(clubId: string, teamId: string, guardianId:
     .eq('id', guardianId);
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -140,7 +140,7 @@ export async function linkPlayerAccount(clubId: string, teamId: string, playerId
   const { error: linkError } = await supabase.from('players').update({ user_id: existingUser.id }).eq('id', playerId);
   if (linkError) return { error: friendlyError(linkError) };
 
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -148,6 +148,6 @@ export async function unlinkPlayerAccount(clubId: string, teamId: string, player
   const supabase = await createClient();
   const { error } = await supabase.from('players').update({ user_id: null }).eq('id', playerId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

@@ -58,7 +58,7 @@ export async function uploadMedia(clubId: string, formData: FormData) {
     return { error: friendlyError(error) };
   }
 
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -74,6 +74,6 @@ export async function deleteMedia(clubId: string, mediaId: string) {
 
   await deleteFile(media.r2_key).catch(() => {});
 
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

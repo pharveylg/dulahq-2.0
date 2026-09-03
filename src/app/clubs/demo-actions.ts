@@ -45,7 +45,7 @@ export async function loadDemoData() {
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
-    .insert({ name: 'Riverside FC (Demo)', org_id: org.id })
+    .insert({ name: 'Riverside FC (Demo)', org_id: org.id, slug: 'riverside-fc-demo' })
     .select()
     .single();
   if (clubError) return { error: friendlyError(clubError) };
@@ -53,8 +53,8 @@ export async function loadDemoData() {
   const { data: teams, error: teamsError } = await supabase
     .from('teams')
     .insert([
-      { name: 'Riverside U12 (Demo)', category_id: crypto.randomUUID(), club_id: club.id },
-      { name: 'Riverside U15 (Demo)', category_id: crypto.randomUUID(), club_id: club.id },
+      { name: 'Riverside U12 (Demo)', category_id: crypto.randomUUID(), club_id: club.id, slug: 'u12' },
+      { name: 'Riverside U15 (Demo)', category_id: crypto.randomUUID(), club_id: club.id, slug: 'u15' },
     ])
     .select();
   if (teamsError) return { error: friendlyError(teamsError) };
@@ -130,7 +130,7 @@ export async function loadDemoData() {
   }
 
   revalidatePath('/clubs');
-  return { success: true, clubId: club.id };
+  return { success: true, clubSlug: club.slug };
 }
 
 /**

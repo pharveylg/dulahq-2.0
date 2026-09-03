@@ -37,7 +37,7 @@ export async function createAnnouncement(clubId: string, formData: FormData) {
   });
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -45,7 +45,7 @@ export async function togglePin(clubId: string, announcementId: string, pinned: 
   const supabase = await createClient();
   const { error } = await supabase.from('announcements').update({ pinned }).eq('id', announcementId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }
 
@@ -53,6 +53,6 @@ export async function deleteAnnouncement(clubId: string, announcementId: string)
   const supabase = await createClient();
   const { error } = await supabase.from('announcements').delete().eq('id', announcementId);
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

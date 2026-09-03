@@ -10,16 +10,16 @@ import Announcements from './Announcements';
 import MediaGallery from './MediaGallery';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 
-export default async function ClubDetailPage({ params }: { params: Promise<{ clubId: string }> }) {
-  const { clubId } = await params;
+export default async function ClubDetailPage({ params }: { params: Promise<{ clubSlug: string }> }) {
+  const { clubSlug } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
-    .select('id, name, created_at')
-    .eq('id', clubId)
+    .select('id, slug, name, created_at')
+    .eq('slug', clubSlug)
     .maybeSingle();
 
   if (clubError) {
@@ -32,6 +32,11 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     );
   }
   if (!club) notFound();
+
+  // Everything below this line uses club.id (the real UUID) for every
+  // query/action/RLS check exactly as before slugs existed -- only the
+  // route param and the hrefs built for navigation use the slug.
+  const clubId = club.id;
 
   // access.isClubAdmin gates club-wide actions (rename, staff, link teams,
   // any-audience announcements); access.isStaff gates the broader "any
@@ -49,7 +54,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const { data: clubTeams } = await supabase
     .from('teams')
-    .select('id, name')
+    .select('id, slug, name')
     .eq('club_id', clubId)
     .order('name');
 
@@ -147,7 +152,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             .map((t) => {
               const assigned = access.isClubAdmin || myAssignedTeamIds.includes(t.id);
               return (
-                <Link key={t.id} href={`/clubs/${club.id}/teams/${t.id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <Link key={t.id} href={`/clubs/${club.slug}/teams/${t.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
                   <span className="list-row-title">{t.name}</span>
                   <span className="chip" style={assigned ? undefined : { color: 'var(--text-muted)' }}>
                     {assigned ? 'Roster →' : 'Not assigned →'}
@@ -187,7 +192,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
         <div className="section-label" style={{ marginTop: 28 }}>
           Trips ({trips?.length ?? 0})
         </div>
-        <Trips clubId={club.id} trips={trips ?? []} canManage={canManageWide} />
+        <Trips clubId={club.id} clubSlug={club.slug} trips={trips ?? []} canManage={canManageWide} />
 
         <div className="section-label" style={{ marginTop: 28 }}>
           Announcements ({announcements.length})

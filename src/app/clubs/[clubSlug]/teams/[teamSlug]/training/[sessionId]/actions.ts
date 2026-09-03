@@ -35,6 +35,6 @@ export async function setAttendance(
     );
 
   if (error) return { error: friendlyError(error) };
-  revalidatePath(`/clubs/${clubId}/teams/${teamId}/training/${sessionId}`);
+  revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };
 }

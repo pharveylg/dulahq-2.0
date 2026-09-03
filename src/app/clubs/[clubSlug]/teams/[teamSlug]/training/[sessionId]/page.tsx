@@ -6,15 +6,20 @@ import AttendanceRow from './AttendanceRow';
 export default async function SessionAttendancePage({
   params,
 }: {
-  params: Promise<{ clubId: string; teamId: string; sessionId: string }>;
+  params: Promise<{ clubSlug: string; teamSlug: string; sessionId: string }>;
 }) {
-  const { clubId, teamId, sessionId } = await params;
+  const { clubSlug, teamSlug, sessionId } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: team } = await supabase.from('teams').select('id, name, club_id').eq('id', teamId).maybeSingle();
-  if (!team || team.club_id !== clubId) notFound();
+  const { data: club } = await supabase.from('clubs').select('id').eq('slug', clubSlug).maybeSingle();
+  if (!club) notFound();
+  const clubId = club.id;
+
+  const { data: team } = await supabase.from('teams').select('id, name, club_id').eq('slug', teamSlug).eq('club_id', clubId).maybeSingle();
+  if (!team) notFound();
+  const teamId = team.id;
 
   const { data: session, error: sessionError } = await supabase
     .from('training_sessions')
@@ -52,7 +57,7 @@ export default async function SessionAttendancePage({
   return (
     <main className="page">
       <div className="container">
-        <Link href={`/clubs/${clubId}/teams/${teamId}`} className="back-link">← {team.name}</Link>
+        <Link href={`/clubs/${clubSlug}/teams/${teamSlug}`} className="back-link">← {team.name}</Link>
 
         <div className="page-header">
           <div>

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 export async function createClub(formData: FormData) {
   const name = (formData.get('name') as string)?.trim();
   const orgId = (formData.get('org_id') as string)?.trim();
+  const slug = (formData.get('slug') as string)?.trim().toLowerCase();
 
   if (!name) {
     return { error: 'Club name is required.' };
@@ -15,11 +16,14 @@ export async function createClub(formData: FormData) {
   if (!orgId) {
     return { error: 'Choose which organization this club belongs to.' };
   }
+  if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
+    return { error: 'Slug must be lowercase letters, numbers, and hyphens only.' };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('clubs')
-    .insert({ name, org_id: orgId })
+    .insert({ name, org_id: orgId, slug })
     .select()
     .single();
 
@@ -31,8 +35,11 @@ export async function createClub(formData: FormData) {
     if (error.code === '42501' || error.message.includes('row-level security')) {
       return { error: 'You need to be an admin of that organization (or a platform admin) to create a club there.' };
     }
+    if (error.code === '23505') {
+      return { error: 'That slug is already taken — pick another.' };
+    }
     return { error: error.message };
   }
 
-  redirect(`/clubs/${data.id}`);
+  redirect(`/clubs/${data.slug}`);
 }

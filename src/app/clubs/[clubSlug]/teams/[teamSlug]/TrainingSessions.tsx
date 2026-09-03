@@ -26,7 +26,7 @@ function formatSession(startsAt: string, endsAt: string) {
   return `${dateStr} · ${timeStr}–${endTimeStr}`;
 }
 
-function SessionRow({ clubId, teamId, session, canManage }: { clubId: string; teamId: string; session: Session; canManage: boolean }) {
+function SessionRow({ clubId, teamId, clubSlug, teamSlug, session, canManage }: { clubId: string; teamId: string; clubSlug: string; teamSlug: string; session: Session; canManage: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +42,7 @@ function SessionRow({ clubId, teamId, session, canManage }: { clubId: string; te
     <div className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div className="list-row-main">
-          <Link href={`/clubs/${clubId}/teams/${teamId}/training/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link href={`/clubs/${clubSlug}/teams/${teamSlug}/training/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="list-row-title">{formatSession(session.starts_at, session.ends_at)}</div>
           </Link>
           <div className="list-row-meta">
@@ -82,11 +82,15 @@ function SessionRow({ clubId, teamId, session, canManage }: { clubId: string; te
 export default function TrainingSessions({
   clubId,
   teamId,
+  clubSlug,
+  teamSlug,
   sessions,
   canManage,
 }: {
   clubId: string;
   teamId: string;
+  clubSlug: string;
+  teamSlug: string;
   sessions: Session[];
   canManage: boolean;
 }) {
@@ -101,7 +105,7 @@ export default function TrainingSessions({
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No training sessions scheduled yet.</p>
       )}
       {sessions.map((s) => (
-        <SessionRow key={s.id} clubId={clubId} teamId={teamId} session={s} canManage={canManage} />
+        <SessionRow key={s.id} clubId={clubId} teamId={teamId} clubSlug={clubSlug} teamSlug={teamSlug} session={s} canManage={canManage} />
       ))}
 
       {canManage && (
