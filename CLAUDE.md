@@ -340,22 +340,25 @@ are live in `next.config.js`; `src/middleware.ts`'s auth gate excludes those
 paths so the proxy isn't intercepted first. DulaHQ's canonical/`og:url` now
 point at `https://dulahq.app/`.
 
-**B. One cookie session — paused, needs a decision.** The Vite tournament app
-(`pharveylg/DulaHQ`) is a single ~7,000-line `index.html` with everything as
-classic synchronous inline `<script>` tags — `onclick="…"` handlers call
-global functions directly, and the whole file assumes the Supabase client
-(`sb`, from the UMD `<script src>` build) exists synchronously the instant it
-runs. `@supabase/ssr`'s `createBrowserClient` is an ES module — async, and
-doesn't leak to `window` — so using it as intended means either converting the
-whole file to a module (exposing every function via `window.*` so the inline
-`onclick`s keep working: a sweeping rewrite of a file this doc says to leave
-alone) or gating every `sb`-dependent call behind an async-ready check. Leaning
-alternative: keep the existing synchronous UMD client, and give it a custom
-`storage` adapter — plain synchronous `getItem`/`setItem`/`removeItem` — that
-reads/writes `document.cookie` in `@supabase/ssr`'s own format (base64, chunked
-past ~3.1KB, `sb-<project-ref>-auth-token` naming) by hand, so nothing about
-the file's boot order changes. Whichever way this goes, verify by signing in on
-one app and opening a `/t/…` deep link on the other without a second sign-in.
+**B. One cookie session — done.** The Vite tournament app (`pharveylg/DulaHQ`,
+a single ~7,000-line `index.html` of classic synchronous inline `<script>`
+tags) keeps its existing synchronous UMD Supabase client — converting the
+whole file to an ES module so `@supabase/ssr`'s `createBrowserClient` would
+fit was ruled out as too large and risky a change to a file this doc says to
+leave alone. Instead it got a hand-rolled `storage` adapter (plain synchronous
+`getItem`/`setItem`/`removeItem`) that reads/writes `document.cookie` in
+`@supabase/ssr`'s exact format: verified against `@supabase/ssr@0.5.2`'s own
+source rather than guessed — cookie name is supabase-js's default storage key
+(`sb-<project-ref>-auth-token`, computed from `SUPABASE_URL`), value is
+`'base64-'` + unpadded base64url of the UTF-8 session JSON, chunked past 3180
+chars into `<name>.0`/`.1`/… cookies. The CDN `supabase-js` script tag is now
+pinned to `2.112.3`, matching this repo's own `node_modules` version exactly,
+since an unpinned `@2` could silently drift the storage-key derivation this
+depends on. Tested end-to-end with a throwaway account against the live
+project, both directions: sign in on either app, the other picks up the same
+session with no second sign-in; sign out on either, the other sees it too.
+Only works because both apps are served from the same `dulahq.app` origin now
+(§6.A) — no `Domain` attribute is set, so it's a host-only cookie.
 
 **C. Entry flow — done.** `/` is a public landing page (Clubs / Tournaments),
 same for everyone, no role-based redirect. `/clubs` and `/clubs/[clubSlug]`
