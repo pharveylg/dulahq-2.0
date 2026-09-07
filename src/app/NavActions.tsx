@@ -28,7 +28,7 @@ export default function NavActions({ signedIn }: { signedIn: boolean }) {
           ← Back
         </button>
       )}
-      {signedIn && (
+      {signedIn ? (
         <button
           type="button"
           onClick={handleLogout}
@@ -37,6 +37,12 @@ export default function NavActions({ signedIn }: { signedIn: boolean }) {
         >
           Log out
         </button>
+      ) : (
+        pathname !== '/login' && (
+          <a href="/login" className="btn" style={{ fontSize: 12, padding: '5px 10px' }}>
+            Sign in
+          </a>
+        )
       )}
     </div>
   );

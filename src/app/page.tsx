@@ -1,69 +1,56 @@
-import { redirect } from 'next/navigation';
-import { createClient, getCurrentDulaUser, isPlatformAdmin } from '@/lib/supabase/server';
+import Link from 'next/link';
+import Reveal from '@/components/motion/Reveal';
+import Spotlight from '@/components/motion/Spotlight';
 
 /**
- * Role-based landing router. Priority: platform admin / any club_staff /
- * any org_member -> /clubs (the staff app, unchanged); else an active
- * guardian -> /guardian; else a linked player -> /player; else a clear
- * "not linked" message rather than dumping them on /clubs to see an
- * empty, confusingly-worded page meant for staff.
+ * Public home page (§6.C) -- identical for everyone, guests included.
+ * No role-based redirect: this used to dispatch signed-in users straight
+ * to /clubs, /guardian or /player depending on who they were. Context now
+ * comes from the URL a person lands on or chooses, not from who's signed
+ * in -- a club shows its own overview or its full staff console depending
+ * on access (see /clubs/[clubSlug]); a tournament shows its own guest or
+ * registered view (the proxied Tournament Manager app already does this).
  */
-export default async function Home() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) redirect('/login');
-
-  if (await isPlatformAdmin()) redirect('/clubs');
-
-  const dulaUser = await getCurrentDulaUser();
-  if (!dulaUser) {
-    // Signed in, but no public.users row at all -- not even a claimed
-    // guardian yet (that claim runs in the root layout on the next
-    // request, so by the time we're here it should normally have run;
-    // this is the genuinely-unlinked case).
-    return notLinked();
-  }
-
-  // A staff member (any role) with access to exactly one club shouldn't
-  // have to pick it from a list of one -- land them straight on that
-  // club's dashboard. Anyone with more than one club (or none yet) still
-  // goes to /clubs, since there's a real choice to make there.
-  const { data: staffRows } = await supabase.from('club_staff').select('club_id, clubs(slug)').eq('user_id', dulaUser.id);
-  if (staffRows && staffRows.length > 0) {
-    const distinctClubs = [...new Map(staffRows.map((s: any) => [s.club_id, s.clubs?.slug])).entries()];
-    if (distinctClubs.length === 1 && distinctClubs[0][1]) redirect(`/clubs/${distinctClubs[0][1]}`);
-    redirect('/clubs');
-  }
-
-  const { data: orgRow } = await supabase.from('org_members').select('org_id').ilike('email', authUser.email!).limit(1).maybeSingle();
-  if (orgRow) redirect('/clubs');
-
-  const { data: guardianRow } = await supabase
-    .from('guardians')
-    .select('id')
-    .eq('user_id', dulaUser.id)
-    .eq('account_status', 'active')
-    .limit(1)
-    .maybeSingle();
-  if (guardianRow) redirect('/guardian');
-
-  const { data: playerRow } = await supabase.from('players').select('id').eq('user_id', dulaUser.id).limit(1).maybeSingle();
-  if (playerRow) redirect('/player');
-
-  return notLinked();
-}
-
-function notLinked() {
+export default function Home() {
   return (
-    <main className="page">
-      <div className="container" style={{ maxWidth: 420 }}>
-        <div className="page-header">
-          <h1>No access yet</h1>
+    <main className="page" style={{ position: 'relative', overflow: 'hidden' }}>
+      <Spotlight />
+      <div className="container" style={{ position: 'relative' }}>
+        <Reveal>
+          <div className="page-header" style={{ display: 'block', textAlign: 'center', marginBottom: 40 }}>
+            <h1 style={{ fontSize: 32 }}>Dula HQ</h1>
+            <p className="subtitle" style={{ marginTop: 8, fontSize: 15 }}>
+              Run a club, or run a tournament.
+            </p>
+          </div>
+        </Reveal>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 20,
+            maxWidth: 720,
+            margin: '0 auto',
+          }}
+        >
+          <Reveal index={1}>
+            <Link href="/clubs" className="card" style={{ display: 'block', textDecoration: 'none', height: '100%' }}>
+              <h2 style={{ fontSize: 19, marginBottom: 8 }}>Clubs</h2>
+              <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+                Rosters, teams, staff, fees, and everything a club runs day to day.
+              </p>
+            </Link>
+          </Reveal>
+          <Reveal index={2}>
+            <Link href="/tournaments" className="card" style={{ display: 'block', textDecoration: 'none', height: '100%' }}>
+              <h2 style={{ fontSize: 19, marginBottom: 8 }}>Tournaments</h2>
+              <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+                Brackets, groups, live scoring, and registration.
+              </p>
+            </Link>
+          </Reveal>
         </div>
-        <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
-          Your account isn’t linked to a club, guardian, or player record yet. Ask your club to add
-          you as staff, invite you as a guardian, or link a player account to you.
-        </p>
       </div>
     </main>
   );

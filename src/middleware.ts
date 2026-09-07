@@ -33,8 +33,21 @@ export async function middleware(request: NextRequest) {
   // scoping still happens where it already did (getClubAccess() /
   // getAssignedTeamIds() on each page, backed by RLS) -- this only
   // gates "signed in or not", not "allowed to manage this specific team".
+  //
+  // §6.C: the home page, the club directory, one club's own page, and the
+  // tournament directory are public -- each of those pages branches on
+  // `user` itself to show a guest view instead of the full console.
+  // /clubs/{slug} is matched to exactly one segment on purpose: deeper
+  // paths like /clubs/{slug}/teams/{team} stay gated here. /clubs/new and
+  // /clubs/platformconsole happen to match that one-segment shape too, but
+  // both already have their own `if (!user) redirect('/login')` guard, so
+  // nothing is exposed by letting the middleware pass them through.
   const PUBLIC_PATHS = ['/login', '/guardian-signup'];
-  const isPublic = PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p));
+  const isPublic =
+    PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p)) ||
+    request.nextUrl.pathname === '/' ||
+    request.nextUrl.pathname === '/tournaments' ||
+    /^\/clubs(\/[^/]+)?$/.test(request.nextUrl.pathname);
 
   if (!user && !isPublic) {
     const loginUrl = new URL('/login', request.url);

@@ -1,13 +1,59 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient, getCurrentDulaUser, getClubCreatableOrgs, isPlatformAdmin } from '@/lib/supabase/server';
 import DemoDataControls from './DemoDataControls';
 import ClubList from './ClubList';
+import PublicClubList from './PublicClubList';
+
+/**
+ * Guests get the public directory (§6.C) -- clubs that opted into
+ * publicly_listed, via the same public_clubs view the proxied tournament
+ * app's directory pattern mirrors. Signed-in staff get the existing
+ * "my clubs" management console unchanged below.
+ */
+async function GuestClubsPage() {
+  const supabase = await createClient();
+  const { data: clubs, error } = await supabase
+    .from('public_clubs')
+    .select('slug, name, location, org_name')
+    .order('name');
+
+  return (
+    <main className="page">
+      <div className="container">
+        <div className="page-header">
+          <div>
+            <h1>Clubs</h1>
+            <p className="subtitle">Browse public clubs, or sign in to manage your own.</p>
+          </div>
+        </div>
+
+        {error && <p className="error-text">Couldn&apos;t load clubs: {error.message}</p>}
+
+        {!error && (!clubs || clubs.length === 0) && (
+          <div className="card empty-state">
+            <p>No clubs are publicly listed yet.</p>
+          </div>
+        )}
+
+        {clubs && clubs.length > 0 && (
+          <PublicClubList
+            clubs={clubs.map((club) => ({
+              slug: club.slug,
+              name: club.name,
+              orgName: club.org_name,
+              location: club.location,
+            }))}
+          />
+        )}
+      </div>
+    </main>
+  );
+}
 
 export default async function ClubsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) return <GuestClubsPage />;
 
   const dulaUser = await getCurrentDulaUser();
 

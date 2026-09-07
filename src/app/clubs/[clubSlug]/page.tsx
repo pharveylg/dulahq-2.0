@@ -1,4 +1,4 @@
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/server';
 import EditNameForm from './EditNameForm';
@@ -15,11 +15,57 @@ import Reports from './Reports';
 import Meetings from './Meetings';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 
+/**
+ * Guest overview (§6.C) for a signed-out visitor. Only public_clubs (the
+ * anon-readable, publicly_listed-gated view) is queried -- the same
+ * outcome whether this club doesn't exist or exists but isn't public, by
+ * design: an anonymous session has no way to tell those apart anyway
+ * (the base clubs table has no anon-read policy at all), so showing the
+ * same "sign in" prompt for both never leaks which one it is.
+ */
+async function GuestClubOverview({ clubSlug }: { clubSlug: string }) {
+  const supabase = await createClient();
+  const { data: club } = await supabase
+    .from('public_clubs')
+    .select('name, about, location, org_name')
+    .eq('slug', clubSlug)
+    .maybeSingle();
+
+  if (!club) {
+    return (
+      <main className="page">
+        <div className="container" style={{ maxWidth: 480 }}>
+          <div className="page-header"><h1>Club not found</h1></div>
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+            This club isn&apos;t publicly visible. If you&apos;re a member, staff, or a
+            guardian, <Link href="/login">sign in</Link> to view it.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page">
+      <div className="container" style={{ maxWidth: 640 }}>
+        <div className="page-header">
+          <div>
+            <h1>{club.name}</h1>
+            <p className="subtitle">{club.org_name}{club.location ? ` · ${club.location}` : ''}</p>
+          </div>
+          <Link href="/login" className="btn btn-primary">Sign in</Link>
+        </div>
+        {club.about && <div className="card"><p style={{ fontSize: 14 }}>{club.about}</p></div>}
+      </div>
+    </main>
+  );
+}
+
 export default async function ClubDetailPage({ params }: { params: Promise<{ clubSlug: string }> }) {
   const { clubSlug } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) return <GuestClubOverview clubSlug={clubSlug} />;
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
