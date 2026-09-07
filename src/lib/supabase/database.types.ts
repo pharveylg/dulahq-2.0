@@ -3434,7 +3434,7 @@ export type Database = {
           data?: Json | null
           event_date?: string | null
           guest_access_enabled?: boolean
-          id: string
+          id?: string
           name?: string
           org_id?: string | null
           poster_url?: string | null
@@ -3972,6 +3972,7 @@ export type Database = {
       is_org_member: { Args: { org: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_player_self: { Args: { check_player_id: string }; Returns: boolean }
+      is_staff_in_org: { Args: { p_org: string }; Returns: boolean }
       org_has_product: {
         Args: { org: string; p_product: string }
         Returns: boolean

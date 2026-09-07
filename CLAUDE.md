@@ -9,9 +9,9 @@ before acting on it — this file goes stale.
 
 ## 0. What changed on 2026-09-07 — read this first
 
-**The database consolidation (phases 1–5) is applied and verified.** Seventeen
-migrations — the original thirteen plus four same-day follow-up fixes (`phase2h`
-through `phase2k`) — are live in `zytyakbgwaegvftblkcn` and committed under
+**The database consolidation (phases 1–5) is applied and verified.** Nineteen
+migrations — the original thirteen plus six same-day follow-up fixes (`phase2h`
+through `phase2m`) — are live in `zytyakbgwaegvftblkcn` and committed under
 `supabase/migrations/`; see §0a for what each one does. Most of §3's security list
 is closed. §2's row counts are gone. Do not re-plan this work — extend it.
 
@@ -58,6 +58,8 @@ was first run.
 | `…083044_phase2i_club_staff_are_org_members` | `is_org_member` widened to include club staff, assigned coaches, guardians, and players themselves — see §0b |
 | `…090000_phase2j_fix_can_read_club_org_collapse` | Bug fix — `can_read_club`'s `OR is_org_member(p_org)` fallback collapsed to org-wide read on every table using it, once combined with the outer `is_org_member(org_id) AND (...)` gate nearly every policy already has — see §0b |
 | `…090100_phase2k_can_read_club_requires_club_admin` | Bug fix — `can_read_club`'s club-wide grant was on `is_club_staff` (any role, including coach/team_manager/staff); narrowed to `is_club_admin`, matching `getClubAccess()` in `src/lib/supabase/server.ts` — see §0b |
+| `…100000_phase2l_public_views_select_only` | Revoked dormant INSERT/UPDATE/DELETE/TRUNCATE grants on `public_clubs`/`public_tournaments` from anon/authenticated — found while building §6.C, not exploitable (both are join views, Postgres already refuses direct writes) but tightened anyway |
+| `…140000_phase2m_tournaments_id_text_to_uuid` | §6.G — `tournaments.id` and its 7 dependent `tournament_id` columns changed from `text` to `uuid`; see §6.G for the full verification |
 
 **Verified**, run as `anon` and as an org admin inside `BEGIN … ROLLBACK`, for the
 first eleven migrations (phase1 through phase2g):
@@ -377,14 +379,42 @@ buttons (referencing the deleted `test-*` accounts) are removed.
 basketball `coming_soon`) and `sport_id` is on clubs, teams and tournaments.
 Remaining: manifest, service worker, picker.
 
-**F. Contract steps — each needs code shipped first.** Drop `users.role` as an
-auth source; drop `players.age`; retire `org_members` / `club_staff` /
-`user_assigned_teams`; retire `referees` / `officiating_team` for `org_officials`;
-drop `match_events.player_name`; drop `backups`.
+**F. Contract steps — audited, none executable yet.** Checked all six against
+the actual app code rather than assuming:
 
-**G. Consider `tournaments.id`.** It is `text`, inherited from 1.0's
-single-tournament era, and every new table references it as text. The table is
-empty right now — this is the cheapest it will ever be to change to `uuid`.
+- `users.role` as an auth source — **already clean**. Grepped every `.role`
+  comparison in the app; the only reads are display (`layout.tsx`'s nav chip,
+  `/clubs`' "Signed in as X"). Nothing gates on it. Can't drop the *column*
+  yet, though — it's still read for that display.
+- `players.age` — **already clean**. Every usage is a `${player.age}y` label
+  (`PlayerDetailPanel.tsx`, the player detail page); nothing decides anything
+  with it. Same story: still displayed, so not droppable yet.
+- Retire `org_members` / `club_staff` / `user_assigned_teams` — **not ready**.
+  Actively written by shipped features (`addStaff`, team assignment) and read
+  by this session's own D-phase RPC calls. Retiring now breaks staff
+  management outright.
+- Retire `referees` / `officiating_team`, drop `match_events.player_name` —
+  **not applicable from here**. Zero references anywhere in this app; these
+  belong to the Tournament Manager app, which stays unrewritten/proxied by
+  explicit rule (§8). Not this codebase's call to make.
+- Drop `backups` — **not ready**, per this file's own standing note: needs
+  the tournament module rebuilt to parity first, which hasn't happened.
+
+**G. `tournaments.id` — done.** Was `text`, inherited from 1.0's
+single-tournament era. Changed to `uuid` (with a `gen_random_uuid()` default,
+which it never had) along with all 7 dependent `tournament_id` columns
+(`matches`, `player_tournament_results` — no formal FK, same reference
+regardless —, `tournament_categories`, `tournament_entries`,
+`tournament_members`, `tournament_officials`, `tournament_roster`). Verified
+safe before running: the Tournament Manager app's own id generator
+(`newTournamentId_()`) already emits `crypto.randomUUID()` on every insert, so
+this needed no change on that (explicitly unrewritten, §8) side. `DROP
+VIEW`/`DROP POLICY` was needed around the migration for `public_tournaments`
+and `tournament_categories`' `tc_public_read` policy, the only two things that
+directly depended on the column's type — both recreated identically.
+End-to-end verified: inserted a tournament with no `id` supplied, got a real
+UUID back from the new default, `public_tournaments` and the `/tournaments`
+page both rendered it correctly, link target was the right `/t/:org/:slug`.
 
 ---
 
