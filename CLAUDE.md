@@ -327,24 +327,48 @@ no UPDATE or DELETE policy for anyone, platform admin included.
 **Done:** identity unification, tenant boundary, entitlements, RBAC, audit,
 player/team decoupling, approvals, tournament schema, the port. Phases 1–5.
 
-**A. Buy the domain, then single origin.** `dulahq.com` is **not registered**
-(~$11.25; `dulahq.app` ~$9.99). The live tournament app already ships
-`<link rel="canonical" href="https://www.dulahq.com/">` pointing at a domain
-nobody owns. Attach the domain to the **Next** project; leave
-`dula-hq.vercel.app` where it is as a break-glass URL. Add rewrites `/t/:slug`,
-`/t/:slug/:path*`, `/platformconsole` → the tournament app. No repointing, no
-downtime window.
+**A. Buy the domain, then single origin — done, DNS pending.** `dulahq.com` is
+still unregistered; **`dulahq.app` was registered instead** and is attached to
+the `dulahq-2.0` Vercel project (`vercel domains add`, verified
+`project.attached: true, verified: true`). **DNS is not yet pointed at Vercel**
+— it's still on the registrar's (GoDaddy) nameservers. Needs either an A record
+at `@` → `216.198.79.1` + `64.29.17.1`, or delegating to `ns1.vercel-dns.com` /
+`ns2.vercel-dns.com`; re-check with `vercel domains verify dulahq.app --scope
+g0d3y3`. `dula-hq.vercel.app` is untouched, still the break-glass URL.
+Rewrites `/t/:slug`, `/t/:slug/:path*`, `/platformconsole` → `dula-hq.vercel.app`
+are live in `next.config.js`; `src/middleware.ts`'s auth gate excludes those
+paths so the proxy isn't intercepted first. DulaHQ's canonical/`og:url` now
+point at `https://dulahq.app/`.
 
-**B. One cookie session.** Apply the `@supabase/ssr` bootstrap to the Vite app.
-Use `getUser()`, not `getSession()` (§7). Verify with a `/t/…` deep link.
+**B. One cookie session — paused, needs a decision.** The Vite tournament app
+(`pharveylg/DulaHQ`) is a single ~7,000-line `index.html` with everything as
+classic synchronous inline `<script>` tags — `onclick="…"` handlers call
+global functions directly, and the whole file assumes the Supabase client
+(`sb`, from the UMD `<script src>` build) exists synchronously the instant it
+runs. `@supabase/ssr`'s `createBrowserClient` is an ES module — async, and
+doesn't leak to `window` — so using it as intended means either converting the
+whole file to a module (exposing every function via `window.*` so the inline
+`onclick`s keep working: a sweeping rewrite of a file this doc says to leave
+alone) or gating every `sb`-dependent call behind an async-ready check. Leaning
+alternative: keep the existing synchronous UMD client, and give it a custom
+`storage` adapter — plain synchronous `getItem`/`setItem`/`removeItem` — that
+reads/writes `document.cookie` in `@supabase/ssr`'s own format (base64, chunked
+past ~3.1KB, `sb-<project-ref>-auth-token` naming) by hand, so nothing about
+the file's boot order changes. Whichever way this goes, verify by signing in on
+one app and opening a `/t/…` deep link on the other without a second sign-in.
 
-**C. Entry flow.** Home page is identical for everyone, guests included: choose
-**Clubs** or **Tournaments**, then browse. A club shows an overview unless RBAC
-grants more; a tournament shows the guest view unless you are registered for it.
-Signing in lands nobody on a dispatcher — context comes from the URL.
+**C. Entry flow — done.** `/` is a public landing page (Clubs / Tournaments),
+same for everyone, no role-based redirect. `/clubs` and `/clubs/[clubSlug]`
+branch on auth: guests get a public view (`public_clubs`, or a same-either-way
+"sign in" prompt that doesn't reveal whether a given club is private or
+doesn't exist), staff get the existing console unchanged. New `/tournaments`
+queries `public_tournaments` natively — not proxied, the proxy is only for
+opening a specific tournament's actual engine. Login's four dead demo-account
+buttons (referencing the deleted `test-*` accounts) are removed.
 
-**D. Wire the app to §5.** Types are not generated in this repo today; generate
-them when starting this.
+**D. Wire the app to §5.** `database.types.ts` is generated and committed
+(`src/lib/supabase/database.types.ts`) but not yet wired into
+`createClient<Database>()` in `client.ts`/`server.ts` — start there.
 
 **E. Sports + PWA.** `sports` is seeded (football production; tennis, pickleball,
 basketball `coming_soon`) and `sport_id` is on clubs, teams and tournaments.
