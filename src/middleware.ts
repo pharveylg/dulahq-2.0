@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
   // /clubs/platformconsole happen to match that one-segment shape too, but
   // both already have their own `if (!user) redirect('/login')` guard, so
   // nothing is exposed by letting the middleware pass them through.
-  const PUBLIC_PATHS = ['/login', '/guardian-signup'];
+  const PUBLIC_PATHS = ['/login', '/guardian-signup', '/demo'];
   const isPublic =
     PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p)) ||
     request.nextUrl.pathname === '/' ||

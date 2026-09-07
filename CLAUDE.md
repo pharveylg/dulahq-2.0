@@ -478,3 +478,32 @@ migrations supersede Appendix F entirely — do not run it.
 - **Verify against the live project, not the document.**
   `mcp__Supabase__get_advisors` and `pg_policies` are the source of truth.
 - Keep the tournament engine unrewritten. It works. It is proxied, never ported.
+
+---
+
+## 10. RBAC demo (2026-09-07)
+
+`/demo` is a public page with one standing, real account per RBAC role
+(platform admin, org admin, club admin, coach, team manager, staff, guardian,
+player), signing straight into a standing demo club and tournament —
+`scripts/seed-rbac-demo.mjs` creates all of it (org slug `dulahq-rbac-demo`,
+club `dulahq-demo-club`, tournament `dulahq-demo-cup`). Shared password
+`DemoPass2026!` — not a real secret, intentionally public, don't reuse it for
+anything that matters.
+
+Deliberately a **separate org from `loadDemoData`/`wipeDemoData`** (§0b's
+`dula-demo`) so clicking "Wipe demo data" on `/clubs` never touches it. Re-run
+the seed script any time to reset it (it cleans up its own prior run first).
+
+The demo tournament's `data` column is intentionally left empty rather than
+hand-crafted — the live Tournament Manager app serializes its *entire*
+working state (brackets, rosters, live scores) as one opaque JSON blob into
+that column on every save (`saveTenantTournament_()` in `index.html`,
+literally `JSON.stringify(S)` where `S` is the whole in-memory app state).
+Faking that blob by hand would mean reverse-engineering an undocumented
+internal format — exactly the risk §8's "keep it unrewritten" rule exists to
+avoid. An empty `data` renders the app's own placeholder content instead,
+which is what `/t/dulahq-rbac-demo/dulahq-demo-cup` currently shows. If a
+populated bracket is ever wanted for the demo, build it by driving the real
+UI as the org admin persona (`is_org_admin` + the `tournament` entitlement
+already let that account manage it), not by writing to `data` directly.

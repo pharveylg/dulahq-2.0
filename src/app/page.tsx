@@ -51,6 +51,12 @@ export default function Home() {
             </Link>
           </Reveal>
         </div>
+
+        <Reveal index={3}>
+          <p style={{ textAlign: 'center', marginTop: 28, fontSize: 12.5, color: 'var(--text-muted)' }}>
+            New here? <Link href="/demo">Try it as any role</Link> — one click, no account needed.
+          </p>
+        </Reveal>
       </div>
     </main>
   );
