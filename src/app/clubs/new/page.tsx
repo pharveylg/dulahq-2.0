@@ -45,5 +45,7 @@ export default async function NewClubPage() {
     );
   }
 
-  return <NewClubForm orgs={orgs} />;
+  const { data: sports } = await supabase.from('sports').select('id, key, name, status').order('sort_order');
+
+  return <NewClubForm orgs={orgs} sports={sports ?? []} />;
 }

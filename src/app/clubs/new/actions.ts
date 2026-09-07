@@ -7,6 +7,7 @@ export async function createClub(formData: FormData) {
   const name = (formData.get('name') as string)?.trim();
   const orgId = (formData.get('org_id') as string)?.trim();
   const slug = (formData.get('slug') as string)?.trim().toLowerCase();
+  const sportId = (formData.get('sport_id') as string)?.trim() || null;
 
   if (!name) {
     return { error: 'Club name is required.' };
@@ -23,7 +24,7 @@ export async function createClub(formData: FormData) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('clubs')
-    .insert({ name, org_id: orgId, slug })
+    .insert({ name, org_id: orgId, slug, sport_id: sportId })
     .select()
     .single();
 

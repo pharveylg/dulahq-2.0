@@ -1,13 +1,20 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import './globals.css';
 import { getCurrentDulaUser, claimPendingGuardianInvite } from '@/lib/supabase/server';
 import { createClient } from '@/lib/supabase/server';
 import NavActions from './NavActions';
+import RegisterServiceWorker from './RegisterServiceWorker';
 
 export const metadata: Metadata = {
   title: 'Dula HQ 2.0 — Club Manager',
   description: 'Club setup and staff management',
+  // manifest.ts and icon.tsx/apple-icon.tsx are Next.js file conventions --
+  // both auto-linked in <head>, nothing to wire up here.
+};
+
+export const viewport: Viewport = {
+  themeColor: '#15803D',
 };
 
 export default async function RootLayout({
@@ -38,6 +45,7 @@ export default async function RootLayout({
         />
       </head>
       <body>
+        <RegisterServiceWorker />
         <nav className="top-nav">
           <div className="container">
             <Link href="/" className="brand">

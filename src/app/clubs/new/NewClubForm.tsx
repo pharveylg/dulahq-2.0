@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClub } from './actions';
 
 type Org = { id: string; name: string };
+type Sport = { id: string; key: string; name: string; status: string };
 type ActionState = { error?: string };
 const initialState: ActionState = {};
 
@@ -12,7 +13,8 @@ function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-export default function NewClubForm({ orgs }: { orgs: Org[] }) {
+export default function NewClubForm({ orgs, sports }: { orgs: Org[]; sports: Sport[] }) {
+  const defaultSport = sports.find((s) => s.status === 'production') ?? sports[0];
   const [state, formAction, pending] = useActionState<ActionState, FormData>(async (_prev, formData) => {
     const result = await createClub(formData);
     return result ?? {};
@@ -56,6 +58,18 @@ export default function NewClubForm({ orgs }: { orgs: Org[] }) {
               /clubs/{slug || '…'}
             </p>
           </div>
+          {sports.length > 0 && (
+            <div className="form-group">
+              <label htmlFor="sport_id">Sport</label>
+              <select id="sport_id" name="sport_id" required defaultValue={defaultSport?.id}>
+                {sports.map((sport) => (
+                  <option key={sport.id} value={sport.id} disabled={sport.status !== 'production'}>
+                    {sport.name}{sport.status !== 'production' ? ' (coming soon)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {orgs.length === 1 ? (
             <input type="hidden" name="org_id" value={orgs[0].id} />
           ) : (

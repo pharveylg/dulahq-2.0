@@ -62,6 +62,11 @@ export const config = {
   // /t/* and /platformconsole are rewritten (next.config.js) to the proxied
   // Tournament Manager app, which has its own separate auth model and is
   // reachable by guests -- Club Manager's login gate must not intercept
-  // them before the rewrite gets a chance to run.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|t/|platformconsole).*)'],
+  // them before the rewrite gets a chance to run. manifest.webmanifest,
+  // sw.js, and the icon routes (§6.E) are unauthenticated static/generated
+  // assets fetched by the browser itself, not a person navigating -- a
+  // redirect-to-login response for these breaks PWA installability
+  // (found by hand: manifest.webmanifest was 302ing to /login instead of
+  // serving JSON).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|t/|platformconsole|manifest.webmanifest|sw.js|icon|apple-icon).*)'],
 };
