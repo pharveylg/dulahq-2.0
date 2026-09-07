@@ -46,5 +46,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // /t/* and /platformconsole are rewritten (next.config.js) to the proxied
+  // Tournament Manager app, which has its own separate auth model and is
+  // reachable by guests -- Club Manager's login gate must not intercept
+  // them before the rewrite gets a chance to run.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|t/|platformconsole).*)'],
 };
