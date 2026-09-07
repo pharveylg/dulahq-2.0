@@ -8,11 +8,10 @@
  *   - No tenants/tenant_users -- this database has none.
  *   - Uses the EXISTING public.teams / public.players tables, not new
  *     ones.
- *   - Identity is resolved by matching auth.jwt() ->> 'email' against
- *     public.users.email (current_dula_user_id()) -- NOT auth.uid().
- *     Every test user therefore needs BOTH an auth.users row (via
- *     admin.createUser) AND a manually-inserted public.users row with
- *     the matching email -- there is no trigger connecting the two.
+ *   - 2026-09-07 (phase 1): identity is now auth.uid(). public.users.id
+ *     IS auth.users.id, and a trigger on auth.users creates the profile
+ *     row automatically. Test users are created with admin.createUser
+ *     alone; the helper only UPDATEs the role afterwards.
  *   - Team-level scoping (coach/team_manager) is enforced via the
  *     EXISTING public.user_assigned_teams table, not a new
  *     Club-Manager-only assignment table.
@@ -43,7 +42,6 @@ let orgA: { id: string };
 let orgB: { id: string };
 let clubA: { id: string };
 let clubB: { id: string };
-let categoryId: string; // teams.category_id is NOT NULL; needs a value, doesn't need to reference a real category for these tests
 let teamA1: { id: string };
 let teamA2: { id: string };
 let teamB1: { id: string };
@@ -58,8 +56,9 @@ let guardianOfA1Client: ReturnType<typeof createClient>;
 let orgAdminAClient: ReturnType<typeof createClient>;
 
 /**
- * Creates BOTH the auth.users row and the matching public.users row --
- * required because this schema has no auth->public sync trigger.
+ * Creates the auth.users row. The phase-1 trigger creates the matching
+ * public.users row with the SAME id, so we only set the role here.
+ * Inserting a profile row manually would now violate the FK to auth.users.
  */
 async function createTestUser(email: string, role: string) {
   const { data, error } = await adminClient.auth.admin.createUser({
@@ -71,12 +70,24 @@ async function createTestUser(email: string, role: string) {
 
   const { data: publicUser, error: publicUserError } = await adminClient
     .from('users')
-    .insert({ email, role, name: email.split('@')[0] })
+    .update({ role, name: email.split('@')[0] })
+    .eq('id', data.user.id)
     .select()
     .single();
   if (publicUserError) throw publicUserError;
 
   return { authUser: data.user, publicUser };
+}
+
+/**
+ * Fixture inserts previously destructured only `data` and ignored `error`,
+ * so a constraint violation surfaced as "Cannot read properties of null"
+ * several lines further down. Unwrap loudly instead.
+ */
+function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
+  if (res.error) throw new Error(`fixture "${what}" failed: ${res.error.message}`);
+  if (!res.data) throw new Error(`fixture "${what}" returned no row`);
+  return res.data;
 }
 
 async function signInAs(email: string) {
@@ -90,68 +101,74 @@ async function signInAs(email: string) {
 }
 
 beforeAll(async () => {
-  categoryId = crypto.randomUUID(); // teams.category_id has no FK in the live schema; any uuid satisfies NOT NULL
-
   const suffix = crypto.randomUUID().slice(0, 8);
-  const { data: oA } = await adminClient
+  orgA = must(await adminClient
     .from('organizations')
     .insert({ slug: `rls-test-org-a-${suffix}`, name: 'RLS Test Org A' })
     .select()
-    .single();
-  orgA = oA;
-  const { data: oB } = await adminClient
+    .single(), 'organizations orgA');
+  orgB = must(await adminClient
     .from('organizations')
     .insert({ slug: `rls-test-org-b-${suffix}`, name: 'RLS Test Org B' })
     .select()
-    .single();
-  orgB = oB;
+    .single(), 'organizations orgB');
 
-  const { data: cA } = await adminClient.from('clubs').insert({ name: 'RLS Test Club A', org_id: orgA.id }).select().single();
-  clubA = cA;
-  const { data: cB } = await adminClient.from('clubs').insert({ name: 'RLS Test Club B', org_id: orgB.id }).select().single();
-  clubB = cB;
+  // phase 2: the clubs write policy requires org_has_product(org_id,'club'),
+  // so an org with no entitlement row cannot have clubs created in it.
+  const entRes = await adminClient.from('org_entitlements').insert([
+    { org_id: orgA.id, product: 'club' },
+    { org_id: orgB.id, product: 'club' },
+  ]);
+  if (entRes.error) throw new Error(`fixture "org_entitlements" failed: ${entRes.error.message}`);
 
-  const { data: tA1 } = await adminClient
-    .from('teams')
-    .insert({ name: 'Club A - U15', category_id: categoryId, club_id: clubA.id })
+  // clubs.slug is NOT NULL with no default (add_club_and_team_slugs, 2026-09-03)
+  // and is globally unique, so it must be supplied and suffixed.
+  clubA = must(await adminClient
+    .from('clubs')
+    .insert({ name: 'RLS Test Club A', slug: `rls-test-club-a-${suffix}`, org_id: orgA.id })
     .select()
-    .single();
-  teamA1 = tA1;
-
-  const { data: tA2 } = await adminClient
-    .from('teams')
-    .insert({ name: 'Club A - U17', category_id: categoryId, club_id: clubA.id })
+    .single(), 'clubs clubA');
+  clubB = must(await adminClient
+    .from('clubs')
+    .insert({ name: 'RLS Test Club B', slug: `rls-test-club-b-${suffix}`, org_id: orgB.id })
     .select()
-    .single();
-  teamA2 = tA2;
+    .single(), 'clubs clubB');
 
-  const { data: tB1 } = await adminClient
+  teamA1 = must(await adminClient
     .from('teams')
-    .insert({ name: 'Club B - U15', category_id: categoryId, club_id: clubB.id })
+    .insert({ name: 'Club A - U15', club_id: clubA.id })
     .select()
-    .single();
-  teamB1 = tB1;
+    .single(), 'teams teamA1');
 
-  const { data: pA1 } = await adminClient
+  teamA2 = must(await adminClient
+    .from('teams')
+    .insert({ name: 'Club A - U17', club_id: clubA.id })
+    .select()
+    .single(), 'teams teamA2');
+
+  teamB1 = must(await adminClient
+    .from('teams')
+    .insert({ name: 'Club B - U15', club_id: clubB.id })
+    .select()
+    .single(), 'teams teamB1');
+
+  playerA1 = must(await adminClient
     .from('players')
     .insert({ name: 'Player A1', team_id: teamA1.id })
     .select()
-    .single();
-  playerA1 = pA1;
+    .single(), 'players playerA1');
 
-  const { data: pA2 } = await adminClient
+  playerA2 = must(await adminClient
     .from('players')
     .insert({ name: 'Player A2', team_id: teamA2.id })
     .select()
-    .single();
-  playerA2 = pA2;
+    .single(), 'players playerA2');
 
-  const { data: pB } = await adminClient
+  playerB = must(await adminClient
     .from('players')
     .insert({ name: 'Player B', team_id: teamB1.id })
     .select()
-    .single();
-  playerB = pB;
+    .single(), 'players playerB');
 
   // --- Users ---
   const coachA1 = await createTestUser('coach-a1@rls-test.local', 'team');
@@ -181,11 +198,11 @@ beforeAll(async () => {
     { club_id: clubA.id, user_id: coachA1.publicUser.id, role: 'coach' },
   ]);
 
-  const { data: guardianRecord } = await adminClient
+  const guardianRecord = must(await adminClient
     .from('guardians')
-    .insert({ user_id: guardianA1.publicUser.id, name: 'Guardian of A1' })
+    .insert({ user_id: guardianA1.publicUser.id, name: 'Guardian of A1', org_id: orgA.id })
     .select()
-    .single();
+    .single(), 'guardians guardianA1');
 
   await adminClient.from('player_guardians').insert({
     player_id: playerA1.id, // linked ONLY to playerA1
@@ -201,13 +218,18 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // beforeAll may have thrown partway; skip anything that never got created.
+  const ids = (...xs: ({ id: string } | undefined)[]) =>
+    xs.map((x) => x?.id).filter((v): v is string => Boolean(v));
+
   // Clubs cascade to club_staff/memberships/etc; teams.club_id is
   // ON DELETE SET NULL so deleting clubs won't cascade-delete teams --
   // clean those up explicitly along with players/users.
-  await adminClient.from('players').delete().in('id', [playerA1.id, playerA2.id, playerB.id]);
-  await adminClient.from('teams').delete().in('id', [teamA1.id, teamA2.id]);
-  await adminClient.from('clubs').delete().in('id', [clubA.id, clubB.id]);
-  await adminClient.from('organizations').delete().in('id', [orgA.id, orgB.id]);
+  await adminClient.from('players').delete().in('id', ids(playerA1, playerA2, playerB));
+  await adminClient.from('teams').delete().in('id', ids(teamA1, teamA2, teamB1));
+  await adminClient.from('clubs').delete().in('id', ids(clubA, clubB));
+  await adminClient.from('org_entitlements').delete().in('org_id', ids(orgA, orgB));
+  await adminClient.from('organizations').delete().in('id', ids(orgA, orgB));
 
   const { data: users } = await adminClient.auth.admin.listUsers();
   for (const email of [
@@ -239,7 +261,7 @@ describe('org-level fencing: clubs.org_id (added 2026-08-27)', () => {
   it('org admin of Org A CAN insert a club into Org A', async () => {
     const { data, error } = await orgAdminAClient
       .from('clubs')
-      .insert({ name: 'Org A New Club', org_id: orgA.id })
+      .insert({ name: 'Org A New Club', org_id: orgA.id, slug: `rls-test-org-a-new-club-${crypto.randomUUID().slice(0, 8)}` })
       .select()
       .single();
     expect(error).toBeNull();
@@ -305,7 +327,7 @@ describe('player/guardian write access via club_staff (added 2026-08-27)', () =>
   it('club_staff of Club A can create a guardian and read it back immediately (no player link yet)', async () => {
     const { data, error } = await clubAdminAClient
       .from('guardians')
-      .insert({ name: 'New Guardian A' })
+      .insert({ name: 'New Guardian A', org_id: orgA.id })
       .select()
       .single();
     expect(error).toBeNull();
@@ -314,7 +336,7 @@ describe('player/guardian write access via club_staff (added 2026-08-27)', () =>
   });
 
   it('club_staff of Club A can link a guardian they created to Player A2', async () => {
-    const { data: guardian } = await clubAdminAClient.from('guardians').insert({ name: 'Linked Guardian A' }).select().single();
+    const { data: guardian } = await clubAdminAClient.from('guardians').insert({ name: 'Linked Guardian A', org_id: orgA.id }).select().single();
     const { error } = await clubAdminAClient.from('player_guardians').insert({ player_id: playerA2.id, guardian_id: guardian.id });
     expect(error).toBeNull();
     await adminClient.from('player_guardians').delete().eq('guardian_id', guardian.id);
@@ -416,16 +438,28 @@ describe('guardian-level isolation: fee_charges', () => {
   });
 });
 
-describe('existing Tournament Manager functionality is unaffected', () => {
-  it('teams table is still readable by any authenticated user (pre-existing policy)', async () => {
+describe('teams / players are org-fenced (phase 2 replaced the open policies)', () => {
+  it('club_admin of Club A CAN read their own club\'s team', async () => {
     const { data, error } = await clubAdminAClient.from('teams').select('*').eq('id', teamA1.id);
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
   });
 
-  it('players table is still readable by any authenticated user (pre-existing policy)', async () => {
+  it('club_admin of Club A CAN read their own club\'s player', async () => {
     const { data, error } = await clubAdminAClient.from('players').select('*').eq('id', playerA1.id);
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
+  });
+
+  // Before phase 2 both of these returned the row: the policies were
+  // `auth.role() = 'authenticated'`, i.e. any signed-in user, any org.
+  it('club_admin of Club B CANNOT read Club A\'s team', async () => {
+    const { data } = await clubStaffBClient.from('teams').select('*').eq('id', teamA1.id);
+    expect(data).toHaveLength(0);
+  });
+
+  it('club_admin of Club B CANNOT read Club A\'s player', async () => {
+    const { data } = await clubStaffBClient.from('players').select('*').eq('id', playerA1.id);
+    expect(data).toHaveLength(0);
   });
 });

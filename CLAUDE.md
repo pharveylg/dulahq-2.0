@@ -9,10 +9,11 @@ before acting on it — this file goes stale.
 
 ## 0. What changed on 2026-09-07 — read this first
 
-**The database consolidation (phases 1–5) is applied and verified.** Thirteen
-migrations are live in `zytyakbgwaegvftblkcn` and committed under
-`supabase/migrations/`. Most of §3's security list is closed. §2's row counts are
-gone. Do not re-plan this work — extend it.
+**The database consolidation (phases 1–5) is applied and verified.** Seventeen
+migrations — the original thirteen plus four same-day follow-up fixes (`phase2h`
+through `phase2k`) — are live in `zytyakbgwaegvftblkcn` and committed under
+`supabase/migrations/`; see §0a for what each one does. Most of §3's security list
+is closed. §2's row counts are gone. Do not re-plan this work — extend it.
 
 **All demo data was deliberately wiped.** Both orgs, both clubs, all teams,
 players, guardians, evaluations, fees, trips and tournaments. The four `test-*`
@@ -26,6 +27,153 @@ tournament *schema* (roster, members, officials, the port functions) so it is
 ready when wanted. It did **not** require rewriting the tournament UI, and §8's
 rule still holds. The new tables become the tournament app's backend if and when
 it is updated — not before.
+
+---
+
+## 0a. Migration file reference (2026-09-07)
+
+All seventeen of today's migrations are committed under `supabase/migrations/`,
+filenames matching the live project's migration history by version timestamp.
+`phase2h` and `phase2i` were reconstructed from the live schema state when these
+files were added to the repo (the batch of thirteen didn't originally include
+them) — verified to match what's live, not necessarily byte-identical to whatever
+was first run.
+
+| File | What it does |
+|---|---|
+| `…002707_enable_rls_on_backups` | Closes the anon read/write hole on `backups` |
+| `…043830_phase1_identity_on_auth_uid` | `public.users.id` **is** `auth.users.id`; signup + email-sync triggers; `current_dula_user_id()` returns `auth.uid()` |
+| `…043919_phase2a_tenant_primitives` | `sports`, `org_entitlements`, `role_assignments`, a real append-only `audit_log`, `write_audit()` |
+| `…044033_phase2b_org_id_on_owned_tables` | `org_id NOT NULL` on 37 tables + derivation triggers so existing inserts keep working |
+| `…044103_phase2c_authorization_helpers` | Helpers rewritten uid-based and tenant-first, each honouring the legacy table it replaces |
+| `…044134_phase2d_public_surface_and_new_table_rls` | `publicly_listed` on clubs, `sport_id` everywhere, `public_tournaments` / `public_clubs` views, RLS on the new primitives |
+| `…044309_phase2e_policies_tenant_first` | Every policy rebuilt with the org fence carried **inside** it |
+| `…044353_phase3_free_the_player` | `players.club_id`, `team_memberships`, `tournament_categories`, `tournament_entries`, `venues`, cascade downgrades, `requires_guardian_consent()` |
+| `…044432_phase4_approvals_and_notifications` | `approval_requests`, `notifications`, derived fee status, expiry sweep |
+| `…044509_phase5a_tournament_identity_and_officials` | `tournament_roster`, `tournament_members`, `org_officials`, `tournament_officials`, `match_events.player_id`, `player_tournament_results` |
+| `…044558_phase5b_the_port_and_tournament_rls` | `port_squad_to_tournament()`, `port_match_results_home()`, tournament-side RLS |
+| `…044730_phase2f_restore_public_directory_policies` | Bug fix — phase2e's drop-all rebuild had silently removed phase2d's anon directory policies |
+| `…044810_phase2g_lock_down_helper_execution` | Revokes `EXECUTE` on every SECURITY DEFINER helper from `anon` — **regressed** since: as of the 2026-09-07 test-fix session, `get_advisors` shows 57 SECURITY DEFINER functions anon-executable again (0 ERROR-level advisories, only WARN — §2's "0 errors" still holds). Cause not identified; predates and is unrelated to `phase2j`/`phase2k` below |
+| `…082946_phase2h_fix_club_staff_guardian_writes` | club_staff (any role, no `org_members` row) can create/read/link guardians for their own club — see §0b |
+| `…083044_phase2i_club_staff_are_org_members` | `is_org_member` widened to include club staff, assigned coaches, guardians, and players themselves — see §0b |
+| `…090000_phase2j_fix_can_read_club_org_collapse` | Bug fix — `can_read_club`'s `OR is_org_member(p_org)` fallback collapsed to org-wide read on every table using it, once combined with the outer `is_org_member(org_id) AND (...)` gate nearly every policy already has — see §0b |
+| `…090100_phase2k_can_read_club_requires_club_admin` | Bug fix — `can_read_club`'s club-wide grant was on `is_club_staff` (any role, including coach/team_manager/staff); narrowed to `is_club_admin`, matching `getClubAccess()` in `src/lib/supabase/server.ts` — see §0b |
+
+**Verified**, run as `anon` and as an org admin inside `BEGIN … ROLLBACK`, for the
+first eleven migrations (phase1 through phase2g):
+
+- An org admin with two orgs in the database sees only their own club, team and player.
+- `is_org_admin()` is false for the other org, true for their own.
+- `anon` sees the published tournament and not the unpublished draft.
+- `anon` sees a listed club and not a private one.
+- `anon` sees zero players, zero role assignments, zero audit rows, and is refused outright on `backups`.
+- `port_squad_to_tournament()` with no consent recorded returned `consent_missing` for a 14-year-old and `ported` for an adult, from the same call.
+
+**Verified** for phase2j/phase2k, via `tests/rls/club-manager-isolation.test.ts`
+(21/21 passing) against the live project: a coach assigned to one team cannot read
+another team's sessions in the same club; a guardian cannot read another player's
+fee charge in the same club; the org-level cross-tenant fence below still holds.
+
+---
+
+## 0b. RLS test suite — resolved 2026-09-07
+
+`npm run test:rls` is green: 21/21 passing. This was the only thing in flight;
+everything else in this file was already settled.
+
+The suite is `tests/rls/club-manager-isolation.test.ts` (now 18,412 bytes), run
+with `npm run test:rls`. It points at the LIVE project (Supabase branching is
+unavailable on free tier — see §1). Fixtures are prefixed `rls-test-` and cleaned
+up in `afterAll`; a crash mid-run leaves them behind — four leftover orgs from
+runs that predate the `hookTimeout` fix below were found and removed.
+
+### What was already fixed today
+
+- `vitest.config.ts` now parses `.env.local` by hand (Node `fs`, splitting on
+  `/\r?\n/` for CRLF). It does NOT use vite's `loadEnv` — that lives in `vite`,
+  not `vitest/config`, and importing it from the latter throws
+  `loadEnv is not a function`.
+- `createTestUser` no longer inserts a `public.users` row. The phase-1 trigger
+  creates it with the same id as `auth.users`; a manual insert now violates the
+  FK.
+- `category_id` removed from team fixtures — nullable since phase 3, and now a
+  real FK to `tournament_categories`, so a random uuid fails.
+- `org_entitlements` rows are seeded for both test orgs. Without them the
+  `clubs` write policy (`org_has_product(org_id,'club')`) refuses the insert.
+- `clubs.slug` is supplied and suffixed. It is NOT NULL with no default since
+  `add_club_and_team_slugs` (2026-09-03) and globally unique. This broke the
+  suite on 3 Sep, before any of the consolidation work.
+- Fixture inserts go through a `must()` helper that throws the real Postgres
+  message. Previously they destructured `data` and dropped `error`, so a
+  constraint violation surfaced as `Cannot read properties of null` several
+  lines later — which cost about four debugging rounds.
+- `afterAll` now also deletes `teamB1` (it was orphaned every run, since
+  `teams.club_id` is ON DELETE SET NULL) and tolerates a `beforeAll` that threw
+  partway.
+- `vitest.config.ts` sets `hookTimeout: 30000`. `beforeAll` makes ~15 sequential
+  round trips to the live project (fixture inserts, 5× `createUser`, 5×
+  `signInWithPassword`) — the default 10s hook timeout wasn't enough, and a timed-out
+  hook silently reports all 21 tests as "skipped" rather than failing loudly.
+- Three inline test-body inserts were missing fields required since phase2b: a
+  club insert missing `slug`, and two guardian inserts missing `org_id` (guardians
+  have no parent row to derive it from — see §5).
+
+### Two real policy bugs the suite caught — both fixed, both worth understanding
+
+`phase2h_fix_club_staff_guardian_writes` and `phase2i_club_staff_are_org_members`.
+
+Phase 2e wrote almost every policy as `is_org_member(org_id) and (...)`. But
+`is_org_member` only consulted `role_assignments` and `org_members` — so anyone
+whose access comes from `club_staff`, with no `org_members` row, was fenced out
+of **their own club's** teams, players, sessions and fees. The suite's own test
+at "club_admin of Club B can still read Club B even without any org_members row"
+documents that this is a supported case.
+
+Fixed at the source rather than by patching 40 policies: `is_org_member` now also
+returns true for club staff, assigned coaches, guardians of a player in the org,
+and the player themselves. Re-verified afterwards that the cross-tenant fence
+still holds — a club_admin of Club A sees Club A and nothing of Org B.
+
+**If you widen a security helper, re-run the cross-tenant check before moving on.**
+
+### A third bug the suite caught, once the first two were fixed
+
+`phase2j_fix_can_read_club_org_collapse` and `phase2k_can_read_club_requires_club_admin`.
+
+`can_read_club(p_org, p_club)` fell back to `is_club_staff(p_club) or
+is_org_member(p_org)`. Almost every read policy is already written as
+`is_org_member(org_id) and (can_read_club(org_id, club_id) or ...)`, with the same
+`org_id` passed to both calls — so once the outer gate passed, the inner `or
+is_org_member(p_org)` was trivially true too, and the whole club-scoping collapsed
+to "any org member can read any club's data." This silently erased intra-org
+isolation on every table using `can_read_club`: `players`, `training_sessions`,
+`fee_charges`, `guardians`, `payments`, `player_evaluations`, `meetings`,
+`expenses`, `memberships`, `document_uploads`, `approval_requests`,
+`team_memberships`. A `club_staff` row with role `coach` compounded it further,
+since `is_club_staff` doesn't check role at all — any staff row, any role, read
+the whole club.
+
+Caught by two tests: "coach assigned to Team A1 CANNOT see Team A2 sessions (same
+club)" and "guardian CANNOT see a different player's fee charge, even same club" —
+both returned the forbidden row instead of zero.
+
+Fixed by making `can_read_club`'s override require `is_org_admin` (not mere
+membership) and `is_club_admin` (not any staff role) — matching the access model
+`getClubAccess()` in `src/lib/supabase/server.ts` already documents: only platform
+admin and club_admin are club-wide, every other club_staff role is scoped to
+`is_assigned_to_team()`, which the read policies already OR in separately.
+Re-verified the cross-tenant fence afterwards; still holds.
+
+### If the run fails again
+
+A null-deref at the `teams` insert means `clubA` was null, which means the club
+insert failed. Fixture inserts go through `must()`, which throws the real Postgres
+error instead of surfacing a downstream null-deref — read that message first, it
+will name the column or policy.
+
+Confirm you are running the patched file: it is **18,412 bytes** and contains
+`function must<T>`. An earlier write silently did not land while reporting
+success once, so check the file before debugging the database.
 
 ---
 
