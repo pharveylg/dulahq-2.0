@@ -35,15 +35,25 @@ export default async function TournamentsPage() {
 
         {tournaments && tournaments.length > 0 && (
           <PublicTournamentList
-            tournaments={tournaments.map((t) => ({
-              slug: t.slug,
-              name: t.name,
-              posterUrl: t.poster_url,
-              eventDate: t.event_date,
-              venue: t.venue,
-              orgSlug: t.org_slug,
-              orgName: t.org_name,
-            }))}
+            // public_tournaments is a view, so PostgREST can't see that
+            // tournaments.slug/name and organizations.slug/name (joined)
+            // are all NOT NULL at the base-table level -- filter
+            // defensively rather than assert, since a broken /t/ link is
+            // worse than a skipped row if that guarantee is ever wrong.
+            tournaments={tournaments
+              .filter(
+                (t): t is typeof t & { slug: string; name: string; org_slug: string; org_name: string } =>
+                  !!t.slug && !!t.name && !!t.org_slug && !!t.org_name
+              )
+              .map((t) => ({
+                slug: t.slug,
+                name: t.name,
+                posterUrl: t.poster_url,
+                eventDate: t.event_date,
+                venue: t.venue,
+                orgSlug: t.org_slug,
+                orgName: t.org_name,
+              }))}
           />
         )}
       </div>

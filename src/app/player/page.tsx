@@ -31,14 +31,18 @@ export default async function PlayerHomePage() {
 
   const team = (player as any).teams;
 
-  const { data: upcomingSessions } = await supabase
-    .from('training_sessions')
-    .select('id, starts_at, ends_at, status')
-    .eq('team_id', player.team_id)
-    .eq('status', 'scheduled')
-    .gte('starts_at', new Date().toISOString())
-    .order('starts_at')
-    .limit(10);
+  // players.team_id is nullable (phase3_free_the_player) -- a player not
+  // on any team has no upcoming sessions to show.
+  const { data: upcomingSessions } = player.team_id
+    ? await supabase
+        .from('training_sessions')
+        .select('id, starts_at, ends_at, status')
+        .eq('team_id', player.team_id)
+        .eq('status', 'scheduled')
+        .gte('starts_at', new Date().toISOString())
+        .order('starts_at')
+        .limit(10)
+    : { data: [] };
 
   const { data: attendanceHistory } = await supabase
     .from('attendance')

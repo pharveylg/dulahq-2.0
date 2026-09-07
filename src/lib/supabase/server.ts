@@ -1,10 +1,11 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import type { Database } from './database.types';
 
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -28,58 +29,52 @@ export async function createClient() {
 }
 
 /**
- * This project's identity model is NOT auth.uid()-based -- public.users
- * has no relationship to auth.users at all. The whole app (existing
- * Tournament Manager RLS included) resolves "who is this" by matching
- * the signed-in session's email against public.users.email. This helper
- * is the app-code equivalent of the current_dula_user_id() SQL function,
- * for places that need the current user's row (not just relying on RLS
- * to filter automatically, which it already does for query results).
+ * public.users.id IS auth.users.id (phase1_identity_on_auth_uid) -- a
+ * trigger on auth.users creates the profile row on signup with the same
+ * id and keeps email in sync, so matching by id is both simpler and more
+ * robust than the old email match (immune to email casing/changes). This
+ * helper is the app-code equivalent of current_dula_user_id(), for
+ * places that need the current user's row (not just relying on RLS to
+ * filter automatically, which it already does for query results).
  *
- * Returns null if there's no session, or if the session's email has no
- * matching public.users row (e.g. an auth account exists but nobody
- * has been added to public.users yet -- this app doesn't build user
- * signup/provisioning, it assumes accounts are already set up the way
- * the existing Tournament Manager app already manages them).
+ * Returns null if there's no session, or if the trigger hasn't run yet
+ * for some reason (shouldn't happen in normal operation, but code that
+ * calls this should still treat a signed-in user with no profile row as
+ * possible rather than assuming one always exists).
  */
 export async function getCurrentDulaUser() {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser?.email) return null;
+  if (!authUser) return null;
 
   const { data: dulaUser } = await supabase
     .from('users')
     .select('id, name, email, role')
-    .eq('email', authUser.email)
+    .eq('id', authUser.id)
     .maybeSingle();
 
   return dulaUser;
 }
 
 /**
- * Whether the signed-in session is a platform admin (public.platform_admins),
- * the org-system's own concept of "admin" -- separate from and not
- * necessarily equal to public.users.role === 'admin' (see the note in
- * getCurrentDulaUser above: those are two different identity paths that
- * happen to currently agree for the one account that exists).
+ * Whether the signed-in session is a platform admin -- separate from and
+ * not necessarily equal to public.users.role === 'admin' (see the note in
+ * getCurrentDulaUser above).
  *
- * Querying platform_admins directly (rather than a users.role check) works
- * safely even though its own RLS policy also gates on is_platform_admin():
- * for a non-admin caller RLS filters the row set to empty (not an error),
- * which is exactly the "false" case we want; for an admin caller their own
- * row comes back.
+ * Calls the is_platform_admin() RPC rather than reimplementing its check
+ * (role_assignments with scope_type='platform', OR the legacy
+ * platform_admins table by email) in TypeScript: a hand-rolled version
+ * that only checked platform_admins would silently disagree with RLS the
+ * moment anyone is granted platform admin the new way (role_assignments,
+ * per §4) instead of the legacy table -- RLS would let them in, the UI
+ * wouldn't know it.
  */
 export async function isPlatformAdmin() {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser?.email) return false;
+  if (!authUser) return false;
 
-  const { data } = await supabase
-    .from('platform_admins')
-    .select('email')
-    .ilike('email', authUser.email)
-    .maybeSingle();
-
+  const { data } = await supabase.rpc('is_platform_admin');
   return !!data;
 }
 
@@ -94,7 +89,7 @@ export async function isPlatformAdmin() {
 export async function getClubCreatableOrgs() {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser?.email) return [];
+  if (!authUser) return [];
 
   if (await isPlatformAdmin()) {
     const { data } = await supabase
@@ -104,15 +99,35 @@ export async function getClubCreatableOrgs() {
     return data ?? [];
   }
 
-  const { data } = await supabase
-    .from('org_members')
-    .select('org_id, role, organizations(id, name)')
-    .eq('role', 'admin')
-    .ilike('email', authUser.email);
+  // Org admin grants now live in two places: the legacy org_members table
+  // (role='admin', matched by user_id or email) and role_assignments
+  // (scope_type='org', role in ('org_admin','admin')) -- exactly what
+  // is_org_admin(org) checks per-org on the DB side. There's no per-org
+  // "list the orgs I admin" RPC, so this unions both sources directly
+  // rather than calling is_org_admin() once per organization.
+  const [{ data: viaRoleAssignments }, { data: viaOrgMembers }] = await Promise.all([
+    supabase
+      .from('role_assignments')
+      .select('scope_id')
+      .eq('scope_type', 'org')
+      .in('role', ['org_admin', 'admin']),
+    supabase
+      .from('org_members')
+      .select('org_id')
+      .eq('role', 'admin')
+      .or(`user_id.eq.${authUser.id},email.ilike.${authUser.email ?? ''}`),
+  ]);
 
-  return (data ?? [])
-    .map((m: any) => m.organizations)
-    .filter(Boolean);
+  const orgIds = Array.from(
+    new Set([
+      ...(viaRoleAssignments ?? []).map((r) => r.scope_id).filter((id): id is string => !!id),
+      ...(viaOrgMembers ?? []).map((r) => r.org_id),
+    ])
+  );
+  if (orgIds.length === 0) return [];
+
+  const { data: orgs } = await supabase.from('organizations').select('id, name').in('id', orgIds).order('name');
+  return orgs ?? [];
 }
 
 export type ClubRole = 'club_admin' | 'staff' | 'coach' | 'team_manager';
@@ -145,15 +160,26 @@ export async function getClubAccess(clubId: string): Promise<ClubAccess> {
   if (!dulaUser) return { isSignedIn: false, isPlatformAdmin: platformAdmin, role: null, isClubAdmin: platformAdmin, isStaff: platformAdmin };
 
   const supabase = await createClient();
-  const { data } = await supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle();
-  const role = (data?.role as ClubRole | undefined) ?? null;
+  // isClubAdmin/isStaff come from the RPCs (is_club_admin/is_club_staff),
+  // not a club_staff role check, so a role_assignments-only grant (§4's
+  // now-preferred way to grant a club role) is reflected here exactly like
+  // RLS already sees it. `role` -- the specific label ('coach' etc.) shown
+  // in the UI -- still only reflects club_staff, since role_assignments.role
+  // has no enforced vocabulary to safely map into ClubRole; that's fine
+  // because nothing gates access on `role` itself, only on the two booleans.
+  const [{ data: staffRow }, { data: clubAdminRpc }, { data: clubStaffRpc }] = await Promise.all([
+    supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle(),
+    supabase.rpc('is_club_admin', { check_club_id: clubId }),
+    supabase.rpc('is_club_staff', { check_club_id: clubId }),
+  ]);
+  const role = (staffRow?.role as ClubRole | undefined) ?? null;
 
   return {
     isSignedIn: true,
     isPlatformAdmin: platformAdmin,
     role,
-    isClubAdmin: platformAdmin || role === 'club_admin',
-    isStaff: platformAdmin || !!role,
+    isClubAdmin: !!clubAdminRpc,
+    isStaff: !!clubStaffRpc,
   };
 }
 
@@ -168,9 +194,13 @@ export async function getAssignedTeamIds(): Promise<string[]> {
   const dulaUser = await getCurrentDulaUser();
   if (!dulaUser) return [];
 
+  // current_user_team_ids() unions user_assigned_teams with
+  // role_assignments (scope_type='team') -- calling it directly instead
+  // of querying user_assigned_teams alone means a team grant made the new
+  // way (role_assignments) shows up here too, not just at the RLS layer.
   const supabase = await createClient();
-  const { data } = await supabase.from('user_assigned_teams').select('team_id').eq('user_id', dulaUser.id);
-  return (data ?? []).map((r) => r.team_id);
+  const { data } = await supabase.rpc('current_user_team_ids');
+  return data ?? [];
 }
 
 /**
@@ -204,11 +234,16 @@ export async function claimPendingGuardianInvite() {
     .maybeSingle();
   if (!invite) return;
 
-  let { data: dulaUser } = await supabase.from('users').select('id').eq('email', authUser.email).maybeSingle();
+  let { data: dulaUser } = await supabase.from('users').select('id').eq('id', authUser.id).maybeSingle();
   if (!dulaUser) {
+    // Shouldn't normally happen -- the phase1 trigger creates this row on
+    // signup -- but if it somehow hasn't run yet, public.users.id defaults
+    // to gen_random_uuid(), NOT auth.uid(). Passing id explicitly here
+    // avoids silently creating a profile row that current_dula_user_id()
+    // (and every id-based RLS check) would never match.
     const { data: created } = await supabase
       .from('users')
-      .insert({ email: authUser.email, name: authUser.email.split('@')[0], role: 'audience' })
+      .insert({ id: authUser.id, email: authUser.email, name: authUser.email.split('@')[0], role: 'audience' })
       .select('id')
       .single();
     dulaUser = created;

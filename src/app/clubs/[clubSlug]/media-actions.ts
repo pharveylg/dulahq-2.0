@@ -44,7 +44,7 @@ export async function uploadMedia(clubId: string, formData: FormData) {
 
   const { error } = await supabase.from('media').insert({
     club_id: clubId,
-    r2_key: key,
+    storage_key: key,
     file_name: file.name,
     content_type: file.type,
     caption,
@@ -65,14 +65,14 @@ export async function uploadMedia(clubId: string, formData: FormData) {
 export async function deleteMedia(clubId: string, mediaId: string) {
   const supabase = await createClient();
 
-  const { data: media, error: fetchError } = await supabase.from('media').select('r2_key').eq('id', mediaId).maybeSingle();
+  const { data: media, error: fetchError } = await supabase.from('media').select('storage_key').eq('id', mediaId).maybeSingle();
   if (fetchError) return { error: friendlyError(fetchError) };
   if (!media) return { error: 'Not found.' };
 
   const { error } = await supabase.from('media').delete().eq('id', mediaId);
   if (error) return { error: friendlyError(error) };
 
-  await deleteFile(media.r2_key).catch(() => {});
+  await deleteFile(media.storage_key).catch(() => {});
 
   revalidatePath('/clubs/[clubSlug]', 'layout');
   return { success: true };

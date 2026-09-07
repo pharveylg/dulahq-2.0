@@ -37,12 +37,21 @@ async function GuestClubsPage() {
 
         {clubs && clubs.length > 0 && (
           <PublicClubList
-            clubs={clubs.map((club) => ({
-              slug: club.slug,
-              name: club.name,
-              orgName: club.org_name,
-              location: club.location,
-            }))}
+            // public_clubs is a view, so PostgREST can't see that
+            // clubs.slug/name and organizations.name (joined) are all
+            // NOT NULL at the base-table level -- filter defensively
+            // rather than assert, since a broken link is worse than a
+            // skipped row if that guarantee is ever wrong.
+            clubs={clubs
+              .filter((club): club is typeof club & { slug: string; name: string; org_name: string } =>
+                !!club.slug && !!club.name && !!club.org_name
+              )
+              .map((club) => ({
+                slug: club.slug,
+                name: club.name,
+                orgName: club.org_name,
+                location: club.location,
+              }))}
           />
         )}
       </div>

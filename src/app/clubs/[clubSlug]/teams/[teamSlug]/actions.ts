@@ -54,10 +54,16 @@ export async function addGuardian(clubId: string, teamId: string, playerId: stri
 
   const supabase = await createClient();
 
+  // guardians has no parent row to derive org_id from (§5) -- unlike
+  // players/teams/etc, which get it from a BEFORE INSERT trigger.
+  const { data: club, error: clubError } = await supabase.from('clubs').select('org_id').eq('id', clubId).single();
+  if (clubError) return { error: friendlyError(clubError) };
+
   const { data: guardian, error: guardianError } = await supabase
     .from('guardians')
     .insert({
       name,
+      org_id: club.org_id,
       created_by: dulaUser.id,
       contact_info: { phone: phone || null, email: email || null },
     })

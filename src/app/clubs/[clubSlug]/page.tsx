@@ -161,7 +161,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const { data: mediaRows } = await supabase
     .from('media')
-    .select('id, r2_key, file_name, caption')
+    .select('id, storage_key, file_name, caption')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -316,6 +316,9 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
       : { data: [] };
     const playerIdsByTeam = new Map<string, string[]>();
     for (const p of teamPlayers ?? []) {
+      // players.team_id is nullable (phase3_free_the_player) -- a player not
+      // on any team isn't part of this per-team report.
+      if (!p.team_id) continue;
       const list = playerIdsByTeam.get(p.team_id) ?? [];
       list.push(p.id);
       playerIdsByTeam.set(p.team_id, list);
@@ -365,7 +368,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   const mediaItems = await Promise.all(
     (mediaRows ?? []).map(async (m) => ({
       id: m.id,
-      url: await getDownloadUrl(m.r2_key),
+      url: await getDownloadUrl(m.storage_key),
       fileName: m.file_name,
       caption: m.caption,
     }))

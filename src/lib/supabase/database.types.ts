@@ -84,7 +84,7 @@ export type Database = {
         Insert: {
           announcement_id: string
           id?: string
-          org_id: string
+          org_id?: string
           read_at?: string
           user_id: string
         }
@@ -142,7 +142,7 @@ export type Database = {
           created_by?: string | null
           expires_at?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           pinned?: boolean
           team_id?: string | null
           title: string
@@ -297,7 +297,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           player_id: string
           status?: string
           training_session_id: string
@@ -449,7 +449,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           role: string
           updated_at?: string
           user_id: string
@@ -581,7 +581,7 @@ export type Database = {
         Insert: {
           drill_id: string
           goal_id: string
-          org_id: string
+          org_id?: string
         }
         Update: {
           drill_id?: string
@@ -641,7 +641,7 @@ export type Database = {
           current_level?: number | null
           description?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           player_id: string
           skill_id?: string | null
           start_date?: string | null
@@ -773,7 +773,7 @@ export type Database = {
           id?: string
           mime_type?: string | null
           name?: string | null
-          org_id: string
+          org_id?: string
           player_id?: string | null
           player_name?: string | null
           review_note?: string | null
@@ -862,7 +862,7 @@ export type Database = {
           id?: string
           name: string
           objective?: string | null
-          org_id: string
+          org_id?: string
           player_max?: number | null
           player_min?: number | null
           skills?: string[]
@@ -943,7 +943,7 @@ export type Database = {
           description: string
           expense_date?: string
           id?: string
-          org_id: string
+          org_id?: string
         }
         Update: {
           amount?: number
@@ -1014,7 +1014,7 @@ export type Database = {
           fee_type: string
           guardian_id?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           player_id: string
           status?: string
           updated_at?: string
@@ -1156,7 +1156,7 @@ export type Database = {
           id?: string
           label?: string | null
           match_id?: string | null
-          org_id: string
+          org_id?: string
           url: string
         }
         Update: {
@@ -1206,7 +1206,7 @@ export type Database = {
           match_id: string
           minute?: number | null
           official_id?: string | null
-          org_id: string
+          org_id?: string
           player_id?: string | null
           player_name?: string | null
           player_off_id?: string | null
@@ -1422,7 +1422,7 @@ export type Database = {
           created_by?: string | null
           file_name: string
           id?: string
-          org_id: string
+          org_id?: string
           player_id?: string | null
           storage_key: string
           team_id?: string | null
@@ -1514,7 +1514,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           meeting_id: string
-          org_id: string
+          org_id?: string
           status?: string
         }
         Update: {
@@ -1581,7 +1581,7 @@ export type Database = {
           location?: string | null
           meeting_date?: string
           notes?: string | null
-          org_id: string
+          org_id?: string
           status?: string
           title: string
           updated_at?: string
@@ -1649,7 +1649,7 @@ export type Database = {
           created_by?: string | null
           export_file_id?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           player_id: string
           requested_by: string
           status?: string
@@ -1730,7 +1730,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           period_end?: string | null
           period_start: string
           player_id: string
@@ -2082,7 +2082,7 @@ export type Database = {
           fee_charge_id: string
           id?: string
           method?: string | null
-          org_id: string
+          org_id?: string
           paid_at?: string
           updated_at?: string
         }
@@ -2159,7 +2159,7 @@ export type Database = {
           goal_id?: string | null
           id?: string
           note: string
-          org_id: string
+          org_id?: string
           player_id: string
           session_id?: string | null
           team_id: string
@@ -2276,7 +2276,7 @@ export type Database = {
           evaluation_date?: string
           id?: string
           mental_score?: number | null
-          org_id: string
+          org_id?: string
           period?: string | null
           physical_score?: number | null
           player_id: string
@@ -2377,7 +2377,7 @@ export type Database = {
           guardian_id: string
           id?: string
           is_primary_contact?: boolean
-          org_id: string
+          org_id?: string
           payment_responsible?: boolean
           player_id: string
           relationship?: string
@@ -2437,7 +2437,7 @@ export type Database = {
         Insert: {
           evaluation_id: string
           id?: string
-          org_id: string
+          org_id?: string
           rating: number
           skill_id: string
         }
@@ -2574,7 +2574,7 @@ export type Database = {
           jersey?: string | null
           name: string
           notes?: string | null
-          org_id: string
+          org_id?: string
           photo_url?: string | null
           position?: string | null
           preferred_foot?: string | null
@@ -2783,7 +2783,7 @@ export type Database = {
           created_at?: string
           drill_id: string
           id?: string
-          org_id: string
+          org_id?: string
           session_id: string
           sort_order?: number
         }
@@ -2865,7 +2865,7 @@ export type Database = {
           from_date?: string
           id?: string
           jersey?: string | null
-          org_id: string
+          org_id?: string
           player_id: string
           position?: string | null
           team_id: string
@@ -2920,7 +2920,7 @@ export type Database = {
         Insert: {
           id?: string
           name: string
-          org_id: string
+          org_id?: string
           phone?: string | null
           role?: string | null
           role_other?: string | null
@@ -2977,7 +2977,7 @@ export type Database = {
           id?: string
           medical_status?: string | null
           name: string
-          org_id: string
+          org_id?: string
           registration_status?: string | null
           slug?: string | null
           sport_id?: string | null
@@ -3050,7 +3050,7 @@ export type Database = {
           max_birth_year?: number | null
           min_birth_year?: number | null
           name: string
-          org_id: string
+          org_id?: string
           sort_order?: number
           tournament_id: string
         }
@@ -3211,7 +3211,7 @@ export type Database = {
           created_by?: string | null
           entry_id?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           role: string
           tournament_id: string
           user_id: string
@@ -3272,7 +3272,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           official_id: string
-          org_id: string
+          org_id?: string
           role?: string
           tournament_id: string
         }
@@ -3343,7 +3343,7 @@ export type Database = {
           full_name: string
           id?: string
           jersey?: string | null
-          org_id: string
+          org_id?: string
           player_id?: string | null
           position?: string | null
           reject_reason?: string | null
@@ -3503,7 +3503,7 @@ export type Database = {
           id?: string
           notes?: string | null
           objective?: string | null
-          org_id: string
+          org_id?: string
           starts_at: string
           status?: string
           team_id: string
@@ -3595,7 +3595,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           player_id: string
           seat?: string | null
           trip_id: string
@@ -3661,7 +3661,7 @@ export type Database = {
           driver_id?: string | null
           dropoff_point?: string | null
           id?: string
-          org_id: string
+          org_id?: string
           pickup_point?: string | null
           trip_id: string
           updated_at?: string
@@ -3730,7 +3730,7 @@ export type Database = {
           ends_at?: string | null
           id?: string
           name: string
-          org_id: string
+          org_id?: string
           purpose?: string
           starts_at?: string | null
           updated_at?: string
@@ -3785,7 +3785,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          org_id: string
+          org_id?: string
           team_id: string
           user_id: string
         }

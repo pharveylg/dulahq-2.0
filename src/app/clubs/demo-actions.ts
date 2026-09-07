@@ -7,7 +7,6 @@ import { createClient, getCurrentDulaUser, isPlatformAdmin } from '@/lib/supabas
 // created, across sessions, without tracking ids anywhere -- no hidden
 // state, just look up 'dula-demo' and cascade from there.
 const DEMO_ORG_SLUG = 'dula-demo';
-const DEMO_STAFF_EMAIL = 'coach.delacruz@demo.dulahq.local';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -43,6 +42,12 @@ export async function loadDemoData() {
     .single();
   if (orgError) return { error: friendlyError(orgError) };
 
+  // clubs' insert RLS is org_has_product(org_id,'club') AND is_org_admin --
+  // a brand-new org has no entitlement row yet, so without this the very
+  // next insert is refused (§5).
+  const { error: entitlementError } = await supabase.from('org_entitlements').insert({ org_id: org.id, product: 'club' });
+  if (entitlementError) return { error: friendlyError(entitlementError) };
+
   const { data: club, error: clubError } = await supabase
     .from('clubs')
     .insert({ name: 'Riverside FC (Demo)', org_id: org.id, slug: 'riverside-fc-demo' })
@@ -60,12 +65,14 @@ export async function loadDemoData() {
   if (teamsError) return { error: friendlyError(teamsError) };
   const [u12, u15] = teams;
 
-  const { data: demoStaffUser, error: staffUserError } = await supabase
-    .from('users')
-    .insert({ email: DEMO_STAFF_EMAIL, name: 'Coach Dela Cruz (Demo)', role: 'audience' })
-    .select()
-    .single();
-  if (staffUserError) return { error: friendlyError(staffUserError) };
+  // Demo staff used to be a separate placeholder public.users row
+  // (Coach Dela Cruz) inserted directly. public.users has no INSERT
+  // policy at all now (phase1_identity_on_auth_uid) -- a profile row can
+  // only be created by the signup trigger, tied to a real auth.users
+  // account -- so a client-side insert of a fabricated user is no longer
+  // possible. The signed-in platform admin plays the coach role for the
+  // demo instead of a fictional second account.
+  const demoStaffUser = dulaUser;
 
   const { error: clubStaffError } = await supabase
     .from('club_staff')
@@ -119,6 +126,7 @@ export async function loadDemoData() {
       .from('guardians')
       .insert({
         name: seed.name,
+        org_id: org.id,
         created_by: dulaUser.id,
         contact_info: { phone: seed.phone ?? null, email: (seed as any).email ?? null },
         account_status: (seed as any).accountStatus ?? 'no_account',
@@ -279,8 +287,8 @@ export async function loadDemoData() {
  * than relying on FK cascade behavior (teams.club_id is ON DELETE SET
  * NULL, not CASCADE -- relying on cascade here would leave orphaned demo
  * teams sitting in the unclaimed-teams picker for every real club).
- * Looks everything up fresh by DEMO_ORG_SLUG / DEMO_STAFF_EMAIL rather
- * than tracking ids anywhere, so it works even in a fresh session.
+ * Looks everything up fresh by DEMO_ORG_SLUG rather than tracking ids
+ * anywhere, so it works even in a fresh session.
  */
 export async function wipeDemoData() {
   if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can wipe demo data.' };
@@ -312,9 +320,11 @@ export async function wipeDemoData() {
     await supabase.from('players').delete().in('id', playerIds);
   }
 
+  // No demo-only public.users row to clean up here: the "coach" is the
+  // signed-in platform admin's own real account (see loadDemoData), not
+  // a fabricated one, so deleting it is never on the table.
   if (clubIds.length) await supabase.from('club_staff').delete().in('club_id', clubIds);
   if (teamIds.length) await supabase.from('user_assigned_teams').delete().in('team_id', teamIds);
-  await supabase.from('users').delete().eq('email', DEMO_STAFF_EMAIL);
 
   if (teamIds.length) await supabase.from('teams').delete().in('id', teamIds);
   if (clubIds.length) await supabase.from('clubs').delete().in('id', clubIds);
