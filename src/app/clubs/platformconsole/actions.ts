@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, isPlatformAdmin } from '@/lib/supabase/server';
 
+// Mirrors org_entitlements' own product_check constraint -- filtered here
+// too so a crafted request can't smuggle an arbitrary string into the
+// `.not('product', 'in', ...)` filter string below.
+const VALID_PRODUCTS = ['club', 'tournament'];
+
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
     return 'You don’t have permission to do that.';
@@ -26,12 +31,17 @@ export async function provisionTenant(formData: FormData) {
   const adminEmail = (formData.get('adminEmail') as string)?.trim().toLowerCase();
   const clubName = (formData.get('clubName') as string)?.trim();
   const clubSlug = (formData.get('clubSlug') as string)?.trim().toLowerCase();
+  const products = (formData.getAll('products') as string[]).filter((p) => VALID_PRODUCTS.includes(p));
 
   if (!slug || !/^[a-z0-9-]+$/.test(slug)) return { error: 'Org slug must be lowercase letters, numbers, and hyphens only.' };
   if (!name) return { error: 'Organizer / business name is required.' };
   if (!adminEmail) return { error: 'Admin email is required so someone can actually sign in to this tenant.' };
+  if (products.length === 0) return { error: 'Select at least one product (club or tournament) for this org.' };
   if (clubName && (!clubSlug || !/^[a-z0-9-]+$/.test(clubSlug))) {
     return { error: 'Club slug must be lowercase letters, numbers, and hyphens only.' };
+  }
+  if (clubName && !products.includes('club')) {
+    return { error: 'Select the Club product to create a first club now, or leave the club fields blank.' };
   }
 
   const supabase = await createClient();
@@ -46,6 +56,17 @@ export async function provisionTenant(formData: FormData) {
     .single();
   if (orgError) return { error: friendlyError(orgError) };
 
+  // clubs/tournaments RLS gates writes on org_has_product(org_id, ...), so
+  // entitlements have to exist before anything below tries to use them --
+  // in particular the first-club insert a few lines down would otherwise
+  // fail RLS even though the org and admin were just created successfully.
+  const { error: entitlementError } = await supabase
+    .from('org_entitlements')
+    .insert(products.map((product) => ({ org_id: org.id, product })));
+  if (entitlementError) {
+    return { error: `Tenant created, but granting product access failed: ${friendlyError(entitlementError)}. Set it from the directory.` };
+  }
+
   const { error: memberError } = await supabase.from('org_members').insert({ org_id: org.id, email: adminEmail, role: 'admin' });
   if (memberError) return { error: `Tenant created, but adding the admin failed: ${friendlyError(memberError)}. Add them from the directory.` };
 
@@ -56,6 +77,37 @@ export async function provisionTenant(formData: FormData) {
 
   revalidatePath('/clubs/platformconsole');
   return { success: true, orgName: name, adminEmail };
+}
+
+/**
+ * The Directory's per-org product toggle. Deleting a product's row (rather
+ * than e.g. setting status='suspended') is deliberate -- it's the same
+ * "no row = no access" state a freshly provisioned org starts in, so there's
+ * only one way to represent "off" instead of two.
+ */
+export async function updateOrgEntitlements(orgId: string, formData: FormData) {
+  if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can do that.' };
+
+  const products = (formData.getAll('products') as string[]).filter((p) => VALID_PRODUCTS.includes(p));
+  const supabase = await createClient();
+
+  if (products.length > 0) {
+    const { error } = await supabase
+      .from('org_entitlements')
+      .upsert(
+        products.map((product) => ({ org_id: orgId, product, status: 'active' })),
+        { onConflict: 'org_id,product' }
+      );
+    if (error) return { error: friendlyError(error) };
+  }
+
+  let deleteQuery = supabase.from('org_entitlements').delete().eq('org_id', orgId);
+  deleteQuery = products.length > 0 ? deleteQuery.not('product', 'in', `(${products.join(',')})`) : deleteQuery;
+  const { error: deleteError } = await deleteQuery;
+  if (deleteError) return { error: friendlyError(deleteError) };
+
+  revalidatePath('/clubs/platformconsole');
+  return { success: true };
 }
 
 export async function toggleOrgStatus(orgId: string, suspend: boolean) {

@@ -31,7 +31,7 @@ export default async function PlatformConsolePage({
 
   const { data: orgRows } = await supabase
     .from('organizations')
-    .select('id, slug, name, accent, status, clubs(count), org_members(count)')
+    .select('id, slug, name, accent, status, clubs(count), org_members(count), org_entitlements(product, status)')
     .order('created_at', { ascending: false });
 
   const orgs = (orgRows ?? []).map((o: any) => ({
@@ -42,6 +42,11 @@ export default async function PlatformConsolePage({
     status: o.status,
     clubCount: o.clubs?.[0]?.count ?? 0,
     memberCount: o.org_members?.[0]?.count ?? 0,
+    // Mirrors org_has_product()'s own gate -- a 'suspended'/'cancelled' row
+    // still exists but shouldn't show as a granted product.
+    entitlements: (o.org_entitlements ?? [])
+      .filter((e: any) => e.status === 'active' || e.status === 'trial')
+      .map((e: any) => e.product as string),
   }));
 
   return (

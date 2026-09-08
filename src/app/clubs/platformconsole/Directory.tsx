@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { toggleOrgStatus, renameOrganization } from './actions';
+import { toggleOrgStatus, renameOrganization, updateOrgEntitlements } from './actions';
 
 type Org = {
   id: string;
@@ -11,6 +11,7 @@ type Org = {
   status: string;
   clubCount: number;
   memberCount: number;
+  entitlements: string[];
 };
 
 function OrgRow({ org }: { org: Org }) {
@@ -36,6 +37,14 @@ function OrgRow({ org }: { org: Org }) {
     });
   }
 
+  function handleEntitlements(formData: FormData) {
+    setError(null);
+    startTransition(async () => {
+      const result = await updateOrgEntitlements(org.id, formData);
+      if (result?.error) setError(result.error);
+    });
+  }
+
   return (
     <div className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -47,7 +56,15 @@ function OrgRow({ org }: { org: Org }) {
               {suspended ? 'Suspended' : 'Active'}
             </span>
           </div>
-          <div className="list-row-meta">/clubs/… · {org.clubCount} club{org.clubCount === 1 ? '' : 's'} · {org.memberCount} member{org.memberCount === 1 ? '' : 's'}</div>
+          <div className="list-row-meta">
+            /clubs/… · {org.clubCount} club{org.clubCount === 1 ? '' : 's'} · {org.memberCount} member{org.memberCount === 1 ? '' : 's'}
+            {' · '}
+            {org.entitlements.length > 0 ? (
+              org.entitlements.map((p) => p[0].toUpperCase() + p.slice(1)).join(', ')
+            ) : (
+              <span style={{ color: 'var(--warn)' }}>No products — can&apos;t create anything</span>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn" style={{ fontSize: 11 }} onClick={() => setExpanded((v) => !v)}>Manage</button>
@@ -58,17 +75,44 @@ function OrgRow({ org }: { org: Org }) {
       </div>
 
       {expanded && (
-        <form action={handleRename} className="form-row" style={{ flexWrap: 'wrap', paddingLeft: 26 }}>
-          <div className="form-group" style={{ flex: 2, minWidth: 160 }}>
-            <input name="name" defaultValue={org.name} required />
-          </div>
-          <div className="form-group" style={{ flex: 0, minWidth: 70 }}>
-            <input name="accent" type="color" defaultValue={org.accent} style={{ padding: 2, height: 38 }} />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={pending} style={{ fontSize: 12 }}>
-            {pending ? 'Saving…' : 'Save'}
-          </button>
-        </form>
+        <>
+          <form action={handleRename} className="form-row" style={{ flexWrap: 'wrap', paddingLeft: 26 }}>
+            <div className="form-group" style={{ flex: 2, minWidth: 160 }}>
+              <input name="name" defaultValue={org.name} required />
+            </div>
+            <div className="form-group" style={{ flex: 0, minWidth: 70 }}>
+              <input name="accent" type="color" defaultValue={org.accent} style={{ padding: 2, height: 38 }} />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={pending} style={{ fontSize: 12 }}>
+              {pending ? 'Saving…' : 'Save'}
+            </button>
+          </form>
+
+          {/* Uncontrolled, like the rename form's defaultValue inputs above --
+              keyed on the entitlements themselves so a successful save (which
+              changes org.entitlements via revalidatePath) remounts these
+              checkboxes with fresh defaults instead of showing pre-save state
+              forever, which controlled checked={state} did the first time
+              this was tested: the summary line updated but the boxes didn't. */}
+          <form
+            key={org.entitlements.join(',')}
+            action={handleEntitlements}
+            style={{ display: 'flex', alignItems: 'center', gap: 16, paddingLeft: 26 }}
+          >
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Products:</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input type="checkbox" name="products" value="club" defaultChecked={org.entitlements.includes('club')} />
+              Club
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input type="checkbox" name="products" value="tournament" defaultChecked={org.entitlements.includes('tournament')} />
+              Tournament
+            </label>
+            <button type="submit" className="btn" disabled={pending} style={{ fontSize: 12 }}>
+              {pending ? 'Saving…' : 'Save products'}
+            </button>
+          </form>
+        </>
       )}
       {error && <p className="error-text" style={{ marginTop: 0, paddingLeft: 26 }}>{error}</p>}
     </div>
