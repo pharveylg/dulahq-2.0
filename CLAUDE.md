@@ -60,6 +60,8 @@ was first run.
 | `…090100_phase2k_can_read_club_requires_club_admin` | Bug fix — `can_read_club`'s club-wide grant was on `is_club_staff` (any role, including coach/team_manager/staff); narrowed to `is_club_admin`, matching `getClubAccess()` in `src/lib/supabase/server.ts` — see §0b |
 | `…100000_phase2l_public_views_select_only` | Revoked dormant INSERT/UPDATE/DELETE/TRUNCATE grants on `public_clubs`/`public_tournaments` from anon/authenticated — found while building §6.C, not exploitable (both are join views, Postgres already refuses direct writes) but tightened anyway |
 | `…140000_phase2m_tournaments_id_text_to_uuid` | §6.G — `tournaments.id` and its 7 dependent `tournament_id` columns changed from `text` to `uuid`; see §6.G for the full verification |
+| `…150000_phase2n_default_currency_php` | `fee_charges`/`expenses` default `currency` to `'PHP'` |
+| `…20260908120000_phase6a_permission_foundation` | §0c — granular permission catalog (`permissions`, `role_permission_defaults`, `guardian_permission_defaults`, `staff_permission_grants`, `guardian_permission_grants`) and `has_staff_permission()`/`has_guardian_permission()`. Additive only — no existing RLS policy rewired yet; defaults seeded to reproduce current behavior exactly, verified live against real seeded users |
 
 **Verified**, run as `anon` and as an org admin inside `BEGIN … ROLLBACK`, for the
 first eleven migrations (phase1 through phase2g):
@@ -176,6 +178,56 @@ will name the column or policy.
 Confirm you are running the patched file: it is **18,412 bytes** and contains
 `function must<T>`. An earlier write silently did not land while reporting
 success once, so check the file before debugging the database.
+
+---
+
+## 0c. Coach / Player Profile / Parent-Guardian rework (2026-09-08, in progress)
+
+Three detailed specs (`docs/specs/coach-module.md`, `player-profile.md`,
+`parent-guardian-module.md` — copied from the user's own prompt files so they
+survive outside this session) describe one shared initiative, not three
+separate features: a canonical Player Profile with role-specific views for
+Coach/Player/Guardian, plus a Coach → Guardian tournament-roster-acknowledgement
+workflow threading through all three. Gap analysis against the actual app
+(2026-09-08): the backend is further along than the UI — `development_goals`,
+`player_evaluations`/`player_skill_ratings` (1-5, technical/tactical/physical/
+mental, 27-skill `development_skills` framework), `player_development_notes`,
+`drills`/`session_drills`, `fee_charges`/`payments`, `memberships`,
+`document_uploads`, and — most importantly — the full guardian-acknowledgement
+data layer (`approval_requests`, `requires_guardian_consent()`,
+`approval_is_granted()`, `port_squad_to_tournament()`) already exist from the
+Sept 7 phase 3-5 migrations. **None of the acknowledgement layer has any UI**
+— grepped, zero references outside migrations/generated types. No canonical
+shared Player Profile component exists either: `player/page.tsx`,
+`guardian/page.tsx`, and the coach-side `c/[clubSlug]/teams/[teamSlug]/
+players/[playerId]/` tree are three independent hand-rolled renderings.
+Player-facing tabs today are actually Schedule/Attendance/Development/Fees/
+Announcements, not the five sections (Overview/Development/Fees/Membership/
+Family) the Player Profile spec assumes already exist — Membership and Family
+have no player-facing UI at all yet. No PDF/TXT export tooling exists in the
+repo. Permissions today are coarse: `club_staff.role` + `is_assigned_to_team()`
+only, no granular per-permission model.
+
+Agreed phasing (user confirmed: build the full granular permission table per
+the specs, not a lighter role-only extension; guardian acknowledgement ships
+in-app now, real email deferred until SMTP exists per §8; one phase at a time,
+reviewed before the next starts):
+
+- **Phase 0 — permission foundation. Done, this migration.** Additive only,
+  no existing policy rewired yet — see the `phase6a` migration row above.
+  `club_admin` deliberately has no hardcoded bypass in `has_staff_permission()`
+  (per the Player Profile spec's "do not simply make every administrator a
+  superuser") — it gets a `role_permission_defaults` bundle containing every
+  staff permission instead, same code path as everyone else.
+- **Phase 1** — canonical Player Profile, built directly against Phase 0's
+  permission functions.
+- **Phase 2** — fill real gaps in existing sections (Membership tab, Family
+  tab with per-guardian permissions, coach action-center dashboard).
+- **Phase 3** — tournament roster + guardian acknowledgement workflow
+  end-to-end, in-app notifications only (no email — SMTP still isn't wired,
+  §8).
+- **Phase 4** — audit logging on the sensitive actions across all of the
+  above.
 
 ---
 
