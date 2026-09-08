@@ -157,3 +157,46 @@ export async function unlinkPlayerAccount(clubId: string, teamId: string, player
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
+
+/**
+ * Overrides one guardian permission for one specific player_guardians
+ * relationship (Phase 0/6a's guardian_permission_grants) -- 'granted'
+ * true/false adds or revokes it beyond the shared default bundle,
+ * 'reset' deletes the override so it falls back to the default again.
+ * RLS on guardian_permission_grants is club_admin-only for writes, not
+ * gated behind a permission of its own -- see phase6a's migration comment
+ * for why. Reads through PlayerProfile.tsx's own club_admin-only fetch, so
+ * this is never called from a context where it'd silently no-op.
+ */
+export async function setGuardianPermission(
+  playerGuardianId: string,
+  permissionKey: string,
+  value: 'granted' | 'revoked' | 'reset',
+  orgId: string
+) {
+  const supabase = await createClient();
+
+  if (value === 'reset') {
+    const { error } = await supabase
+      .from('guardian_permission_grants')
+      .delete()
+      .eq('player_guardian_id', playerGuardianId)
+      .eq('permission_key', permissionKey);
+    if (error) return { error: friendlyError(error) };
+    revalidatePath('/c/[clubSlug]', 'layout');
+    return { success: true };
+  }
+
+  const { error } = await supabase.from('guardian_permission_grants').upsert(
+    {
+      org_id: orgId,
+      player_guardian_id: playerGuardianId,
+      permission_key: permissionKey,
+      granted: value === 'granted',
+    },
+    { onConflict: 'player_guardian_id,permission_key' }
+  );
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/c/[clubSlug]', 'layout');
+  return { success: true };
+}

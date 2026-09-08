@@ -54,7 +54,7 @@ export default async function PlayerProfile({
   const { data: player, error: playerError } = await supabase
     .from('players')
     .select(
-      'id, name, jersey, position, secondary_position, preferred_foot, dob, development_status, team_id, club_id, user_id, teams(id, name, slug, club_id, clubs(id, name, slug))'
+      'id, name, jersey, position, secondary_position, preferred_foot, dob, development_status, team_id, club_id, org_id, user_id, teams(id, name, slug, club_id, clubs(id, name, slug))'
     )
     .eq('id', playerId)
     .maybeSingle();
@@ -72,28 +72,21 @@ export default async function PlayerProfile({
   let perms = {
     viewTeam: false, manageDevelopment: false, addEvaluation: false,
     addPlayerFeedback: false, addPrivateCoachNote: false, editFootballProfile: false,
-    manageFinances: false, manageMembership: false,
+    manageFinances: false, manageMembership: false, manageStaff: false,
   };
   if (viewer === 'coach' && clubId) {
     const keys = [
       'view_team', 'manage_development', 'add_evaluation', 'add_player_feedback',
-      'add_private_coach_note', 'edit_player_football_profile', 'manage_finances', 'manage_membership',
+      'add_private_coach_note', 'edit_player_football_profile', 'manage_finances', 'manage_membership', 'manage_staff',
     ] as const;
-    // database.types.ts predates the phase6a migration and doesn't know
-    // has_staff_permission() exists yet -- regenerating it surfaces ~85
-    // unrelated pre-existing type errors elsewhere in the app (inserts that
-    // omit trigger-derived org_id, which the currently-committed types file
-    // doesn't require but the live schema, correctly, does). Out of scope
-    // to fix here; casting narrowly at this one call site instead of
-    // widening the blast radius with a full regeneration.
-    const rpc = supabase.rpc.bind(supabase) as unknown as (fn: string, args: Record<string, unknown>) => ReturnType<typeof supabase.rpc>;
     const results = await Promise.all(
-      keys.map((key) => rpc('has_staff_permission', { p_permission_key: key, p_club_id: clubId, p_team_id: teamId ?? undefined }))
+      keys.map((key) => supabase.rpc('has_staff_permission', { p_permission_key: key, p_club_id: clubId, p_team_id: teamId ?? undefined }))
     );
     perms = {
       viewTeam: !!results[0].data, manageDevelopment: !!results[1].data, addEvaluation: !!results[2].data,
       addPlayerFeedback: !!results[3].data, addPrivateCoachNote: !!results[4].data,
       editFootballProfile: !!results[5].data, manageFinances: !!results[6].data, manageMembership: !!results[7].data,
+      manageStaff: !!results[8].data,
     };
   }
   // Preserves today's exact behavior (canManage || role==='staff' for fees;
@@ -106,6 +99,13 @@ export default async function PlayerProfile({
   const canManageMembership = perms.viewTeam || perms.manageMembership;
   const canManageFamily = perms.viewTeam;
   const canManageNotes = perms.addPlayerFeedback || perms.addPrivateCoachNote;
+  // guardian_permission_grants RLS is genuinely club_admin/platform_admin
+  // only (see phase6a's migration comment -- not extended to an assigned
+  // coach the way canManageFamily is), and manage_staff is only in
+  // club_admin's role bundle, so it's an accurate stand-in. Gating the
+  // fetch+UI on the SAME check the write policy enforces, rather than the
+  // broader canManageFamily, avoids showing controls that would 403.
+  const canManageGuardianPermissions = perms.manageStaff;
 
   // ---- data ----
   const [
@@ -193,6 +193,34 @@ export default async function PlayerProfile({
     relationship: l.relationship, isPrimaryContact: l.is_primary_contact,
     contactInfo: l.guardians?.contact_info ?? null, accountStatus: l.guardians?.account_status ?? 'no_account',
   }));
+
+  // Per-guardian permission overrides (Phase 0's guardian_permission_grants)
+  // -- only fetched for club_admin/platform_admin (canManageGuardianPermissions,
+  // matching the RLS write policy exactly, not the broader canManageFamily),
+  // and only when there's a guardian to show it for.
+  let guardianPermissions: Record<string, { key: string; label: string; granted: boolean; isOverride: boolean }[]> = {};
+  if (canManageGuardianPermissions && guardians.length > 0) {
+    const linkIds = guardians.map((g) => g.linkId);
+    const [{ data: catalog }, { data: defaults }, { data: grants }] = await Promise.all([
+      supabase.from('permissions').select('key, label').eq('category', 'guardian').order('label'),
+      supabase.from('guardian_permission_defaults').select('permission_key'),
+      supabase.from('guardian_permission_grants').select('player_guardian_id, permission_key, granted').in('player_guardian_id', linkIds),
+    ]);
+    const defaultSet = new Set((defaults ?? []).map((d) => d.permission_key));
+    const grantsByLink = new Map<string, Map<string, boolean>>();
+    for (const g of grants ?? []) {
+      const map = grantsByLink.get(g.player_guardian_id) ?? new Map();
+      map.set(g.permission_key, g.granted);
+      grantsByLink.set(g.player_guardian_id, map);
+    }
+    for (const linkId of linkIds) {
+      const overrides = grantsByLink.get(linkId);
+      guardianPermissions[linkId] = (catalog ?? []).map((p) => {
+        const override = overrides?.get(p.key);
+        return { key: p.key, label: p.label, granted: override ?? defaultSet.has(p.key), isOverride: override !== undefined };
+      });
+    }
+  }
 
   return (
     <SlotTabs
@@ -297,7 +325,11 @@ export default async function PlayerProfile({
           </div>
         ),
         family: clubId && teamId ? (
-          <Family clubId={clubId} teamId={teamId} playerId={playerId} guardians={guardians} linkedAccount={linkedAccount} canManage={canManageFamily} />
+          <Family
+            clubId={clubId} teamId={teamId} playerId={playerId} orgId={player.org_id}
+            guardians={guardians} linkedAccount={linkedAccount} canManage={canManageFamily}
+            guardianPermissions={guardianPermissions}
+          />
         ) : (
           <div className="card">
             {guardians.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No guardians linked yet.</p>}

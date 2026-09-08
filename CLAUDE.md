@@ -249,14 +249,27 @@ reviewed before the next starts):
   rather than the spec's tighter "coaches shouldn't see finances by
   default" — deliberate, since tightening it now would be a silent UX
   change without the matching RLS cutover a later phase should do together.
-  And `database.types.ts` predates `phase6a`/`phase6b`/`phase6c` — a full
-  regeneration surfaces ~85 unrelated pre-existing type errors elsewhere in
-  the app (trigger-derived `org_id` omitted from inserts, which the live
-  schema requires but this committed file doesn't), so `PlayerProfile.tsx`
-  casts narrowly at its one `has_staff_permission()` RPC call site instead;
-  regenerating this file for real is a separable cleanup task.
-- **Phase 2** — fill real gaps in existing sections (Membership tab, Family
-  tab with per-guardian permissions, coach action-center dashboard).
+  And `database.types.ts`: a full regeneration surfaces ~85 unrelated
+  pre-existing type errors elsewhere in the app (trigger-derived `org_id`
+  omitted from inserts, which the live schema requires but the file — as it
+  already existed before any of this session's work — doesn't); reverted
+  that regeneration and instead hand-added just the five `phase6a` tables
+  (`permissions`, `role_permission_defaults`, `guardian_permission_defaults`,
+  `staff_permission_grants`, `guardian_permission_grants`) and four
+  functions (`has_staff_permission`, `has_guardian_permission`,
+  `my_staff_permissions`, `my_guardian_permissions`) by hand, matching the
+  file's existing Row/Insert/Update/Relationships shape exactly, touching
+  nothing else. A real full regeneration (fixing the ~85 pre-existing
+  `org_id` errors properly, not working around them) is still a separable
+  cleanup task, just no longer blocking this phase's own type-correctness.
+- **Phase 2 (in progress)** — fill real gaps in existing sections. Done:
+  per-guardian permission management in the Family tab (club_admin can see
+  each guardian's effective permission set — default bundle plus any
+  override — and grant/revoke/reset individual ones via
+  `setGuardianPermission()`, writing to `guardian_permission_grants`). The
+  Membership and Family tabs themselves already shipped in Phase 1 as part
+  of the canonical component. Still open: coach action-center dashboard,
+  richer development timeline.
 - **Phase 3** — tournament roster + guardian acknowledgement workflow
   end-to-end, in-app notifications only (no email — SMTP still isn't wired,
   §8).

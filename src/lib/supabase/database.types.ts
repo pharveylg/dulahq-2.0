@@ -2846,6 +2846,190 @@ export type Database = {
         }
         Relationships: []
       }
+      permissions: {
+        Row: {
+          category: string
+          description: string | null
+          key: string
+          label: string
+          scope: string
+        }
+        Insert: {
+          category: string
+          description?: string | null
+          key: string
+          label: string
+          scope: string
+        }
+        Update: {
+          category?: string
+          description?: string | null
+          key?: string
+          label?: string
+          scope?: string
+        }
+        Relationships: []
+      }
+      role_permission_defaults: {
+        Row: {
+          permission_key: string
+          role: string
+        }
+        Insert: {
+          permission_key: string
+          role: string
+        }
+        Update: {
+          permission_key?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permission_defaults_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      guardian_permission_defaults: {
+        Row: {
+          permission_key: string
+        }
+        Insert: {
+          permission_key: string
+        }
+        Update: {
+          permission_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_permission_defaults_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      staff_permission_grants: {
+        Row: {
+          club_id: string
+          granted: boolean
+          granted_at: string
+          granted_by: string | null
+          id: string
+          org_id: string
+          permission_key: string
+          team_id: string | null
+          user_id: string
+        }
+        Insert: {
+          club_id: string
+          granted: boolean
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          org_id: string
+          permission_key: string
+          team_id?: string | null
+          user_id: string
+        }
+        Update: {
+          club_id?: string
+          granted?: boolean
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          org_id?: string
+          permission_key?: string
+          team_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_permission_grants_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_permission_grants_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_permission_grants_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "staff_permission_grants_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_permission_grants: {
+        Row: {
+          granted: boolean
+          granted_at: string
+          granted_by: string | null
+          id: string
+          org_id: string
+          permission_key: string
+          player_guardian_id: string
+        }
+        Insert: {
+          granted: boolean
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          org_id: string
+          permission_key: string
+          player_guardian_id: string
+        }
+        Update: {
+          granted?: boolean
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          org_id?: string
+          permission_key?: string
+          player_guardian_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_permission_grants_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_permission_grants_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "guardian_permission_grants_player_guardian_id_fkey"
+            columns: ["player_guardian_id"]
+            isOneToOne: false
+            referencedRelation: "player_guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_memberships: {
         Row: {
           created_at: string
@@ -3960,8 +4144,16 @@ export type Database = {
       current_user_role: { Args: never; Returns: string }
       current_user_team_ids: { Args: never; Returns: string[] }
       expire_stale_approvals: { Args: never; Returns: number }
+      has_guardian_permission: {
+        Args: { p_permission_key: string; p_player_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: { p_roles: string[]; p_scope_id: string; p_scope_type: string }
+        Returns: boolean
+      }
+      has_staff_permission: {
+        Args: { p_club_id: string; p_permission_key: string; p_team_id?: string }
         Returns: boolean
       }
       is_assigned_to_team: { Args: { check_team_id: string }; Returns: boolean }
@@ -3973,6 +4165,14 @@ export type Database = {
       is_platform_admin: { Args: never; Returns: boolean }
       is_player_self: { Args: { check_player_id: string }; Returns: boolean }
       is_staff_in_org: { Args: { p_org: string }; Returns: boolean }
+      my_guardian_permissions: {
+        Args: { p_player_id: string }
+        Returns: string[]
+      }
+      my_staff_permissions: {
+        Args: { p_club_id: string; p_team_id?: string }
+        Returns: string[]
+      }
       org_has_product: {
         Args: { org: string; p_product: string }
         Returns: boolean
