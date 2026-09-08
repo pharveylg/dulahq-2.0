@@ -23,7 +23,7 @@ export async function decideAcknowledgement(approvalRequestId: string, decision:
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('approval_requests')
     .update({
       status: decision,
@@ -31,9 +31,21 @@ export async function decideAcknowledgement(approvalRequestId: string, decision:
       decided_at: new Date().toISOString(),
       decline_reason: decision === 'declined' ? declineReason!.trim() : null,
     })
-    .eq('id', approvalRequestId);
+    .eq('id', approvalRequestId)
+    .select('org_id, subject_id, player_id')
+    .single();
 
   if (error) return { error: friendlyError(error) };
+
+  await supabase.rpc('write_audit', {
+    p_org_id: updated.org_id,
+    p_action: 'tournament.acknowledgement.decided',
+    p_scope_type: 'tournament',
+    p_entity_type: 'approval_request',
+    p_entity_id: approvalRequestId,
+    p_after: { decision, player_id: updated.player_id, entry_id: updated.subject_id, decline_reason: declineReason ?? null },
+  });
+
   revalidatePath('/guardian', 'layout');
   return { success: true };
 }

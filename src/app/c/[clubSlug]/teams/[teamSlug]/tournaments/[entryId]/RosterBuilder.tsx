@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { submitRoster } from '../actions';
+import { submitRoster, recordRosterExport } from '../actions';
 
 type Candidate = {
   id: string;
@@ -104,6 +104,7 @@ export default function RosterBuilder({
       ...finalizedRoster.map((p, i) => `${String(i + 1).padEnd(4)}${(p.jersey ?? '—').padEnd(8)}${(p.position ?? '—').padEnd(11)}${p.name}`),
     ];
     downloadText(`${tournamentName.replace(/\s+/g, '-')}-${teamName.replace(/\s+/g, '-')}-roster.txt`, lines.join('\n'));
+    void recordRosterExport(entryId, orgId, 'txt', finalizedRoster.length);
   }
 
   return (

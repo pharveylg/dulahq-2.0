@@ -72,11 +72,21 @@ export async function addGuardian(clubId: string, teamId: string, playerId: stri
 
   if (guardianError) return { error: friendlyError(guardianError) };
 
-  const { error: linkError } = await supabase
+  const { data: link, error: linkError } = await supabase
     .from('player_guardians')
-    .insert({ player_id: playerId, guardian_id: guardian.id, relationship });
+    .insert({ player_id: playerId, guardian_id: guardian.id, relationship })
+    .select('id')
+    .single();
 
   if (linkError) return { error: friendlyError(linkError) };
+
+  await supabase.rpc('write_audit', {
+    p_org_id: club.org_id,
+    p_action: 'guardian.relationship.created',
+    p_entity_type: 'player_guardian',
+    p_entity_id: link.id,
+    p_after: { player_id: playerId, guardian_id: guardian.id, relationship, guardian_name: name },
+  });
 
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
@@ -90,8 +100,29 @@ export async function addGuardian(clubId: string, teamId: string, playerId: stri
  */
 export async function removeGuardianLink(clubId: string, teamId: string, playerGuardianId: string) {
   const supabase = await createClient();
+
+  // fetch before deleting -- both for the org_id write_audit needs and to
+  // record what the link actually was, since a delete leaves nothing to
+  // read back afterward.
+  const { data: link } = await supabase
+    .from('player_guardians')
+    .select('org_id, player_id, guardian_id, relationship')
+    .eq('id', playerGuardianId)
+    .maybeSingle();
+
   const { error } = await supabase.from('player_guardians').delete().eq('id', playerGuardianId);
   if (error) return { error: friendlyError(error) };
+
+  if (link) {
+    await supabase.rpc('write_audit', {
+      p_org_id: link.org_id,
+      p_action: 'guardian.relationship.removed',
+      p_entity_type: 'player_guardian',
+      p_entity_id: playerGuardianId,
+      p_before: { player_id: link.player_id, guardian_id: link.guardian_id, relationship: link.relationship },
+    });
+  }
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
@@ -183,6 +214,13 @@ export async function setGuardianPermission(
       .eq('player_guardian_id', playerGuardianId)
       .eq('permission_key', permissionKey);
     if (error) return { error: friendlyError(error) };
+    await supabase.rpc('write_audit', {
+      p_org_id: orgId,
+      p_action: 'guardian.permission.changed',
+      p_entity_type: 'player_guardian',
+      p_entity_id: playerGuardianId,
+      p_after: { permission_key: permissionKey, value: 'reset_to_default' },
+    });
     revalidatePath('/c/[clubSlug]', 'layout');
     return { success: true };
   }
@@ -197,6 +235,13 @@ export async function setGuardianPermission(
     { onConflict: 'player_guardian_id,permission_key' }
   );
   if (error) return { error: friendlyError(error) };
+  await supabase.rpc('write_audit', {
+    p_org_id: orgId,
+    p_action: 'guardian.permission.changed',
+    p_entity_type: 'player_guardian',
+    p_entity_id: playerGuardianId,
+    p_after: { permission_key: permissionKey, value },
+  });
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }

@@ -348,8 +348,25 @@ reviewed before the next starts):
   item on `/guardian`'s Tournaments tab → confirms → coach revisits, sees
   "Guardian approved", resubmits → player ports into the final 16-player
   roster.
-- **Phase 4** — audit logging on the sensitive actions across all of the
-  above.
+- **Phase 4 — audit logging. Done.** All via the existing `write_audit()`
+  SECURITY DEFINER function (append-only `audit_log`, no read UI built —
+  out of scope, this phase is write-side only) — no new tables or
+  authorization changes, just a call added at each sensitive action:
+  `guardian.relationship.created`/`removed` (`addGuardian`/
+  `removeGuardianLink`, both pre-existing actions that had no audit trail
+  before this), `guardian.permission.changed` (`setGuardianPermission`,
+  Phase 2), `tournament.acknowledgement.requested` (`submitRoster`'s
+  guardian-consent step, Phase 3 — distinct from `port_squad_to_tournament`'s
+  own `tournament.roster.ported_out`/`received` pair, which already audited
+  the finalize step since phase5b), `tournament.acknowledgement.decided`
+  (`decideAcknowledgement`, Phase 3), and `tournament.roster.exported`
+  (`recordRosterExport` — the export itself is a client-side Blob download
+  with no server round-trip, so this one-line action exists purely to log
+  that it happened).
+
+  Verified live: toggled a guardian permission as club_admin, confirmed the
+  `audit_log` row landed with the correct actor email, entity, and
+  before/after values, then reset the permission back to default.
 
 ---
 

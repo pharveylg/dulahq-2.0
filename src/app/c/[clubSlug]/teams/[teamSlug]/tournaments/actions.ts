@@ -85,6 +85,14 @@ export async function submitRoster(entryId: string, orgId: string, playerIds: st
       if (rows.length > 0) {
         const { error: insertError } = await supabase.from('approval_requests').insert(rows);
         if (insertError) return { error: friendlyError(insertError) };
+        await supabase.rpc('write_audit', {
+          p_org_id: orgId,
+          p_action: 'tournament.acknowledgement.requested',
+          p_scope_type: 'tournament',
+          p_entity_type: 'tournament_entry',
+          p_entity_id: entryId,
+          p_after: { player_ids: rows.map((r) => r.player_id) },
+        });
       }
 
       noGuardianCount = needsNewRequest.filter((id) => !guardianByPlayer.has(id)).length;
@@ -111,4 +119,23 @@ export async function submitRoster(entryId: string, orgId: string, playerIds: st
 
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true, message: parts.join('. ') + '.' };
+}
+
+/**
+ * The export itself happens client-side (a Blob download, RosterBuilder.tsx)
+ * -- there's no server round-trip to hang an audit call on otherwise, so
+ * this one-line action exists purely to record that it happened, per the
+ * Coach Module spec §20's "export generation" audit item.
+ */
+export async function recordRosterExport(entryId: string, orgId: string, format: 'txt' | 'pdf', playerCount: number) {
+  const supabase = await createClient();
+  await supabase.rpc('write_audit', {
+    p_org_id: orgId,
+    p_action: 'tournament.roster.exported',
+    p_scope_type: 'tournament',
+    p_entity_type: 'tournament_entry',
+    p_entity_id: entryId,
+    p_after: { format, player_count: playerCount },
+  });
+  return { success: true };
 }
