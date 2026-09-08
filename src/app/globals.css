@@ -8,10 +8,10 @@
    previous version on purpose, so every existing page picks up the new
    look for free just by editing the values below.
 
-   Theme: defaults to light regardless of OS preference (no
-   prefers-color-scheme query) -- ThemeToggle.tsx sets data-theme on
-   <html> from localStorage on mount, falling back to "light" when
-   nothing is stored yet. */
+   Theme: defaults to dark regardless of OS preference (no
+   prefers-color-scheme query) -- ThemeInitScript in layout.tsx sets
+   data-theme="dark" on <html> before hydration unless localStorage
+   explicitly holds "light". */
 :root {
   --bg: #F8FAFC;
   --surface: #FFFFFF;

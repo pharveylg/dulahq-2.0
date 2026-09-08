@@ -2,22 +2,22 @@
 
 import { useEffect, useState } from 'react';
 
-/** Inline, runs before hydration so a returning dark-mode visitor doesn't
-    see a flash of the light theme while React boots. Defaults to light --
-    no system-preference fallback, per §6.E's redesign brief: light unless
-    someone has actually chosen dark on this browser before. */
+/** Inline, runs before hydration so a returning light-mode visitor doesn't
+    see a flash of the dark theme while React boots. Defaults to dark --
+    no system-preference fallback: dark unless someone has actually chosen
+    light on this browser before. */
 export function ThemeInitScript() {
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `try{var t=localStorage.getItem('dula-theme');if(t==='dark')document.documentElement.dataset.theme='dark';}catch(e){}`,
+        __html: `try{var t=localStorage.getItem('dula-theme');if(t!=='light')document.documentElement.dataset.theme='dark';}catch(e){document.documentElement.dataset.theme='dark';}`,
       }}
     />
   );
 }
 
 export default function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
     setIsDark(document.documentElement.dataset.theme === 'dark');
