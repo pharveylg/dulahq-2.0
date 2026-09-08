@@ -531,9 +531,32 @@ feature at all yet — building it is in scope, not deferred. Phasing:
   read-only (no upload/approve/reject controls) and the empty state
   renders correctly. Cleaned up the test row afterward. `tsc`/`build`/
   `tests/rls` (21/21) all stayed clean.
-- **Phase 5e — movement, travel half.** Not started. Hook into
-  `trips`/`trip_passengers`; also check whether a "move player between
-  teams" action exists at all — it may need to be built from scratch.
+- **Phase 5e — movement, travel half. Done** (the trips/travel half only
+  — see the note below on the team-transfer half). `addPassenger`/
+  `removePassenger` (`trips/[tripId]/actions.ts`) now call
+  `notifyAboutPlayer()` with the trip's name. Verified live: created a
+  real trip, added Angelica as a passenger (`trip.passenger_added`
+  landed), removed her (`trip.passenger_removed` landed), cleaned up
+  both the trip and the test notification rows afterward. `tsc`/`build`/
+  `tests/rls` (21/21) all stayed clean.
+
+  **The other half of "movement" is a genuine missing feature, not just a
+  missing notification hook — flagged to the user rather than built
+  unprompted.** Grepped for any way to move a player from one team to
+  another within the same club: none exists. `teams/[teamSlug]/
+  actions.ts` only has `addPlayer` (create) and `removePlayer` (delete) —
+  no transfer/reassign action anywhere, so today the only way to "move" a
+  player between two of a club's own teams is to remove them from one
+  and re-add them as a brand new player row on the other, losing their
+  whole history (evaluations, goals, notes, fees, memberships — none of
+  it carries over). `updateMembershipStatus`'s `'transferred'` status
+  (wired to notify in Phase 5c) covers a player leaving the club
+  entirely, not moving between two teams inside it. Building a real
+  "reassign to another team" action is a separate feature decision (does
+  it preserve history? does it need its own approval step for a minor's
+  guardian? is a team change during an active tournament roster
+  allowed?) that the original notification-scoping conversation flagged
+  as an open question, not a green light — out of scope for this pass.
 
 ---
 
