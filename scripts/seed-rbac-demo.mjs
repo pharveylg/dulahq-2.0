@@ -112,7 +112,7 @@ async function main() {
   const club = await must(
     admin
       .from('clubs')
-      .insert({ name: 'Dula HQ Demo Club', slug: 'dulahq-demo-club', org_id: org.id, sport_id: football.id, publicly_listed: true, about: 'A standing demo club covering every RBAC role -- see /demo for accounts.' })
+      .insert({ name: 'Dula HQ Demo Club', slug: 'dulahq-demo-club', org_id: org.id, sport_id: football.id, publicly_listed: true, about: 'A grassroots football club running two youth squads, U12 and U15 -- training, match schedules, fees, and player development, all managed through Dulà HQ.' })
       .select()
       .single(),
     'insert clubs'
