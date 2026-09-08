@@ -17,11 +17,16 @@ const nextConfig = {
   // sufficient -- no separate asset rewrite is needed. Proxies to the
   // project's stable `dula-hq.vercel.app` alias, not the new domain, so
   // this keeps working regardless of what custom domain that project has.
+  //
+  // /platformconsole is deliberately NOT proxied (was, until the platform
+  // console consolidation): that path now serves this app's own console,
+  // which is the canonical one going forward. The Tournament Manager's own
+  // Superadmin Console still exists but is reachable only at the
+  // break-glass dula-hq.vercel.app/platformconsole URL directly.
   async rewrites() {
     return [
       { source: '/t/:slug', destination: 'https://dula-hq.vercel.app/t/:slug' },
       { source: '/t/:slug/:path*', destination: 'https://dula-hq.vercel.app/t/:slug/:path*' },
-      { source: '/platformconsole', destination: 'https://dula-hq.vercel.app/platformconsole' },
     ];
   },
 };

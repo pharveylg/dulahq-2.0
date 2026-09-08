@@ -54,7 +54,7 @@ export default async function DemoPage() {
             guest (nobody signed in) sees.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href={`/clubs/${CLUB_SLUG}`} className="btn">Demo club (guest view)</Link>
+            <Link href={`/c/${CLUB_SLUG}`} className="btn">Demo club (guest view)</Link>
             <a href={`/t/${ORG_SLUG}/${TOURNAMENT_SLUG}`} className="btn">Demo tournament (guest view)</a>
           </div>
         </div>

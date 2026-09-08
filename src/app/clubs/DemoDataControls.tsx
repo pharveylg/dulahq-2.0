@@ -14,7 +14,7 @@ export default function DemoDataControls({ hasDemoData }: { hasDemoData: boolean
     startTransition(async () => {
       const result = await loadDemoData();
       if (result?.error) setError(result.error);
-      else if (result?.clubSlug) router.push(`/clubs/${result.clubSlug}`);
+      else if (result?.clubSlug) router.push(`/c/${result.clubSlug}`);
       else router.refresh();
     });
   }

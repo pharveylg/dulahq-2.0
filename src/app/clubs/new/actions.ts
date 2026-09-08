@@ -42,5 +42,5 @@ export async function createClub(formData: FormData) {
     return { error: error.message };
   }
 
-  redirect(`/clubs/${data.slug}`);
+  redirect(`/c/${data.slug}`);
 }

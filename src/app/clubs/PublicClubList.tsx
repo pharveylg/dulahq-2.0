@@ -42,7 +42,7 @@ export default function PublicClubList({ clubs }: { clubs: PublicClub[] }) {
         )}
         {filtered.map((club, i) => (
           <Reveal key={club.slug} index={i}>
-            <Link href={`/clubs/${club.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <Link href={`/c/${club.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
               <div className="list-row-main">
                 <div className="list-row-title">{club.name}</div>
                 <div className="list-row-meta">

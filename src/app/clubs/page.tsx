@@ -97,7 +97,7 @@ export default async function ClubsPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {platformAdmin && (
-              <Link href="/clubs/platformconsole" className="btn">
+              <Link href="/platformconsole" className="btn">
                 Platform console
               </Link>
             )}
