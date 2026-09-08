@@ -262,14 +262,29 @@ reviewed before the next starts):
   nothing else. A real full regeneration (fixing the ~85 pre-existing
   `org_id` errors properly, not working around them) is still a separable
   cleanup task, just no longer blocking this phase's own type-correctness.
-- **Phase 2 (in progress)** — fill real gaps in existing sections. Done:
-  per-guardian permission management in the Family tab (club_admin can see
-  each guardian's effective permission set — default bundle plus any
-  override — and grant/revoke/reset individual ones via
-  `setGuardianPermission()`, writing to `guardian_permission_grants`). The
-  Membership and Family tabs themselves already shipped in Phase 1 as part
-  of the canonical component. Still open: coach action-center dashboard,
-  richer development timeline.
+- **Phase 2 — fill real gaps in existing sections. Done.** Per-guardian
+  permission management in the Family tab (club_admin can see each
+  guardian's effective permission set — default bundle plus any override —
+  and grant/revoke/reset individual ones via `setGuardianPermission()`,
+  writing to `guardian_permission_grants`). Membership and Family tabs
+  themselves already shipped in Phase 1 as part of the canonical component.
+  Coach action-center dashboard (`src/app/c/[clubSlug]/ActionCenter.tsx`):
+  Coach Module spec §1's "what do I need to know and do today" — today's
+  sessions, upcoming sessions, a team snapshot (player count, 30-day
+  attendance, active/needs-attention goals), and an action list (take
+  attendance for a session with none recorded, plan a session with no
+  drills attached, review a goal marked needs_attention) — action-first per
+  the spec's own instruction, the list renders above the snapshot tiles.
+  Shown to club_admin (all teams) and coach/team_manager (assigned teams
+  only, verified live: a coach assigned only to U15 Girls sees just that
+  team's snapshot, not the other two) as a new default "Overview" tab on
+  `/c/[clubSlug]` — previously club_admin-only (the existing
+  `ClubDashboardStats` rollup now renders below it, under a "Club-wide"
+  label, unchanged otherwise). Richer development timeline (attendance/
+  match events folded into `Timeline.tsx`, not just evaluations/goals/
+  notes) stayed out of scope — no match data exists in this app yet to
+  timeline, and attendance is already the Overview tab's own "Training"
+  snapshot rather than a timeline entry.
 - **Phase 3** — tournament roster + guardian acknowledgement workflow
   end-to-end, in-app notifications only (no email — SMTP still isn't wired,
   §8).

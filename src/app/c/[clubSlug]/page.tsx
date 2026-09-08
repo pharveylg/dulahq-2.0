@@ -9,6 +9,7 @@ import Trips from './Trips';
 import Announcements from './Announcements';
 import MediaGallery from './MediaGallery';
 import ClubDashboardStats from './ClubDashboardStats';
+import ActionCenter from './ActionCenter';
 import ClubPageTabs from './ClubPageTabs';
 import Finances from './Finances';
 import Reports from './Reports';
@@ -244,6 +245,130 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     };
   }
 
+  // Coach Module spec §1: "what do I need to know and do today" -- shown to
+  // club_admin (club-wide) and coach/team_manager (their assigned teams
+  // only), same component, scoped by relevantTeamIds. Action-first: what's
+  // flagged below drives the Action Center list, not just tile counts.
+  const relevantTeamIds = access.isClubAdmin ? (clubTeams ?? []).map((t) => t.id) : myAssignedTeamIds;
+  const teamsById = new Map((clubTeams ?? []).map((t) => [t.id, t]));
+
+  let actionCenter: {
+    todaySessions: { id: string; teamId: string; teamSlug: string; teamName: string; startsAt: string; endsAt: string }[];
+    upcomingSessions: { id: string; teamId: string; teamSlug: string; teamName: string; startsAt: string; endsAt: string }[];
+    actionItems: { id: string; labelPrefix: string; startsAt?: string; href: string; urgent?: boolean }[];
+    teamSnapshots: { teamId: string; teamSlug: string; teamName: string; playerCount: number; attendancePct: number | null; activeGoals: number; goalsNeedingAttention: number }[];
+  } | null = null;
+
+  if (relevantTeamIds.length > 0) {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const threeDaysAhead = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgoAC = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { data: todayRows },
+      { data: upcomingRows },
+      { data: recentSessionRows },
+      { data: soonSessionRows },
+      { data: acPlayerRows },
+      { data: acAttendanceRows },
+      { data: acGoalRows },
+    ] = await Promise.all([
+      supabase.from('training_sessions').select('id, team_id, starts_at, ends_at').in('team_id', relevantTeamIds).gte('starts_at', startOfToday).lt('starts_at', endOfToday).order('starts_at'),
+      supabase.from('training_sessions').select('id, team_id, starts_at, ends_at').in('team_id', relevantTeamIds).gte('starts_at', endOfToday).eq('status', 'scheduled').order('starts_at').limit(5),
+      supabase.from('training_sessions').select('id, team_id, starts_at, status, attendance(id)').in('team_id', relevantTeamIds).gte('starts_at', threeDaysAgo).lt('starts_at', startOfToday),
+      supabase.from('training_sessions').select('id, team_id, starts_at, session_drills(id)').in('team_id', relevantTeamIds).gte('starts_at', startOfToday).lte('starts_at', threeDaysAhead).eq('status', 'scheduled'),
+      supabase.from('players').select('id, team_id').in('team_id', relevantTeamIds),
+      supabase.from('attendance').select('status, training_sessions!inner(team_id, starts_at)').in('training_sessions.team_id', relevantTeamIds).gte('training_sessions.starts_at', thirtyDaysAgoAC),
+      supabase.from('development_goals').select('id, title, status, player_id, team_id, players(name)').in('team_id', relevantTeamIds),
+    ]);
+
+    const toSession = (s: any) => {
+      const team = teamsById.get(s.team_id);
+      if (!team || !team.slug) return null;
+      return { id: s.id, teamId: s.team_id, teamSlug: team.slug, teamName: team.name, startsAt: s.starts_at, endsAt: s.ends_at };
+    };
+
+    const actionItems: { id: string; labelPrefix: string; startsAt?: string; href: string; urgent?: boolean }[] = [];
+
+    for (const s of recentSessionRows ?? []) {
+      const team = teamsById.get((s as any).team_id);
+      if (!team || !team.slug || (s as any).status === 'cancelled' || ((s as any).attendance ?? []).length > 0) continue;
+      actionItems.push({
+        id: `attendance-${s.id}`,
+        labelPrefix: `Take attendance — ${team.name}`,
+        startsAt: (s as any).starts_at,
+        href: `/c/${clubSlug}/teams/${team.slug}/training/${s.id}`,
+        urgent: true,
+      });
+    }
+    for (const s of soonSessionRows ?? []) {
+      const team = teamsById.get((s as any).team_id);
+      if (!team || !team.slug || ((s as any).session_drills ?? []).length > 0) continue;
+      actionItems.push({
+        id: `plan-${s.id}`,
+        labelPrefix: `Plan training session — ${team.name}`,
+        startsAt: (s as any).starts_at,
+        href: `/c/${clubSlug}/teams/${team.slug}/training/${s.id}`,
+      });
+    }
+    for (const g of (acGoalRows ?? []).filter((g: any) => g.status === 'needs_attention')) {
+      const team = teamsById.get((g as any).team_id);
+      if (!team || !team.slug) continue;
+      actionItems.push({
+        id: `goal-${g.id}`,
+        labelPrefix: `Review goal — ${(g as any).players?.name ?? 'Player'}: ${g.title}`,
+        href: `/c/${clubSlug}/teams/${team.slug}/players/${g.player_id}`,
+        urgent: true,
+      });
+    }
+    actionItems.sort((a, b) => Number(b.urgent) - Number(a.urgent));
+
+    const playersByTeam = new Map<string, string[]>();
+    for (const p of acPlayerRows ?? []) {
+      if (!p.team_id) continue;
+      const list = playersByTeam.get(p.team_id) ?? [];
+      list.push(p.id);
+      playersByTeam.set(p.team_id, list);
+    }
+    const goalsByTeam = new Map<string, any[]>();
+    for (const g of acGoalRows ?? []) {
+      const list = goalsByTeam.get((g as any).team_id) ?? [];
+      list.push(g);
+      goalsByTeam.set((g as any).team_id, list);
+    }
+
+    const teamSnapshots = relevantTeamIds
+      .map((teamId) => teamsById.get(teamId))
+      .filter((t): t is { id: string; slug: string; name: string } => !!t && !!t.slug)
+      .map((team) => {
+        const teamPlayerIds = new Set(playersByTeam.get(team.id) ?? []);
+        const teamAttendance = (acAttendanceRows ?? []).filter(
+          (a: any) => a.training_sessions?.team_id === team.id && !['injured', 'suspended'].includes(a.status)
+        );
+        const teamAttended = teamAttendance.filter((a: any) => a.status === 'present' || a.status === 'late').length;
+        const teamGoals = goalsByTeam.get(team.id) ?? [];
+        return {
+          teamId: team.id,
+          teamSlug: team.slug,
+          teamName: team.name,
+          playerCount: teamPlayerIds.size,
+          attendancePct: teamAttendance.length ? Math.round((teamAttended / teamAttendance.length) * 100) : null,
+          activeGoals: teamGoals.filter((g: any) => !['achieved', 'archived'].includes(g.status)).length,
+          goalsNeedingAttention: teamGoals.filter((g: any) => g.status === 'needs_attention').length,
+        };
+      });
+
+    actionCenter = {
+      todaySessions: (todayRows ?? []).map(toSession).filter((s): s is NonNullable<typeof s> => !!s),
+      upcomingSessions: (upcomingRows ?? []).map(toSession).filter((s): s is NonNullable<typeof s> => !!s),
+      actionItems,
+      teamSnapshots,
+    };
+  }
+
   // Meetings + action items -- club-wide staff tool, visible/manageable
   // by any club_staff role (unlike fees, which are admin/staff-only).
   const { data: meetingRows } = await supabase
@@ -396,7 +521,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
         )}
 
         <ClubPageTabs
-          hasDashboard={!!dashboard}
+          hasDashboard={!!dashboard || !!actionCenter}
           counts={{
             teams: clubTeams?.length ?? 0,
             staff: staffRows?.length ?? 0,
@@ -405,8 +530,24 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             photos: mediaItems.length,
             meetings: meetings.length,
           }}
-          dashboardSlot={dashboard && (
-            <ClubDashboardStats teamCount={clubTeams?.length ?? 0} staffCount={staffRows?.length ?? 0} dashboard={dashboard} />
+          dashboardSlot={(dashboard || actionCenter) && (
+            <>
+              {actionCenter && (
+                <ActionCenter
+                  clubSlug={club.slug}
+                  todaySessions={actionCenter.todaySessions}
+                  upcomingSessions={actionCenter.upcomingSessions}
+                  actionItems={actionCenter.actionItems}
+                  teamSnapshots={actionCenter.teamSnapshots}
+                />
+              )}
+              {dashboard && (
+                <div style={{ marginTop: actionCenter ? 28 : 0 }}>
+                  {actionCenter && <div className="section-label">Club-wide</div>}
+                  <ClubDashboardStats teamCount={clubTeams?.length ?? 0} staffCount={staffRows?.length ?? 0} dashboard={dashboard} />
+                </div>
+              )}
+            </>
           )}
           teamsSlot={
             <>
