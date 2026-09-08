@@ -46,7 +46,7 @@ export default function ProvisionForm() {
         <div className="form-row" style={{ flexWrap: 'wrap' }}>
           <div className="form-group" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
             <label>Accent color</label>
-            <input name="accent" type="color" defaultValue="#15803D" style={{ padding: 2, height: 38, width: 70 }} />
+            <input name="accent" type="color" defaultValue="#059669" style={{ padding: 2, height: 38, width: 70 }} />
           </div>
           <div className="form-group" style={{ flex: 2, minWidth: 200, marginBottom: 0 }}>
             <label>Admin email</label>

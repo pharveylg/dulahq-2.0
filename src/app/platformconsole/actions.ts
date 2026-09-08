@@ -27,7 +27,7 @@ export async function provisionTenant(formData: FormData) {
 
   const slug = (formData.get('slug') as string)?.trim().toLowerCase();
   const name = (formData.get('name') as string)?.trim();
-  const accent = (formData.get('accent') as string)?.trim() || '#15803D';
+  const accent = (formData.get('accent') as string)?.trim() || '#059669';
   const adminEmail = (formData.get('adminEmail') as string)?.trim().toLowerCase();
   const clubName = (formData.get('clubName') as string)?.trim();
   const clubSlug = (formData.get('clubSlug') as string)?.trim().toLowerCase();
