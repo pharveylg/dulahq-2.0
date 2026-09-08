@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import SlotTabs from '@/components/motion/SlotTabs';
+import { formatMoney } from '@/lib/currency';
 
 export default async function GuardianHomePage() {
   const supabase = await createClient();
@@ -192,7 +193,7 @@ export default async function GuardianHomePage() {
                           <div className="section-label" style={{ fontSize: 11, marginTop: 12 }}>Outstanding fees</div>
                           {outstandingFees.map((f) => (
                             <div key={f.id} className="list-row" style={{ padding: '6px 0' }}>
-                              <span style={{ fontSize: 13 }}>{f.fee_type} — {f.currency} {Number(f.amount).toFixed(2)}</span>
+                              <span style={{ fontSize: 13 }}>{f.fee_type} — {formatMoney(Number(f.amount), f.currency)}</span>
                               <span className="chip" style={{ color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' }}>{f.status}</span>
                             </div>
                           ))}

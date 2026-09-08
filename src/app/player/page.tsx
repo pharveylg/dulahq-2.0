@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import SlotTabs from '@/components/motion/SlotTabs';
+import { formatMoney } from '@/lib/currency';
 
 export default async function PlayerHomePage() {
   const supabase = await createClient();
@@ -242,7 +243,7 @@ export default async function PlayerHomePage() {
                 {(!fees || fees.length === 0) && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No fees on record.</p>}
                 {fees?.map((f) => (
                   <div key={f.id} className="list-row">
-                    <span className="list-row-title">{f.fee_type} — {f.currency} {Number(f.amount).toFixed(2)}</span>
+                    <span className="list-row-title">{f.fee_type} — {formatMoney(Number(f.amount), f.currency)}</span>
                     <span className="chip">{f.status}</span>
                   </div>
                 ))}

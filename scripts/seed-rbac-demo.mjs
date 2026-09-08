@@ -50,6 +50,13 @@ async function cleanupPriorRun() {
   await admin.from('teams').delete().ilike('name', 'Demo %');
   await admin.from('tournaments').delete().eq('slug', 'dulahq-demo-cup');
 
+  // platform_admins is keyed by email with no FK to auth.users, so
+  // deleting the user doesn't cascade here -- has to be swept explicitly.
+  await admin.from('platform_admins').delete().in(
+    'email',
+    PERSONAS.map((p) => p.email)
+  );
+
   const { data: users } = await admin.auth.admin.listUsers();
   for (const p of PERSONAS) {
     const u = users.users.find((u) => u.email === p.email);
@@ -201,14 +208,14 @@ async function main() {
     admin
       .from('fee_charges')
       .insert([
-        { club_id: club.id, player_id: jordan.id, fee_type: 'membership', amount: 150, currency: 'USD', status: 'pending', created_by: ids.staff },
-        { club_id: club.id, player_id: players[1].id, fee_type: 'membership', amount: 150, currency: 'USD', status: 'pending', created_by: ids.staff },
+        { club_id: club.id, player_id: jordan.id, fee_type: 'membership', amount: 2500, currency: 'PHP', status: 'pending', created_by: ids.staff },
+        { club_id: club.id, player_id: players[1].id, fee_type: 'membership', amount: 2500, currency: 'PHP', status: 'pending', created_by: ids.staff },
       ])
       .select(),
     'insert fee_charges'
   );
   await must(
-    admin.from('payments').insert({ fee_charge_id: jordanCharge.id, amount: 150, method: 'card', created_by: ids.staff }),
+    admin.from('payments').insert({ fee_charge_id: jordanCharge.id, amount: 2500, method: 'gcash', created_by: ids.staff }),
     'insert payments'
   );
   await must(

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { addFeeCharge, recordPayment, updateFeeChargeStatus } from './fees-actions';
+import { formatMoney } from '@/lib/currency';
 
 type Payment = { id: string; amount: number; method: string | null; paid_at: string };
 type FeeCharge = {
@@ -51,9 +52,9 @@ function ChargeRow({ clubId, teamId, playerId, charge, canManage }: { clubId: st
     <div style={{ padding: '6px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13 }}>
-          {charge.feeType} — {charge.currency} {charge.amount.toFixed(2)}
+          {charge.feeType} — {formatMoney(charge.amount, charge.currency)}
           {charge.dueDate && <span style={{ color: 'var(--text-muted)' }}> · due {charge.dueDate}</span>}
-          {paid > 0 && <span style={{ color: 'var(--text-muted)' }}> · {charge.currency} {paid.toFixed(2)} paid</span>}
+          {paid > 0 && <span style={{ color: 'var(--text-muted)' }}> · {formatMoney(paid, charge.currency)} paid</span>}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="chip" style={STATUS_STYLE[charge.status]}>{charge.status}</span>

@@ -4,6 +4,7 @@ import { useState, useTransition, useActionState } from 'react';
 import Reveal from '@/components/motion/Reveal';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import { createExpense, deleteExpense } from './finances-actions';
+import { formatMoney, currencySymbol } from '@/lib/currency';
 
 type FeeCharge = { id: string; playerName: string; feeType: string; amount: number; currency: string; status: string; dueDate: string | null };
 type Expense = { id: string; description: string; category: string; amount: number; currency: string; expenseDate: string };
@@ -51,15 +52,20 @@ export default function Finances({
   const overdueCount = feeCharges.filter((f) => f.status === 'overdue').length;
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const net = collected - totalExpenses;
+  // Every seeded club runs a single currency today; this picks whichever one
+  // actually appears rather than hardcoding PHP, so a differently-configured
+  // club's tiles still show its own symbol instead of the wrong one.
+  const currency = feeCharges[0]?.currency ?? expenses[0]?.currency ?? 'PHP';
+  const symbol = currencySymbol(currency);
 
   return (
     <>
       <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20, marginBottom: 20 }}>
-        <Tile index={0} value={<AnimatedNumber value={collected} decimals={2} />} label="Collected" />
-        <Tile index={1} value={<AnimatedNumber value={outstanding} decimals={2} />} label="Outstanding" warn={outstanding > 0} />
+        <Tile index={0} value={<AnimatedNumber value={collected} prefix={symbol} decimals={2} />} label="Collected" />
+        <Tile index={1} value={<AnimatedNumber value={outstanding} prefix={symbol} decimals={2} />} label="Outstanding" warn={outstanding > 0} />
         <Tile index={2} value={<AnimatedNumber value={overdueCount} />} label="Overdue charges" warn={overdueCount > 0} />
-        <Tile index={3} value={<AnimatedNumber value={totalExpenses} decimals={2} />} label="Expenses" />
-        <Tile index={4} value={<AnimatedNumber value={net} decimals={2} />} label="Net" warn={net < 0} />
+        <Tile index={3} value={<AnimatedNumber value={totalExpenses} prefix={symbol} decimals={2} />} label="Expenses" />
+        <Tile index={4} value={<AnimatedNumber value={net} prefix={symbol} decimals={2} />} label="Net" warn={net < 0} />
       </div>
 
       <div className="section-label">Fee charges ({feeCharges.length})</div>
@@ -70,7 +76,7 @@ export default function Finances({
             <div className="list-row-main">
               <div className="list-row-title">{f.playerName}</div>
               <div className="list-row-meta">
-                {f.feeType} · {f.currency} {f.amount.toFixed(2)}
+                {f.feeType} · {formatMoney(f.amount, f.currency)}
                 {f.dueDate ? ` · due ${new Date(f.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
               </div>
             </div>
@@ -102,7 +108,7 @@ export default function Finances({
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 600 }}>{e.currency} {e.amount.toFixed(2)}</span>
+              <span style={{ fontSize: 13.5, fontWeight: 600 }}>{formatMoney(e.amount, e.currency)}</span>
               {canManage && (
                 <button className="btn" style={{ fontSize: 11 }} onClick={() => handleDeleteExpense(e.id)} disabled={pending}>
                   Delete

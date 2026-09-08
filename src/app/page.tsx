@@ -18,7 +18,7 @@ export default function Home() {
       <div className="container" style={{ position: 'relative' }}>
         <Reveal>
           <div className="page-header" style={{ display: 'block', textAlign: 'center', marginBottom: 40 }}>
-            <h1 style={{ fontSize: 32 }}>Dula HQ</h1>
+            <h1 style={{ fontSize: 32 }}>Dulà HQ</h1>
             <p className="subtitle" style={{ marginTop: 8, fontSize: 15 }}>
               Run a club, or run a tournament.
             </p>

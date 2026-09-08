@@ -10,10 +10,12 @@ import { motion, useMotionValue, useSpring, useInView } from 'motion/react';
  */
 export default function AnimatedNumber({
   value,
+  prefix = '',
   suffix = '',
   decimals = 0,
 }: {
   value: number;
+  prefix?: string;
   suffix?: string;
   decimals?: number;
 }) {
@@ -28,9 +30,9 @@ export default function AnimatedNumber({
 
   useEffect(() => {
     return spring.on('change', (latest) => {
-      if (ref.current) ref.current.textContent = `${latest.toFixed(decimals)}${suffix}`;
+      if (ref.current) ref.current.textContent = `${prefix}${latest.toFixed(decimals)}${suffix}`;
     });
-  }, [spring, decimals, suffix]);
+  }, [spring, prefix, decimals, suffix]);
 
-  return <motion.span ref={ref}>0{suffix}</motion.span>;
+  return <motion.span ref={ref}>{prefix}0{suffix}</motion.span>;
 }

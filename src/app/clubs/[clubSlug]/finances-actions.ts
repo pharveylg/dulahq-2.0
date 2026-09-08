@@ -27,7 +27,7 @@ export async function createExpense(clubId: string, formData: FormData) {
     description,
     amount,
     category,
-    currency: (formData.get('currency') as string) || 'USD',
+    currency: (formData.get('currency') as string) || 'PHP',
     expense_date: (formData.get('expenseDate') as string) || new Date().toISOString().slice(0, 10),
     created_by: dulaUser?.id,
   });

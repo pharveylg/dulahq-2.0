@@ -36,7 +36,7 @@ export default async function DemoPage() {
     <main className="page">
       <div className="container">
         <div className="page-header" style={{ display: 'block' }}>
-          <h1>Try Dula HQ as any role</h1>
+          <h1>Try Dulà HQ as any role</h1>
           <p className="subtitle" style={{ marginTop: 6, maxWidth: 640 }}>
             One standing demo club and tournament, one account per RBAC role. Pick a
             role below to sign in as that account directly — no password to remember.

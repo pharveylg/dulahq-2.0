@@ -1,47 +1,78 @@
-/* Dula HQ 2.0 -- "Athletic Premium" redesign.
-   Evolves the original sporty green/Oswald identity (angular clip-path
-   buttons, condensed headings) rather than discarding it -- brought
-   up to a motion-primitives / Watermelon-style dashboard finish:
-   glassy layered cards, spring easing, gradient accents, animated
-   stat tiles. Class names are unchanged from the previous version on
-   purpose, so every existing page picks up the new look for free. */
+/* Dula HQ -- "Daylight" redesign (2026-09-07).
+   Crisp slate/white/emerald system replacing the earlier glassy
+   green-gradient "Athletic Premium" look -- flatter surfaces, tighter
+   radii, one accent color instead of a two-stop gradient everywhere.
+   Marigold is held back for exactly one thing: the ᜇᜓᜎ Baybayin mark in
+   the wordmark (see layout.tsx) -- it never appears as a second UI
+   accent competing with emerald. Class names are unchanged from the
+   previous version on purpose, so every existing page picks up the new
+   look for free just by editing the values below.
+
+   Theme: defaults to light regardless of OS preference (no
+   prefers-color-scheme query) -- ThemeToggle.tsx sets data-theme on
+   <html> from localStorage on mount, falling back to "light" when
+   nothing is stored yet. */
 :root {
-  --bg: #F4F7F5;
-  --bg-mesh: radial-gradient(1200px circle at 10% -10%, rgba(21, 128, 61, .06), transparent 55%),
-             radial-gradient(900px circle at 100% 0%, rgba(37, 99, 235, .05), transparent 50%);
+  --bg: #F8FAFC;
   --surface: #FFFFFF;
-  --surface-raised: #F8FAF9;
-  --surface-glass: rgba(255, 255, 255, .72);
-  --border: #E4E9E6;
-  --border-strong: #CBD5D1;
-  --text: #0B1210;
-  --text-muted: #64756E;
-  --accent: #15803D;
-  --accent-2: #22C55E;
-  --accent-gradient: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-  --accent-hover: #16913F;
-  --accent-soft: rgba(21, 128, 61, .10);
-  --accent-soft-border: rgba(21, 128, 61, .30);
+  --surface-raised: #F1F5F9;
+  --surface-glass: rgba(255, 255, 255, .82);
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --text: #0F172A;
+  --text-muted: #475569;
+  --accent: #059669;
+  --accent-2: #059669;
+  --accent-gradient: var(--accent);
+  --accent-hover: #047857;
+  --accent-soft: #ECFDF5;
+  --accent-soft-border: #A7F3D0;
   --on-accent: #fff;
-  --warn: #B45309;
-  --warn-soft: rgba(217, 119, 6, .10);
-  --warn-soft-border: rgba(217, 119, 6, .30);
+  --warn: #D97706;
+  --warn-soft: #FFFBEB;
+  --warn-soft-border: #FDE68A;
   --danger: #DC2626;
-  --danger-soft: rgba(220, 38, 38, .10);
-  --danger-soft-border: rgba(220, 38, 38, .30);
+  --danger-soft: #FEF2F2;
+  --danger-soft-border: #FECACA;
   --blue: #2563EB;
-  --blue-soft: rgba(37, 99, 235, .08);
-  --blue-soft-border: rgba(37, 99, 235, .25);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow-xs: 0 1px 2px rgba(15, 23, 20, .04);
-  --shadow: 0 1px 2px rgba(15, 23, 20, .04), 0 8px 24px -8px rgba(15, 23, 20, .10);
-  --shadow-lg: 0 4px 12px rgba(15, 23, 20, .06), 0 20px 40px -16px rgba(15, 23, 20, .16);
+  --blue-soft: #EFF6FF;
+  --blue-soft-border: #BFDBFE;
+  --marigold: #E4A339;
+  --marigold-ink: #8A5A12;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, .05);
+  --shadow: 0 1px 2px 0 rgba(15, 23, 42, .05), 0 1px 3px 0 rgba(15, 23, 42, .06);
+  --shadow-lg: 0 4px 6px -1px rgba(15, 23, 42, .07), 0 2px 4px -2px rgba(15, 23, 42, .06);
   --ease-spring: cubic-bezier(.22, 1, .36, 1);
   --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-heading: 'Oswald', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0B1220;
+  --surface: #131C2E;
+  --surface-raised: #182338;
+  --surface-glass: rgba(19, 28, 46, .82);
+  --border: #223049;
+  --border-strong: #2E4066;
+  --text: #F1F5F9;
+  --text-muted: #AEBBCF;
+  --accent-soft: #06301F;
+  --accent-soft-border: #0B4A31;
+  --warn-soft: #3A2705;
+  --warn-soft-border: #5C3D08;
+  --danger-soft: #3A1414;
+  --danger-soft-border: #5C1F1F;
+  --blue-soft: #0E2440;
+  --blue-soft-border: #163659;
+  --marigold-ink: #F6D9A0;
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, .35);
+  --shadow: 0 1px 2px 0 rgba(0, 0, 0, .35), 0 1px 3px 0 rgba(0, 0, 0, .3);
+  --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, .4), 0 2px 4px -2px rgba(0, 0, 0, .35);
+  color-scheme: dark;
 }
 
 * {
@@ -51,8 +82,7 @@
 }
 
 html, body {
-  background: var(--bg-mesh), var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
   line-height: 1.5;
@@ -151,22 +181,11 @@ h1, h2, h3, .brand {
 
 .top-nav {
   border-bottom: 1px solid var(--border);
-  padding: 14px 0;
-  background: var(--surface-glass);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  padding: 12px 0;
+  background: var(--surface);
   position: sticky;
   top: 0;
   z-index: 20;
-}
-
-.top-nav::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: -1px;
-  height: 1px;
-  background: var(--accent-gradient);
-  opacity: .5;
 }
 
 .top-nav .container {
@@ -174,21 +193,36 @@ h1, h2, h3, .brand {
   align-items: center;
   justify-content: space-between;
   position: relative;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .brand {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 16px;
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* The ᜇᜓᜎ Baybayin mark -- the one place marigold appears. It never
+   competes with the emerald accent used everywhere else in the UI.
+   Neither Inter nor Oswald ships glyphs for the Baybayin Unicode block
+   (U+1700-171F) -- without Noto Sans Tagalog this renders as tofu boxes. */
+.brand .baybayin {
+  font-family: 'Noto Sans Tagalog', sans-serif;
+  color: var(--marigold);
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .brand .accent {
-  -webkit-text-fill-color: initial;
-  color: var(--text);
-  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .page {
@@ -221,8 +255,8 @@ h1, h2, h3, .brand {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 18px;
-  border-radius: 0;
+  padding: 9px 16px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
@@ -235,20 +269,18 @@ h1, h2, h3, .brand {
   text-decoration: none;
   position: relative;
   overflow: hidden;
-  transition: transform .2s var(--ease-spring), background .2s ease, box-shadow .2s ease, border-color .2s ease, color .2s ease;
-  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  transition: background .15s ease, box-shadow .15s ease, border-color .15s ease, color .15s ease;
   box-shadow: var(--shadow-xs);
 }
 
 .btn:hover {
   border-color: var(--border-strong);
   color: var(--text);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow);
+  background: var(--surface-raised);
 }
 
 .btn:active {
-  transform: translateY(0);
+  transform: translateY(1px);
 }
 
 .btn:disabled {
@@ -265,24 +297,10 @@ h1, h2, h3, .brand {
   box-shadow: 0 4px 14px -2px var(--accent-soft-border);
 }
 
-.btn-primary::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .35) 45%, transparent 60%);
-  transform: translateX(-100%);
-  transition: transform .6s ease;
-}
-
-.btn-primary:hover::after {
-  transform: translateX(100%);
-}
-
 .btn-primary:hover {
-  box-shadow: 0 6px 20px -2px var(--accent-soft-border);
-  transform: translateY(-2px);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: var(--on-accent);
-  border-color: var(--accent);
 }
 
 .btn-full {

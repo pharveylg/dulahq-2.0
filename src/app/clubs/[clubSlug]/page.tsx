@@ -358,7 +358,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
     reportsData = {
       teams,
-      financials: { collected, outstanding, expenses: totalExpenses, currency: feeCharges[0]?.currency ?? 'USD' },
+      financials: { collected, outstanding, expenses: totalExpenses, currency: feeCharges[0]?.currency ?? 'PHP' },
     };
   }
 

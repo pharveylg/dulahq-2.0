@@ -2,6 +2,7 @@
 
 import Reveal from '@/components/motion/Reveal';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
+import { formatMoney } from '@/lib/currency';
 
 type Dashboard = {
   playerCount: number;
@@ -65,7 +66,7 @@ export default function ClubDashboardStats({
           <Tile
             key={f.currency}
             index={8 + i}
-            value={`${f.currency} ${f.total.toFixed(2)}`}
+            value={formatMoney(f.total, f.currency)}
             label={`Outstanding (${f.count} charge${f.count === 1 ? '' : 's'})`}
             warn
           />

@@ -12,7 +12,7 @@ export async function GET() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #15803D 0%, #22C55E 100%)',
+          background: '#059669',
           color: '#fff',
           fontFamily: 'sans-serif',
           fontWeight: 800,

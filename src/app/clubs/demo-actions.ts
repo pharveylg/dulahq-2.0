@@ -249,15 +249,26 @@ export async function loadDemoData() {
   if (notesError) return { error: friendlyError(notesError) };
 
   // --- Club Manager module: fees, trips, announcements ---
+  // status is never set to something payments would contradict (§5) --
+  // recompute_fee_status only runs on a payments change, so a brand-new
+  // charge's initial value has to match what that function would derive
+  // for zero payments itself: 'overdue' if due_date is already past,
+  // otherwise 'pending'. Player 0's charge below gets flipped to 'paid'
+  // by an actual payment row, not by being inserted that way.
   const { data: feeCharges, error: feesError } = await supabase
     .from('fee_charges')
     .insert([
-      { club_id: club.id, player_id: players[0].id, fee_type: 'membership', amount: 150, currency: 'USD', status: 'paid', due_date: dateOnly(daysAgo(20)), created_by: demoStaffUser.id },
-      { club_id: club.id, player_id: players[1].id, fee_type: 'membership', amount: 150, currency: 'USD', status: 'pending', due_date: dateOnly(daysFromNow(10)), created_by: demoStaffUser.id },
-      { club_id: club.id, player_id: players[5].id, fee_type: 'uniform', amount: 45, currency: 'USD', status: 'overdue', due_date: dateOnly(daysAgo(5)), created_by: demoStaffUser.id },
+      { club_id: club.id, player_id: players[0].id, fee_type: 'membership', amount: 2500, currency: 'PHP', status: 'pending', due_date: dateOnly(daysAgo(20)), created_by: demoStaffUser.id },
+      { club_id: club.id, player_id: players[1].id, fee_type: 'membership', amount: 2500, currency: 'PHP', status: 'pending', due_date: dateOnly(daysFromNow(10)), created_by: demoStaffUser.id },
+      { club_id: club.id, player_id: players[5].id, fee_type: 'uniform', amount: 850, currency: 'PHP', status: 'overdue', due_date: dateOnly(daysAgo(5)), created_by: demoStaffUser.id },
     ])
     .select();
   if (feesError) return { error: friendlyError(feesError) };
+
+  const { error: paymentError } = await supabase
+    .from('payments')
+    .insert({ fee_charge_id: feeCharges[0].id, amount: 2500, method: 'gcash', created_by: demoStaffUser.id });
+  if (paymentError) return { error: friendlyError(paymentError) };
 
   const paidCharge = feeCharges.find((f) => f.status === 'paid');
   if (paidCharge) {

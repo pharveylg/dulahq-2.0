@@ -1,6 +1,7 @@
 'use client';
 
 import Reveal from '@/components/motion/Reveal';
+import { formatMoney } from '@/lib/currency';
 
 type TeamBreakdown = {
   teamId: string;
@@ -57,20 +58,20 @@ export default function Reports({
       <div className="section-label">Financial summary</div>
       <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
         <div className="stat-tile">
-          <div className="stat-value">{financials.currency} {financials.collected.toFixed(2)}</div>
+          <div className="stat-value">{formatMoney(financials.collected, financials.currency)}</div>
           <div className="stat-label">Collected</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-value" style={financials.outstanding > 0 ? { color: 'var(--warn)' } : undefined}>{financials.currency} {financials.outstanding.toFixed(2)}</div>
+          <div className="stat-value" style={financials.outstanding > 0 ? { color: 'var(--warn)' } : undefined}>{formatMoney(financials.outstanding, financials.currency)}</div>
           <div className="stat-label">Outstanding</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-value">{financials.currency} {financials.expenses.toFixed(2)}</div>
+          <div className="stat-value">{formatMoney(financials.expenses, financials.currency)}</div>
           <div className="stat-label">Expenses</div>
         </div>
         <div className="stat-tile">
           <div className="stat-value" style={(financials.collected - financials.expenses) < 0 ? { color: 'var(--warn)' } : undefined}>
-            {financials.currency} {(financials.collected - financials.expenses).toFixed(2)}
+            {formatMoney(financials.collected - financials.expenses, financials.currency)}
           </div>
           <div className="stat-label">Net</div>
         </div>
