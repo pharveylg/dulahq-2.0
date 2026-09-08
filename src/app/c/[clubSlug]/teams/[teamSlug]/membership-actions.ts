@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { notifyAboutPlayer } from '@/lib/notify';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -45,6 +46,17 @@ export async function updateMembershipStatus(clubId: string, teamId: string, mem
   const supabase = await createClient();
   const { error } = await supabase.from('memberships').update({ status }).eq('id', membershipId);
   if (error) return { error: friendlyError(error) };
+
+  const { data: membership } = await supabase.from('memberships').select('player_id').eq('id', membershipId).maybeSingle();
+  if (membership) {
+    const title = status === 'transferred' ? 'Player transferred' : 'Membership status updated';
+    await notifyAboutPlayer({
+      playerId: membership.player_id,
+      template: 'membership.status_changed',
+      payload: { title, body: `Membership is now ${status}` },
+    });
+  }
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }

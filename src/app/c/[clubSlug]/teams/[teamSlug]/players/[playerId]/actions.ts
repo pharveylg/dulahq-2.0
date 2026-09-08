@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { notifyAboutPlayer } from '@/lib/notify';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -36,6 +37,8 @@ export async function addEvaluation(playerId: string, teamId: string, clubId: st
     return isNaN(n) ? null : n;
   };
 
+  const visibility = (formData.get('visibility') as string) || 'coach_only';
+
   const { data: evaluation, error } = await supabase
     .from('player_evaluations')
     .insert({
@@ -52,13 +55,20 @@ export async function addEvaluation(playerId: string, teamId: string, clubId: st
       strengths: (formData.get('strengths') as string)?.trim() || null,
       development_areas: (formData.get('developmentAreas') as string)?.trim() || null,
       coach_comments: (formData.get('coachComments') as string)?.trim() || null,
-      visibility: (formData.get('visibility') as string) || 'coach_only',
+      visibility,
       created_by: dulaUser?.id,
     })
     .select('id')
     .single();
 
   if (error) return { error: friendlyError(error) };
+
+  await notifyAboutPlayer({
+    playerId,
+    template: 'player_evaluation.created',
+    payload: { title: 'New evaluation posted', body: (formData.get('period') as string)?.trim() || 'A new evaluation is available.' },
+    visibility,
+  });
 
   // Per-skill ratings: form fields are named "rating_<skillId>", only
   // submitted ones (non-empty) become rows -- a coach isn't forced to
@@ -90,6 +100,7 @@ export async function addGoal(playerId: string, teamId: string, clubId: string, 
 
   const title = (formData.get('title') as string)?.trim();
   if (!title) return { error: 'Goal title is required.' };
+  const visibility = (formData.get('visibility') as string) || 'coach_only';
 
   const { error } = await supabase.from('development_goals').insert({
     player_id: playerId,
@@ -104,11 +115,19 @@ export async function addGoal(playerId: string, teamId: string, clubId: string, 
     start_date: (formData.get('startDate') as string) || null,
     target_date: (formData.get('targetDate') as string) || null,
     success_criteria: (formData.get('successCriteria') as string)?.trim() || null,
-    visibility: (formData.get('visibility') as string) || 'coach_only',
+    visibility,
     created_by: dulaUser?.id,
   });
 
   if (error) return { error: friendlyError(error) };
+
+  await notifyAboutPlayer({
+    playerId,
+    template: 'development_goal.created',
+    payload: { title: 'New development goal', body: title },
+    visibility,
+  });
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
@@ -140,17 +159,26 @@ export async function addNote(playerId: string, teamId: string, clubId: string, 
 
   const note = (formData.get('note') as string)?.trim();
   if (!note) return { error: 'Note text is required.' };
+  const visibility = (formData.get('visibility') as string) || 'coach_only';
 
   const { error } = await supabase.from('player_development_notes').insert({
     player_id: playerId,
     team_id: teamId,
     club_id: clubId,
     note,
-    visibility: (formData.get('visibility') as string) || 'coach_only',
+    visibility,
     created_by: dulaUser?.id,
   });
 
   if (error) return { error: friendlyError(error) };
+
+  await notifyAboutPlayer({
+    playerId,
+    template: 'player_development_note.created',
+    payload: { title: 'New note added', body: note.length > 140 ? `${note.slice(0, 140)}…` : note },
+    visibility,
+  });
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }

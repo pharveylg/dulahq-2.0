@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { notifyAboutPlayer } from '@/lib/notify';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security') || error.message.includes('insufficient_privilege')) {
@@ -33,6 +34,16 @@ export async function submitRoster(entryId: string, orgId: string, playerIds: st
   if (playerIds.length === 0) return { error: 'Select at least one player.' };
   const supabase = await createClient();
   const dulaUser = await getCurrentDulaUser();
+
+  const { data: entryInfo } = await supabase
+    .from('tournament_entries')
+    .select('tournaments(name), tournament_categories(name)')
+    .eq('id', entryId)
+    .maybeSingle();
+  const tournamentLabel = [
+    (entryInfo as any)?.tournaments?.name,
+    (entryInfo as any)?.tournament_categories?.name,
+  ].filter(Boolean).join(' · ') || 'the tournament';
 
   // requires_guardian_consent is single-player only -- call it per player.
   const needsConsent: Record<string, boolean> = {};
@@ -93,6 +104,15 @@ export async function submitRoster(entryId: string, orgId: string, playerIds: st
           p_entity_id: entryId,
           p_after: { player_ids: rows.map((r) => r.player_id) },
         });
+        await Promise.all(
+          rows.map((r) =>
+            notifyAboutPlayer({
+              playerId: r.player_id,
+              template: 'tournament_roster.acknowledgement_requested',
+              payload: { title: 'Tournament roster confirmation needed', body: `${tournamentLabel} needs your confirmation` },
+            })
+          )
+        );
       }
 
       noGuardianCount = needsNewRequest.filter((id) => !guardianByPlayer.has(id)).length;
@@ -108,7 +128,18 @@ export async function submitRoster(entryId: string, orgId: string, playerIds: st
   });
   if (portError) return { error: friendlyError(portError) };
 
-  const ported = (portResults ?? []).filter((r: any) => r.outcome === 'ported').length;
+  const portedIds = (portResults ?? []).filter((r: any) => r.outcome === 'ported').map((r: any) => r.player_id);
+  await Promise.all(
+    portedIds.map((playerId: string) =>
+      notifyAboutPlayer({
+        playerId,
+        template: 'tournament_roster.ported',
+        payload: { title: 'Added to tournament roster', body: tournamentLabel },
+      })
+    )
+  );
+
+  const ported = portedIds.length;
   const pending = (portResults ?? []).filter((r: any) => r.outcome === 'consent_missing').length - noGuardianCount;
 
   const parts: string[] = [];

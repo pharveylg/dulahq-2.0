@@ -4213,6 +4213,26 @@ export type Database = {
         Args: { p_endpoint: string; p_p256dh: string; p_auth_key: string }
         Returns: undefined
       }
+      create_notification: {
+        Args: {
+          p_org_id: string
+          p_recipient_user_id: string | null
+          p_recipient_guardian_id: string | null
+          p_channel: string
+          p_template: string
+          p_payload: Json
+          p_link_path: string | null
+        }
+        Returns: string
+      }
+      mark_notification_sent: {
+        Args: { p_notification_id: string; p_failed_reason?: string | null }
+        Returns: undefined
+      }
+      delete_stale_push_subscription: {
+        Args: { p_endpoint: string }
+        Returns: undefined
+      }
       port_squad_to_tournament: {
         Args: { p_entry_id: string; p_player_ids: string[] }
         Returns: {

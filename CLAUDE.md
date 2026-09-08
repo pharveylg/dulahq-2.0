@@ -440,11 +440,54 @@ feature at all yet — building it is in scope, not deferred. Phasing:
   database (re-queried directly, not just trusting the optimistic UI), and
   the empty state on the player and coach personas; cleaned up the test
   rows afterward. `tsc`/`build`/`tests/rls` (21/21) all stayed clean.
-- **Phase 5c — wire existing triggers.** Not started. Fees (`addFeeCharge`,
-  `recordPayment`, `updateFeeChargeStatus`), development (`addGoal`,
-  `addEvaluation`, `addNote`), movement (membership status transitions,
-  especially → `transferred`, and Phase 3's tournament-roster port, which
-  currently sends zero notification on either outcome).
+- **Phase 5c — wire existing triggers. Done.** `notifyAboutPlayer()` now
+  gets called from `addFeeCharge`/`recordPayment`/`updateFeeChargeStatus`
+  (fees-actions.ts), `addGoal`/`addEvaluation`/`addNote` (players/
+  [playerId]/actions.ts, each passing its own `visibility` value through
+  so nobody is notified about a `coach_only` row they can't actually open
+  -- see below), `updateMembershipStatus` (membership-actions.ts, generic
+  copy for any status, specific copy for `transferred`), and
+  `submitRoster` (tournaments/actions.ts, both on raising a fresh
+  acknowledgement request and on a successful port). `notifyAboutPlayer`'s
+  signature dropped the `orgId` parameter from Phase 5a's draft -- it's
+  derived from the player row instead, since every call site already has
+  a `playerId` and this is one less thing to thread through. `linkPath`
+  now defaults to `/guardian` for a minor's targets and `/player` for an
+  adult's own account (overridable per template).
+
+  **A real bug, found live, not caught by the RLS suite:** the first
+  attempt at this phase created the fee charge correctly but wrote *zero*
+  notification rows, with no thrown error anywhere. Root cause: Phase 5a's
+  `notifyAboutPlayer` ran `supabase.from('notifications').insert(...)
+  .select('id').single()` in the *notifying staff member's own request
+  context* -- and `.select()` after an insert is a RETURNING-equivalent,
+  which Postgres also checks against the table's SELECT policy
+  (`notifications_read_own`, recipient-only or org_admin). A club_admin
+  raising a fee for someone else's kid is neither, so that implicit
+  SELECT check failed and rolled the *entire insert* back -- and the
+  insert's own `{ data, error }` was destructured without reading `error`,
+  so the failure was silent. The exact same trap existed on the
+  sent_at/failed_reason update after a push attempt (`notifications_mark_
+  read` is also recipient-only) and on cleaning up a dead push
+  subscription (`push_subscriptions`' self-only RLS, deleting someone
+  else's dead endpoint). Fixed with two more SECURITY DEFINER escape
+  hatches, same established pattern as `write_audit`/`port_squad_to_
+  tournament`/`save_push_subscription`: `create_notification(...)` (checks
+  `is_org_member`, then inserts and returns the id as a plain scalar --
+  no RETURNING-triggers-a-read-check trap) and `mark_notification_sent
+  (id, failed_reason)` (`phase6f` migration), plus `delete_stale_push_
+  subscription(endpoint)` (`phase6g`) for the subscription cleanup.
+  `notify.ts` now also actually checks and logs the insert's `error`
+  rather than swallowing it. Caught by re-testing live against the
+  showcase data after the fee charge came back with zero notifications;
+  confirmed the fix with a direct SQL repro (`set local role
+  authenticated` as the real club_admin, insert with `.select()` analog
+  → `42501`; same insert via the new RPC → succeeds) before touching the
+  app code, then re-verified end-to-end through the UI (a club_admin
+  added a `player_and_parent`-visible development note and recorded a
+  fee payment; the guardian's bell showed both, `notifications.sent_at`/
+  `read_at` behaved correctly) and cleaned up the test rows afterward.
+  `tsc`/`build`/`tests/rls` (21/21) all stayed clean throughout.
 - **Phase 5d — documents feature.** Not started. `document_uploads` exists
   as a table only — zero application code references it anywhere except
   generated types. Build upload/list/review UI, then wire notifications.

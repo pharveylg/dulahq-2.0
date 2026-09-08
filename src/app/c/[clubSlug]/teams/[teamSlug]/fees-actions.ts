@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { notifyAboutPlayer } from '@/lib/notify';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -34,6 +35,13 @@ export async function addFeeCharge(clubId: string, teamId: string, playerId: str
   });
 
   if (error) return { error: friendlyError(error) };
+
+  await notifyAboutPlayer({
+    playerId,
+    template: 'fee_charge.created',
+    payload: { title: 'New fee charged', body: `${feeType} · PHP ${amount.toFixed(2)}${dueDate ? ` · due ${dueDate}` : ''}` },
+  });
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
@@ -60,6 +68,15 @@ export async function recordPayment(clubId: string, teamId: string, feeChargeId:
   const { error: statusError } = await supabase.from('fee_charges').update({ status: 'paid' }).eq('id', feeChargeId);
   if (statusError) return { error: friendlyError(statusError) };
 
+  const { data: charge } = await supabase.from('fee_charges').select('player_id, fee_type').eq('id', feeChargeId).maybeSingle();
+  if (charge) {
+    await notifyAboutPlayer({
+      playerId: charge.player_id,
+      template: 'fee_charge.paid',
+      payload: { title: 'Payment received', body: `${charge.fee_type} · PHP ${amount.toFixed(2)} recorded` },
+    });
+  }
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
@@ -68,6 +85,16 @@ export async function updateFeeChargeStatus(clubId: string, teamId: string, feeC
   const supabase = await createClient();
   const { error } = await supabase.from('fee_charges').update({ status }).eq('id', feeChargeId);
   if (error) return { error: friendlyError(error) };
+
+  const { data: charge } = await supabase.from('fee_charges').select('player_id, fee_type').eq('id', feeChargeId).maybeSingle();
+  if (charge) {
+    await notifyAboutPlayer({
+      playerId: charge.player_id,
+      template: 'fee_charge.status_changed',
+      payload: { title: 'Fee status updated', body: `${charge.fee_type} is now ${status}` },
+    });
+  }
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }

@@ -13,7 +13,6 @@ function ensureVapid() {
 }
 
 export type NotifyInput = {
-  orgId: string;
   playerId: string;
   template: string;
   /** Must include title/body -- the schema stores template+payload rather
@@ -22,7 +21,18 @@ export type NotifyInput = {
    * nothing calls notify() with a real template until Phase 5c wires the
    * actual trigger points. Until then, the caller writes its own copy. */
   payload: Record<string, unknown> & { title: string; body: string };
+  /** Defaults to '/guardian' for a minor's targets and '/player' for an
+   * adult's own account -- override only when a more specific page exists
+   * for this template (e.g. a tournament roster's own tab). */
   linkPath?: string;
+  /** development_goals/player_evaluations/player_development_notes' own
+   * visibility column ('coach_only'|'staff'|'player'|'parent'|
+   * 'player_and_parent') -- when given, the notification is skipped
+   * entirely unless the resolved audience (guardian for a minor, the
+   * player themself for an adult) is one the row is actually visible to.
+   * Mirrors the read-RLS predicate exactly (phase6b/6c) so nobody gets
+   * notified about something that opens to a blank page for them. */
+  visibility?: string;
 };
 
 /**
@@ -41,12 +51,27 @@ export type NotifyInput = {
  * current session). Adult: the player's own linked account, if any --
  * nobody is notified if an adult has no account, since there's no
  * "player module" to surface it in.
+ *
+ * orgId is derived from the player row rather than taken as a caller
+ * argument -- every Phase 5c trigger site already has a playerId in hand,
+ * and deriving it here means one less thing for those call sites to fetch
+ * or thread through.
  */
-export async function notifyAboutPlayer({ orgId, playerId, template, payload, linkPath }: NotifyInput) {
+export async function notifyAboutPlayer({ playerId, template, payload, linkPath, visibility }: NotifyInput) {
   const supabase = await createClient();
+
+  const { data: player } = await supabase.from('players').select('org_id, user_id').eq('id', playerId).maybeSingle();
+  if (!player) return { notified: 0 };
+  const orgId = player.org_id;
 
   const { data: isMinorData } = await supabase.rpc('requires_guardian_consent', { p_player_id: playerId });
   const isMinor = !!isMinorData;
+  const resolvedLinkPath = linkPath ?? (isMinor ? '/guardian' : '/player');
+
+  if (visibility) {
+    const visibleTo = isMinor ? ['player_and_parent', 'parent'] : ['player_and_parent', 'player'];
+    if (!visibleTo.includes(visibility)) return { notified: 0 };
+  }
 
   const targets: { userId: string | null; guardianId: string | null }[] = [];
 
@@ -76,30 +101,37 @@ export async function notifyAboutPlayer({ orgId, playerId, template, payload, li
         }
       }
     }
-  } else {
-    const { data: player } = await supabase.from('players').select('user_id').eq('id', playerId).maybeSingle();
-    if (player?.user_id) targets.push({ userId: player.user_id, guardianId: null });
+  } else if (player.user_id) {
+    targets.push({ userId: player.user_id, guardianId: null });
   }
 
   for (const target of targets) {
     if (!target.userId && !target.guardianId) continue;
 
-    const { data: row } = await supabase
-      .from('notifications')
-      .insert({
-        org_id: orgId,
-        recipient_user_id: target.userId,
-        recipient_guardian_id: target.guardianId,
-        channel: 'in_app',
-        template,
-        payload: payload as unknown as Record<string, string | number | boolean | null>,
-        link_path: linkPath ?? null,
-      })
-      .select('id')
-      .single();
+    // A plain insert().select() here would need the *caller* (the staff
+    // member raising the fee, posting the note, etc.) to also satisfy
+    // notifications_read_own's SELECT policy on the row it just wrote --
+    // which only the recipient or an org_admin can. create_notification()
+    // is SECURITY DEFINER specifically so a non-admin coach can notify
+    // someone else without that RETURNING-triggers-a-read-check trap
+    // silently rolling the whole insert back (found live: the fee-charge
+    // trigger created the charge but wrote zero notification rows).
+    const { data: notificationId, error } = await supabase.rpc('create_notification', {
+      p_org_id: orgId,
+      p_recipient_user_id: target.userId,
+      p_recipient_guardian_id: target.guardianId,
+      p_channel: 'in_app',
+      p_template: template,
+      p_payload: payload as unknown as Record<string, string | number | boolean | null>,
+      p_link_path: resolvedLinkPath,
+    });
+    if (error) {
+      console.error('notifyAboutPlayer: create_notification failed', error);
+      continue;
+    }
 
     if (target.userId) {
-      await sendPush(orgId, target.userId, payload.title, payload.body, linkPath, row?.id);
+      await sendPush(orgId, target.userId, payload.title, payload.body, resolvedLinkPath, notificationId ?? undefined);
     }
   }
 
@@ -124,18 +156,21 @@ async function sendPush(orgId: string, userId: string, title: string, body: stri
       } catch (err: any) {
         anyFailed = true;
         // 410/404 means the browser dropped this subscription -- clean it up
-        // rather than retrying a dead endpoint forever.
+        // rather than retrying a dead endpoint forever. The subscription
+        // belongs to the recipient, not this (staff) caller, so the
+        // self-only RLS on push_subscriptions needs the same SECURITY
+        // DEFINER escape hatch as create_notification above.
         if (err?.statusCode === 410 || err?.statusCode === 404) {
-          await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          await supabase.rpc('delete_stale_push_subscription', { p_endpoint: sub.endpoint });
         }
       }
     })
   );
 
   if (notificationRowId) {
-    await supabase
-      .from('notifications')
-      .update(anyFailed ? { failed_reason: 'one or more push endpoints failed' } : { sent_at: new Date().toISOString() })
-      .eq('id', notificationRowId);
+    await supabase.rpc('mark_notification_sent', {
+      p_notification_id: notificationRowId,
+      p_failed_reason: anyFailed ? 'one or more push endpoints failed' : null,
+    });
   }
 }
