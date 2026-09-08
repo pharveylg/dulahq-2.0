@@ -83,13 +83,24 @@ async function wipe() {
   console.log('Wiping prior showcase/demo orgs...');
   const oldOrgs = await must(admin.from('organizations').select('id,slug').in('slug', OLD_SLUGS), 'select old orgs');
   const oldOrgIds = oldOrgs.map((o) => o.id);
+  let orphanTournamentIds = [];
   if (oldOrgIds.length) {
-    // tournaments.org_id is ON DELETE SET NULL (not cascade) -- delete
-    // explicitly first so wiping the org doesn't leave orphaned tournaments.
-    await must(admin.from('tournaments').delete().in('org_id', oldOrgIds), 'delete old tournaments');
+    // tournament_categories/entries/roster/officials/members all cascade on
+    // organizations delete (their own org_id FK), but tournaments.org_id
+    // itself is ON DELETE SET NULL -- so the tournament row survives the org
+    // delete as an orphan, and can only be deleted *after*, once nothing
+    // (tournament_categories etc, gone in the same delete) still references
+    // its id. Deleting tournaments first, before the org, fails instead --
+    // their children still reference them at that point.
+    const oldTournaments = await must(admin.from('tournaments').select('id').in('org_id', oldOrgIds), 'select old tournaments');
+    orphanTournamentIds = oldTournaments.map((t) => t.id);
     await must(admin.from('organizations').delete().in('id', oldOrgIds), 'delete old orgs');
   }
+  if (orphanTournamentIds.length) {
+    await must(admin.from('tournaments').delete().in('id', orphanTournamentIds), 'delete orphaned tournaments');
+  }
   await admin.from('platform_admins').delete().eq('email', 'demo-platformadmin@dulahq-demo.local');
+  await admin.from('platform_admins').delete().eq('email', `demo-platformadmin@${EMAIL_DOMAIN}`);
 
   const { data: users } = await admin.auth.admin.listUsers({ perPage: 1000 });
   for (const u of users.users) {
@@ -272,7 +283,7 @@ async function main() {
 
   const u15g = await createTeam(usnaGali, usnaGaliFC, 'u15-girls', 'U15 Girls', 'grassroots');
   const u15gPlayers = await seedPlayers(usnaGali, usnaGaliFC, u15g, { count: 12, gender: 'F', minAge: 13, maxAge: 15 });
-  await seedGuardians(usnaGali, u15gPlayers);
+  const u15gGuardians = await seedGuardians(usnaGali, u15gPlayers);
   const u15gStaff = await seedTeamStaff(usnaGali, usnaGaliFC, u15g, 'u15-girls.usna-gali-fc');
   clubReport1.teams.push({ name: 'U15 Girls', slug: 'u15-girls', players: u15gPlayers.length, guardians: u15gPlayers.length, staff: u15gStaff });
 
@@ -338,6 +349,43 @@ async function main() {
 
   orgReport.tournaments.push(tourReport1);
   report.orgs.push(orgReport);
+
+  // ------------------------------------------------------------
+  // /demo personas -- one standing, real account per RBAC role, all
+  // pointed at Usna Gali / Usna Gali FC / U15 Girls (the richest team:
+  // players, guardians, coach, team manager, staff). Reuses the org
+  // admin, club admin, coach, and team manager accounts already seeded
+  // above rather than duplicating them; only adds the two roles nothing
+  // else needed a real login for (platform admin, and one guardian+player
+  // pair linked to an actual roster row).
+  // ------------------------------------------------------------
+  console.log('Wiring up /demo personas...');
+  const demoPlatformAdminEmail = `demo-platformadmin@${EMAIL_DOMAIN}`;
+  const demoPlatformAdminName = personName('F');
+  const demoPlatformAdminId = await createPerson(demoPlatformAdminEmail, demoPlatformAdminName);
+  await must(admin.from('platform_admins').insert({ email: demoPlatformAdminEmail }), 'platform_admins demo');
+
+  const demoPlayer = u15gPlayers[0];
+  const demoGuardian = u15gGuardians[0];
+  const demoGuardianEmail = `demo-guardian.u15-girls.usna-gali-fc@${EMAIL_DOMAIN}`;
+  const demoGuardianId = await createPerson(demoGuardianEmail, demoGuardian.name);
+  await must(admin.from('guardians').update({ user_id: demoGuardianId, account_status: 'active' }).eq('id', demoGuardian.id), 'link demo guardian account');
+
+  const demoPlayerEmail = `demo-player.u15-girls.usna-gali-fc@${EMAIL_DOMAIN}`;
+  const demoPlayerId = await createPerson(demoPlayerEmail, demoPlayer.name);
+  await must(admin.from('players').update({ user_id: demoPlayerId }).eq('id', demoPlayer.id), 'link demo player account');
+
+  report.demoPersonas = {
+    orgSlug: 'usna-gali', clubSlug: 'usna-gali-fc', teamSlug: 'u15-girls', tournamentSlug: 'copa-gali',
+    platformAdmin: { name: demoPlatformAdminName, email: demoPlatformAdminEmail },
+    orgAdmin: usnaGaliAdmin,
+    clubAdmin: usnaGaliFCAdmin,
+    coach: u15gStaff.coach,
+    teamManager: u15gStaff.teamManager,
+    staff: u15gStaff.staff,
+    guardian: { name: demoGuardian.name, email: demoGuardianEmail },
+    player: { name: demoPlayer.name, email: demoPlayerEmail },
+  };
 
   // ============================================================
   // CDO Youth Sports Commission -- club only (tournament not entitled)
@@ -440,6 +488,28 @@ function writeReport(report) {
   lines.push('');
   lines.push('---');
   lines.push('');
+
+  if (report.demoPersonas) {
+    const d = report.demoPersonas;
+    lines.push('## Try it as any role (`/demo`)');
+    lines.push('');
+    lines.push(`One standing account per RBAC role, all pointed at Usna Gali FC's U15 Girls team`);
+    lines.push(`(\`/c/${d.clubSlug}/teams/${d.teamSlug}\`) and the Copa Gali tournament (\`/t/${d.orgSlug}/${d.tournamentSlug}\`).`);
+    lines.push('');
+    lines.push('| Role | Name | Email |');
+    lines.push('|---|---|---|');
+    lines.push(`| Platform admin | ${d.platformAdmin.name} | \`${d.platformAdmin.email}\` |`);
+    lines.push(`| Org admin (Usna Gali) | ${d.orgAdmin.name} | \`${d.orgAdmin.email}\` |`);
+    lines.push(`| Club admin (Usna Gali FC) | ${d.clubAdmin.name} | \`${d.clubAdmin.email}\` |`);
+    lines.push(`| Coach (U15 Girls) | ${d.coach.name} | \`${d.coach.email}\` |`);
+    lines.push(`| Team manager (U15 Girls) | ${d.teamManager.name} | \`${d.teamManager.email}\` |`);
+    lines.push(`| Staff (Usna Gali FC) | ${d.staff.name} | \`${d.staff.email}\` |`);
+    lines.push(`| Guardian | ${d.guardian.name} | \`${d.guardian.email}\` |`);
+    lines.push(`| Player | ${d.player.name} | \`${d.player.email}\` |`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
 
   for (const org of report.orgs) {
     lines.push(`## ${org.name}`);

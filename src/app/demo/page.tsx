@@ -2,16 +2,18 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import DemoPersonas from './DemoPersonas';
 
-const CLUB_SLUG = 'dulahq-demo-club';
-const ORG_SLUG = 'dulahq-rbac-demo';
-const TOURNAMENT_SLUG = 'dulahq-demo-cup';
+const CLUB_SLUG = 'usna-gali-fc';
+const ORG_SLUG = 'usna-gali';
+const TOURNAMENT_SLUG = 'copa-gali';
 
 /**
  * Public, permanent RBAC demo -- one standing account per role, seeded by
- * scripts/seed-rbac-demo.mjs (not the ephemeral loadDemoData/wipeDemoData
- * pair on /clubs, which is a separate org and untouched by this). Anyone
- * can sign in as any persona here; the point is to make every role's
- * actual scope directly experienceable rather than described in the abstract.
+ * scripts/seed-showcase-demo.mjs (not the ephemeral loadDemoData/wipeDemoData
+ * pair on /clubs, which is a separate org and untouched by this). Points at
+ * Usna Gali FC's U15 Girls team, part of the same four-org showcase dataset
+ * documented in docs/demo-data-showcase.md. Anyone can sign in as any
+ * persona here; the point is to make every role's actual scope directly
+ * experienceable rather than described in the abstract.
  */
 export default async function DemoPage() {
   const supabase = await createClient();
@@ -24,7 +26,7 @@ export default async function DemoPage() {
           <div className="page-header"><h1>Demo not seeded</h1></div>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
             The RBAC demo club/tournament and its accounts aren&apos;t currently
-            in the database. Run <code>node scripts/seed-rbac-demo.mjs</code>{' '}
+            in the database. Run <code>node scripts/seed-showcase-demo.mjs</code>{' '}
             to create them.
           </p>
         </div>

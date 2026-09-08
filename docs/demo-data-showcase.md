@@ -12,6 +12,24 @@ and by the `@dulahq-showcase.local` email domain), and never touches real accoun
 
 ---
 
+## Try it as any role (`/demo`)
+
+One standing account per RBAC role, all pointed at Usna Gali FC's U15 Girls team
+(`/c/usna-gali-fc/teams/u15-girls`) and the Copa Gali tournament (`/t/usna-gali/copa-gali`).
+
+| Role | Name | Email |
+|---|---|---|
+| Platform admin | Queenie Alvarado | `demo-platformadmin@dulahq-showcase.local` |
+| Org admin (Usna Gali) | Jose Bautista | `orgadmin.usna-gali@dulahq-showcase.local` |
+| Club admin (Usna Gali FC) | Juan Villanueva | `clubadmin.usna-gali-fc@dulahq-showcase.local` |
+| Coach (U15 Girls) | Rodrigo Dagohoy | `coach.u15-girls.usna-gali-fc@dulahq-showcase.local` |
+| Team manager (U15 Girls) | Benigno Kintanar | `teammanager.u15-girls.usna-gali-fc@dulahq-showcase.local` |
+| Staff (Usna Gali FC) | Luisa Villar | `staff.u15-girls.usna-gali-fc@dulahq-showcase.local` |
+| Guardian | Mylene Bautista | `demo-guardian.u15-girls.usna-gali-fc@dulahq-showcase.local` |
+| Player | Angelica Alvarado | `demo-player.u15-girls.usna-gali-fc@dulahq-showcase.local` |
+
+---
+
 ## Usna Gali
 
 - Org: `/platformconsole` → Usna Gali (slug `usna-gali`)
@@ -51,24 +69,24 @@ Club admin: **Rodrigo Marcelo** — `clubadmin.unsa-gali-fc@dulahq-showcase.loca
 ## CDO Youth Sports Commission
 
 - Org: `/platformconsole` → CDO Youth Sports Commission (slug `cdo-ysc`)
-- Org admin: **Queenie Alvarado** — `orgadmin.cdo-ysc@dulahq-showcase.local`
+- Org admin: **Rowena Kintanar** — `orgadmin.cdo-ysc@dulahq-showcase.local`
 
 ### Club: CDO FC (`/c/cdo-fc`)
 
-Club admin: **Elias Kintanar** — `clubadmin.cdo-fc@dulahq-showcase.local`
+Club admin: **Teodoro Villar** — `clubadmin.cdo-fc@dulahq-showcase.local`
 
 | Team | Players | Guardians | Coach | Team manager | Staff |
 |---|---|---|---|---|---|
-| U10 | 10 | 10 | Kim Navarro (`coach.u10.cdo-fc@dulahq-showcase.local`) | Mark Alvarado (`teammanager.u10.cdo-fc@dulahq-showcase.local`) | Jasmine Dagohoy (`staff.u10.cdo-fc@dulahq-showcase.local`) |
+| U10 | 10 | 10 | Mark Alvarado (`coach.u10.cdo-fc@dulahq-showcase.local`) | Paolo Dagohoy (`teammanager.u10.cdo-fc@dulahq-showcase.local`) | Kristine Owades (`staff.u10.cdo-fc@dulahq-showcase.local`) |
 
 ### Club: Misamis Oriental Footballers (`/c/misor-footballers`)
 
-Club admin: **Carlo Owades** — `clubadmin.misor-footballers@dulahq-showcase.local`
+Club admin: **Enzo Abad** — `clubadmin.misor-footballers@dulahq-showcase.local`
 
 | Team | Players | Guardians | Coach | Team manager | Staff |
 |---|---|---|---|---|---|
-| Mens Open | 16 | 0 | Andres Gonzales (`coach.mens-open.misor-footballers@dulahq-showcase.local`) | Emilio Fernandez (`teammanager.mens-open.misor-footballers@dulahq-showcase.local`) | Trinidad Pascual (`staff.mens-open.misor-footballers@dulahq-showcase.local`) |
-| 40A | 16 | 0 | Elias Mendoza (`coach.40a.misor-footballers@dulahq-showcase.local`) | Teodoro Ramos (`teammanager.40a.misor-footballers@dulahq-showcase.local`) | Maria Flores (`staff.40a.misor-footballers@dulahq-showcase.local`) |
+| Mens Open | 16 | 0 | Emilio Fernandez (`coach.mens-open.misor-footballers@dulahq-showcase.local`) | Gregorio Pascual (`teammanager.mens-open.misor-footballers@dulahq-showcase.local`) | Angelica Ocampo (`staff.mens-open.misor-footballers@dulahq-showcase.local`) |
+| 40A | 16 | 0 | Teodoro Ramos (`coach.40a.misor-footballers@dulahq-showcase.local`) | Jose Flores (`teammanager.40a.misor-footballers@dulahq-showcase.local`) | Isabela Rivera (`staff.40a.misor-footballers@dulahq-showcase.local`) |
 
 _No tournament entitlement._
 
@@ -77,7 +95,7 @@ _No tournament entitlement._
 ## Pilipinas Futbol
 
 - Org: `/platformconsole` → Pilipinas Futbol (slug `pilipinas-futbol`)
-- Org admin: **Juan Rivera** — `orgadmin.pilipinas-futbol@dulahq-showcase.local`
+- Org admin: **Antonio Castillo** — `orgadmin.pilipinas-futbol@dulahq-showcase.local`
 
 _No club entitlement._
 
@@ -104,7 +122,7 @@ _No club entitlement._
 ## Davao Unity Sports
 
 - Org: `/platformconsole` → Davao Unity Sports (slug `davao-unity-sports`)
-- Org admin: **Gemma Villar** — `orgadmin.davao-unity-sports@dulahq-showcase.local`
+- Org admin: **Hazel Manalo** — `orgadmin.davao-unity-sports@dulahq-showcase.local`
 
 _No club entitlement._
 
