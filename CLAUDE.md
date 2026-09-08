@@ -368,6 +368,75 @@ reviewed before the next starts):
   `audit_log` row landed with the correct actor email, entity, and
   before/after values, then reset the permission back to default.
 
+**A second initiative followed immediately after Phase 4**, from a fresh user
+request: notifications had shipped as email-only-deferred (Phase 3's own
+note above), and the user asked to scope in-app/push delivery and widen
+scope to cover fees/documents/movement/development for every minor (routed
+to guardians) and adult (routed to the player's own account). Two real
+discrepancies were flagged and resolved before building: the user's "18 and
+under" is treated as identical to `requires_guardian_consent()`'s existing
+`age < 18` (not a new/different rule — same threshold everywhere, on
+purpose), and "movement" (not an existing schema concept) was clarified to
+mean both team/roster movement and trip/travel logistics. "Documents" has no
+feature at all yet — building it is in scope, not deferred. Phasing:
+
+- **Phase 5a — notification core. Done.** `push_subscriptions` table
+  (`phase6e` migration — one row per device, `unique(endpoint)`, self-only
+  RLS) plus two SECURITY DEFINER functions: `push_subscription_targets(org,
+  user)` (reads a user's subscriptions, gated on org membership) and
+  `save_push_subscription(endpoint, p256dh, auth_key)` (upsert-by-endpoint,
+  `auth.uid()`-scoped — deliberately SECURITY DEFINER so re-subscribing a
+  shared device under a different account reassigns the row rather than
+  hitting the previous owner's RLS). `src/lib/notify.ts`'s
+  `notifyAboutPlayer()` is the one entry point future phases call: resolves
+  minor → every guardian link with an effective `receive_notifications`
+  permission true (Phase 0's permission, unused until now — same
+  default-bundle-plus-override computation as `Family.tsx`, just resolved
+  for an arbitrary player rather than the caller's own relationship) /
+  adult → the player's own linked account only (nobody is notified if an
+  adult has no account — there's no "player module" to surface it in yet).
+  Writes a durable `notifications` row (`channel='in_app'`) always, then
+  best-effort push via `web-push` + a real generated VAPID key pair (in
+  `.env.local`, gitignored — still needs adding to Vercel's prod env vars,
+  not done automatically) to every subscribed device; a 410/404 push
+  response deletes that dead subscription rather than retrying it forever.
+  Client side: `NotificationSubscribe.tsx` (a dismiss-free banner — shown
+  whenever the browser supports Push and permission isn't already granted,
+  hidden once subscribed) on both `/player` and `/guardian`, calling
+  `Notification.requestPermission()` then `pushManager.subscribe()` then a
+  new `savePushSubscription()` server action wrapping the RPC. `public/sw.js`
+  (previously fetch-passthrough only, deliberately caching nothing dynamic
+  — see §7's proposal-appendix bug this file already avoided) gained
+  `push`/`notificationclick` listeners; the push payload is exactly what
+  `notify()` JSON.stringifies (`title`/`body`/`linkPath`), not the Push
+  API's own envelope, since there's no template registry yet — `payload`
+  must include rendered `title`/`body` directly until Phase 5c wires real
+  trigger points with real copy.
+
+  Nothing calls `notifyAboutPlayer()` yet — that's Phase 5c. This phase is
+  the plumbing only, verified live on `/demo`'s guardian and player
+  personas: the banner renders and correctly reads `Notification.permission`
+  (shows the "blocked" variant in the sandboxed preview browser, which
+  denies notification permission by default — the OS-level grant→subscribe
+  round trip itself couldn't be exercised in that sandbox, only code-path
+  correctness). `npx tsc --noEmit`, `npm run build`, and `tests/rls` (21/21)
+  all stayed clean; `database.types.ts` was hand-patched again rather than
+  regenerated (this session's standing rule — see Phase 1's note above),
+  adding just the `push_subscriptions` table and the two new functions.
+- **Phase 5b — in-app inbox.** Not started. Bell icon + notification list
+  reading what 5a now writes to `notifications`.
+- **Phase 5c — wire existing triggers.** Not started. Fees (`addFeeCharge`,
+  `recordPayment`, `updateFeeChargeStatus`), development (`addGoal`,
+  `addEvaluation`, `addNote`), movement (membership status transitions,
+  especially → `transferred`, and Phase 3's tournament-roster port, which
+  currently sends zero notification on either outcome).
+- **Phase 5d — documents feature.** Not started. `document_uploads` exists
+  as a table only — zero application code references it anywhere except
+  generated types. Build upload/list/review UI, then wire notifications.
+- **Phase 5e — movement, travel half.** Not started. Hook into
+  `trips`/`trip_passengers`; also check whether a "move player between
+  teams" action exists at all — it may need to be built from scratch.
+
 ---
 
 ## 1. The two deployments

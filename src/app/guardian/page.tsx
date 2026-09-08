@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import SlotTabs from '@/components/motion/SlotTabs';
 import PlayerProfile from '@/components/player-profile/PlayerProfile';
+import NotificationSubscribe from '@/components/NotificationSubscribe';
 import GuardianTournaments from './GuardianTournaments';
 
 export default async function GuardianHomePage() {
@@ -111,6 +112,8 @@ export default async function GuardianHomePage() {
             <p className="subtitle">{children.length} child{children.length === 1 ? '' : 'ren'}</p>
           </div>
         </div>
+
+        <NotificationSubscribe />
 
         {children.length === 0 && (
           <div className="card empty-state">

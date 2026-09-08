@@ -2870,6 +2870,33 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth_key: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth_key: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth_key?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       role_permission_defaults: {
         Row: {
           permission_key: string
@@ -4178,6 +4205,14 @@ export type Database = {
         Returns: boolean
       }
       port_match_results_home: { Args: { p_match_id: string }; Returns: number }
+      push_subscription_targets: {
+        Args: { p_org_id: string; p_user_id: string }
+        Returns: { endpoint: string; p256dh: string; auth_key: string }[]
+      }
+      save_push_subscription: {
+        Args: { p_endpoint: string; p_p256dh: string; p_auth_key: string }
+        Returns: undefined
+      }
       port_squad_to_tournament: {
         Args: { p_entry_id: string; p_player_ids: string[] }
         Returns: {

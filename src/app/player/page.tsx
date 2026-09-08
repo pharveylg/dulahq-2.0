@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import PlayerProfile from '@/components/player-profile/PlayerProfile';
+import NotificationSubscribe from '@/components/NotificationSubscribe';
 
 export default async function PlayerHomePage() {
   const supabase = await createClient();
@@ -66,6 +67,8 @@ export default async function PlayerHomePage() {
             <h1>{player.name}</h1>
           </div>
         </div>
+
+        <NotificationSubscribe />
 
         <PlayerProfile
           playerId={player.id}
