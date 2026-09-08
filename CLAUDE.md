@@ -213,14 +213,48 @@ the specs, not a lighter role-only extension; guardian acknowledgement ships
 in-app now, real email deferred until SMTP exists per §8; one phase at a time,
 reviewed before the next starts):
 
-- **Phase 0 — permission foundation. Done, this migration.** Additive only,
-  no existing policy rewired yet — see the `phase6a` migration row above.
-  `club_admin` deliberately has no hardcoded bypass in `has_staff_permission()`
-  (per the Player Profile spec's "do not simply make every administrator a
-  superuser") — it gets a `role_permission_defaults` bundle containing every
-  staff permission instead, same code path as everyone else.
-- **Phase 1** — canonical Player Profile, built directly against Phase 0's
-  permission functions.
+- **Phase 0 — permission foundation. Done.** Additive only — see the
+  `phase6a` migration row above. `club_admin` deliberately has no hardcoded
+  bypass in `has_staff_permission()` (per the Player Profile spec's "do not
+  simply make every administrator a superuser") — it gets a
+  `role_permission_defaults` bundle containing every staff permission
+  instead, same code path as everyone else.
+- **Phase 1 — canonical Player Profile. Done.** `src/components/player-profile/
+  PlayerProfile.tsx` is the one shared component (Overview / Development /
+  Fees / Membership / Family) now used by all three viewer routes — the
+  coach's `c/[clubSlug]/teams/[teamSlug]/players/[playerId]` page, `/player`
+  (self), and `/guardian` (per child) — replacing three independent
+  renderings. Reuses the existing Goals/Evaluations/Notes/Timeline/
+  ProfileForm/PlayerFees/PlayerMembership components as-is (imported from
+  their original location under the coach route rather than moved — they're
+  pure prop-driven client components with no route coupling, so this works
+  without changes; a future cleanup could relocate them but nothing requires
+  it). New: `Overview.tsx` (header + football/development/training snapshots
+  + recent activity) and `Family.tsx` (guardian list, read-only for player/
+  guardian viewers, full add/remove/invite for coach). Coach viewer's
+  permission flags come from `has_staff_permission()` (Phase 0) instead of
+  the old `canManage` computation; player/guardian viewers are read-only,
+  scoped by RLS rather than a configurable bundle. `development_goals`,
+  `player_evaluations`, `player_skill_ratings`, `player_development_notes`
+  RLS cut over to the new permission functions in the same pass (`phase6b`/
+  `phase6c` migration rows above) — verified live against the showcase data
+  (team-scoping, guardian/player visibility split, the player-visible-note
+  read gap fixed in `phase6c`) and `tests/rls/club-manager-isolation.test.ts`
+  stayed 21/21 throughout.
+
+  Two known gaps, deliberately not fixed here (out of scope for this phase):
+  `fee_charges`/`memberships`/`guardians` RLS is untouched, so the Fees/
+  Membership/Family tabs' edit controls are computed to match today's exact
+  behavior (`view_team` permission as a stand-in for the old `canManage`)
+  rather than the spec's tighter "coaches shouldn't see finances by
+  default" — deliberate, since tightening it now would be a silent UX
+  change without the matching RLS cutover a later phase should do together.
+  And `database.types.ts` predates `phase6a`/`phase6b`/`phase6c` — a full
+  regeneration surfaces ~85 unrelated pre-existing type errors elsewhere in
+  the app (trigger-derived `org_id` omitted from inserts, which the live
+  schema requires but this committed file doesn't), so `PlayerProfile.tsx`
+  casts narrowly at its one `has_staff_permission()` RPC call site instead;
+  regenerating this file for real is a separable cleanup task.
 - **Phase 2** — fill real gaps in existing sections (Membership tab, Family
   tab with per-guardian permissions, coach action-center dashboard).
 - **Phase 3** — tournament roster + guardian acknowledgement workflow
