@@ -423,8 +423,23 @@ feature at all yet — building it is in scope, not deferred. Phasing:
   all stayed clean; `database.types.ts` was hand-patched again rather than
   regenerated (this session's standing rule — see Phase 1's note above),
   adding just the `push_subscriptions` table and the two new functions.
-- **Phase 5b — in-app inbox.** Not started. Bell icon + notification list
-  reading what 5a now writes to `notifications`.
+- **Phase 5b — in-app inbox. Done.** `NotificationBell.tsx` in the global
+  nav (`layout.tsx`, rendered for any signed-in user — harmless for
+  roles nothing notifies yet, and matches `notifications_read_own`'s own
+  org_admin-sees-all clause) — unread-count badge, a dropdown reading
+  `getMyNotifications()` (a thin select relying entirely on the existing
+  RLS policy to scope rows, no explicit recipient filter needed),
+  mark-one-read on click (then navigates to `link_path` if set) and
+  mark-all-read, both optimistic-then-persisted via `notifications-
+  actions.ts`. Initial list is server-fetched once in the root layout so
+  the badge is correct on first paint; opening the dropdown refetches for
+  freshness. Verified live: inserted two real rows for the demo guardian
+  (one pre-read, one not) via direct SQL — since nothing writes to
+  `notifications` yet, that's still Phase 5c's job — confirmed the badge
+  count, the read/unread visual distinction, "Mark all read" updating the
+  database (re-queried directly, not just trusting the optimistic UI), and
+  the empty state on the player and coach personas; cleaned up the test
+  rows afterward. `tsc`/`build`/`tests/rls` (21/21) all stayed clean.
 - **Phase 5c — wire existing triggers.** Not started. Fees (`addFeeCharge`,
   `recordPayment`, `updateFeeChargeStatus`), development (`addGoal`,
   `addEvaluation`, `addNote`), movement (membership status transitions,

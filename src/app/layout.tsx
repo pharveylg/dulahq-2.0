@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server';
 import NavActions from './NavActions';
 import RegisterServiceWorker from './RegisterServiceWorker';
 import ThemeToggle, { ThemeInitScript } from './ThemeToggle';
+import NotificationBell from '@/components/NotificationBell';
+import { getMyNotifications } from '@/lib/notifications-actions';
 
 export const metadata: Metadata = {
   title: 'Dulà HQ — Club Manager',
@@ -35,6 +37,8 @@ export default async function RootLayout({
     dulaUser = await getCurrentDulaUser();
   }
 
+  const initialNotifications = authUser ? await getMyNotifications() : [];
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -63,6 +67,7 @@ export default async function RootLayout({
                   )}
                 </span>
               )}
+              {authUser && <NotificationBell initial={initialNotifications} />}
               <ThemeToggle />
               <NavActions signedIn={!!authUser} />
             </div>
