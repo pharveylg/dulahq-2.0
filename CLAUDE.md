@@ -285,9 +285,69 @@ reviewed before the next starts):
   notes) stayed out of scope — no match data exists in this app yet to
   timeline, and attendance is already the Overview tab's own "Training"
   snapshot rather than a timeline entry.
-- **Phase 3** — tournament roster + guardian acknowledgement workflow
-  end-to-end, in-app notifications only (no email — SMTP still isn't wired,
-  §8).
+- **Phase 3 — tournament roster + guardian acknowledgement. Done**, with two
+  deliberate simplifications. New "Tournaments" tab on the team page lists
+  the team's `tournament_entries` (entries themselves stay an org_admin
+  action — `phase6d`'s migration comment explains why registering a team is
+  gated more strictly than filling its roster); each entry opens
+  `RosterBuilder.tsx`, one "Submit Roster" action that:
+  1. Creates an `approval_requests` row (`status='awaiting'`) for any
+     selected minor (`requires_guardian_consent()`) without a live one for
+     this entry — adults skip straight to step 2.
+  2. Immediately calls `port_squad_to_tournament()` with the full
+     selection — adults and already-`approved` minors port right away; a
+     minor whose request was *just* created comes back `consent_missing`,
+     not an error, just not portable yet until the coach revisits once a
+     guardian has responded.
+
+  `port_squad_to_tournament()` (phase5b, 2026-09-07) hardcoded
+  `is_org_admin(entrant_org_id)` as its only authorization — a real gap
+  against the Coach Module spec's own "Finalize Roster" workflow, since
+  org_admin is a different person from the club's coach in practice.
+  `phase6d` extended it to also accept `has_staff_permission
+  ('finalize_tournament_roster', ...)` scoped to the entry's own
+  club_id/team_id — the exact permission `phase6a`'s catalog defined for
+  this, unused until now.
+
+  Guardian side: new "Tournaments" tab on `/guardian` (`GuardianTournaments.tsx`)
+  lists acknowledgement requests across every child in one flat list, with
+  confirm/decline inline (`decideAcknowledgement()` — decline requires a
+  reason, matching `approval_requests`' own check constraint). No email —
+  guardians see requests only by visiting the app (SMTP still isn't wired,
+  §8); `notifications` table rows aren't created for this either, since
+  nothing yet reads them and `approval_requests` is already the
+  authoritative, directly-queried source for the guardian's own list.
+
+  Export: TXT only (client-side blob download, no new dependency) —
+  PDF deferred, no library installed yet.
+
+  Simplification #1: the spec's separate Fill → Request-acknowledgement →
+  Finalize steps collapse into one "Submit Roster" action, because there's
+  nowhere to persist an in-progress "coach selected but not yet submitted"
+  candidate list (no draft-roster table exists, and adding one was out of
+  scope) — every page visit reconstructs state from what's actually
+  persisted (`approval_requests` + `tournament_roster`), and an adult
+  candidate with neither yet simply isn't selected by default, no data loss
+  since nothing was ever recorded for them.
+
+  Simplification #2: no roster versioning (v1 submitted / v2 updated / v3
+  finalized) — a `tournament_roster` row is final the moment it's created;
+  there's no "unfinalize" or edit-after-port path, matching the spec's own
+  "if changes are required after finalization, require an authorized
+  roster update process" as something to build later, not assumed here.
+
+  Verified live end-to-end against the showcase data (`npm run build`
+  clean, `tests/rls` stays 21/21): a coach submitted two adult candidates,
+  one ported immediately, the other (a genuine seed-data edge case — a
+  17-year-old the age-generation helper had placed on an *adult* team, with
+  no guardian on file at all since adult teams don't seed guardians) came
+  back `consent_missing` with no guardian to notify. Added a real guardian
+  for that player (Rosario Ignacio — kept permanently rather than deleted,
+  since it fixes a genuine gap rather than being pure test residue), then
+  walked the full cycle: coach submits → guardian sees exactly one pending
+  item on `/guardian`'s Tournaments tab → confirms → coach revisits, sees
+  "Guardian approved", resubmits → player ports into the final 16-player
+  roster.
 - **Phase 4** — audit logging on the sensitive actions across all of the
   above.
 

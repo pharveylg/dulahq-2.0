@@ -110,6 +110,23 @@ export default async function TeamRosterPage({
     attendanceTaken: s.attendance?.[0]?.count ?? 0,
   }));
 
+  const { data: entryRows } = await supabase
+    .from('tournament_entries')
+    .select('id, status, team_name, category_id, tournament_categories(name), tournament_id, tournaments(name, slug, event_date), tournament_roster(id)')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false });
+
+  const tournamentEntries = (entryRows ?? []).map((e: any) => ({
+    id: e.id,
+    status: e.status,
+    teamName: e.team_name,
+    categoryName: e.tournament_categories?.name ?? null,
+    tournamentName: e.tournaments?.name ?? 'Tournament',
+    tournamentSlug: e.tournaments?.slug ?? null,
+    eventDate: e.tournaments?.event_date ?? null,
+    rosterCount: (e.tournament_roster ?? []).length,
+  }));
+
   return (
     <main className="page">
       <div className="container">
@@ -143,6 +160,7 @@ export default async function TeamRosterPage({
           teamSlug={teamSlug}
           players={rosterPlayers}
           sessions={trainingSessions}
+          entries={tournamentEntries}
           canManage={canManage}
           canManageFees={canManageFees}
         />

@@ -7,13 +7,16 @@ import Reveal from '@/components/motion/Reveal';
 import AddPlayerForm from './AddPlayerForm';
 import PlayerDetailPanel from './PlayerDetailPanel';
 import TrainingSessions from './TrainingSessions';
+import TeamTournaments from './TeamTournaments';
 
 type Player = Parameters<typeof PlayerDetailPanel>[0]['player'];
 type Session = Parameters<typeof TrainingSessions>[0]['sessions'][number];
+type Entry = Parameters<typeof TeamTournaments>[0]['entries'][number];
 
 const TOP_TABS = [
   { id: 'roster', label: 'Roster' },
   { id: 'training', label: 'Training' },
+  { id: 'tournaments', label: 'Tournaments' },
 ];
 
 export default function TeamRosterTabs({
@@ -23,6 +26,7 @@ export default function TeamRosterTabs({
   teamSlug,
   players,
   sessions,
+  entries,
   canManage,
   canManageFees,
 }: {
@@ -32,6 +36,7 @@ export default function TeamRosterTabs({
   teamSlug: string;
   players: Player[];
   sessions: Session[];
+  entries: Entry[];
   canManage: boolean;
   canManageFees: boolean;
 }) {
@@ -42,7 +47,11 @@ export default function TeamRosterTabs({
   return (
     <div>
       <Tabs
-        tabs={TOP_TABS.map((t) => t.id === 'training' ? { ...t, badge: sessions.filter((s) => s.status === 'scheduled').length } : t)}
+        tabs={TOP_TABS.map((t) => {
+          if (t.id === 'training') return { ...t, badge: sessions.filter((s) => s.status === 'scheduled').length };
+          if (t.id === 'tournaments') return { ...t, badge: entries.length };
+          return t;
+        })}
         active={topTab}
         onChange={setTopTab}
         layoutId="team-top-tabs"
@@ -90,6 +99,10 @@ export default function TeamRosterTabs({
 
       {topTab === 'training' && (
         <TrainingSessions clubId={clubId} teamId={teamId} clubSlug={clubSlug} teamSlug={teamSlug} sessions={sessions} canManage={canManage} />
+      )}
+
+      {topTab === 'tournaments' && (
+        <TeamTournaments clubSlug={clubSlug} teamSlug={teamSlug} entries={entries} />
       )}
     </div>
   );
