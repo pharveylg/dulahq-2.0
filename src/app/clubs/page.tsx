@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient, getCurrentDulaUser, getClubCreatableOrgs, isPlatformAdmin } from '@/lib/supabase/server';
+import { createClient, getCurrentDulaUser, getClubCreatableOrgs, isPlatformAdmin, getMyOrgProductAccess } from '@/lib/supabase/server';
 import DemoDataControls from './DemoDataControls';
 import ClubList from './ClubList';
 import PublicClubList from './PublicClubList';
@@ -64,6 +64,19 @@ export default async function ClubsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return <GuestClubsPage />;
 
+  // A signed-in user whose org(s) have no club entitlement at all gets the
+  // same guest directory a signed-out visitor sees, per the homepage's own
+  // "View as guest ->" link on a disabled Clubs tile -- that link has to
+  // actually land somewhere real, not the empty/access-denied staff console.
+  // Platform admin is exempt: RLS already grants them every club regardless
+  // of any org's entitlements, so this check would otherwise wrongly bounce
+  // them (they typically belong to no org at all).
+  const platformAdmin = await isPlatformAdmin();
+  if (!platformAdmin) {
+    const access = await getMyOrgProductAccess();
+    if (!access.club) return <GuestClubsPage />;
+  }
+
   const dulaUser = await getCurrentDulaUser();
 
   // clubs' own RLS ("clubs readable within org") already scopes this list
@@ -78,7 +91,6 @@ export default async function ClubsPage() {
   // public.users.role check, which knows nothing about orgs.
   const canCreateClub = (await getClubCreatableOrgs()).length > 0;
 
-  const platformAdmin = await isPlatformAdmin();
   const { data: demoOrg } = platformAdmin
     ? await supabase.from('organizations').select('id').eq('slug', 'dula-demo').maybeSingle()
     : { data: null };

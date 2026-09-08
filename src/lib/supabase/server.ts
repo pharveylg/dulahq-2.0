@@ -203,6 +203,69 @@ export async function getAssignedTeamIds(): Promise<string[]> {
   return data ?? [];
 }
 
+export type OrgProductAccess = {
+  /** True if ANY org this session belongs to has the club entitlement. */
+  club: boolean;
+  /** True if ANY org this session belongs to has the tournament entitlement. */
+  tournament: boolean;
+  /**
+   * Org slug to send a "Tournaments" click to (the proxied Tournament
+   * Manager app takes it from there, per-tournament picker included) --
+   * the first org among this session's own that actually has the
+   * entitlement. A person in more than one qualifying org has no
+   * dashboard-side way to choose here yet; this picks one rather than
+   * blocking on a picker that doesn't exist.
+   */
+  tournamentOrgSlug: string | null;
+};
+
+/**
+ * What the home page (and /clubs' guest-vs-console branch) needs to know
+ * about a signed-in session: not "is this person staff anywhere" but
+ * "does ANY org they belong to have this product at all" -- the same
+ * org_has_product() gate the database enforces on writes, read here so the
+ * UI doesn't offer a tile RLS would then refuse. Union across every org
+ * they're in, not just one -- someone in two orgs where only one bought
+ * tournaments should still see it.
+ *
+ * current_user_org_ids() alone is NOT enough here: it only reads
+ * role_assignments and org_members, so a club_admin/coach/team_manager/
+ * staff person whose only grant is a club_staff row (no org_members row at
+ * all -- the common case; verified live, every demo club-staff persona
+ * except the org admin is exactly this) would show zero orgs and wrongly
+ * fall back to the public directory instead of their real Clubs tile.
+ * club_staff carries its own org_id directly, so it's unioned in here too.
+ */
+export async function getMyOrgProductAccess(): Promise<OrgProductAccess> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { club: false, tournament: false, tournamentOrgSlug: null };
+
+  const [{ data: rpcOrgIds }, { data: staffRows }] = await Promise.all([
+    supabase.rpc('current_user_org_ids'),
+    supabase.from('club_staff').select('org_id').eq('user_id', user.id),
+  ]);
+  const orgIds = [
+    ...new Set([...(rpcOrgIds ?? []), ...(staffRows ?? []).map((r) => r.org_id).filter((id): id is string => !!id)]),
+  ];
+  if (orgIds.length === 0) return { club: false, tournament: false, tournamentOrgSlug: null };
+
+  const { data: rows } = await supabase
+    .from('org_entitlements')
+    .select('product, status, organizations(slug)')
+    .in('org_id', orgIds)
+    .in('status', ['active', 'trial']);
+
+  const club = (rows ?? []).some((r) => r.product === 'club');
+  const tournamentRow = (rows ?? []).find((r) => r.product === 'tournament');
+
+  return {
+    club,
+    tournament: !!tournamentRow,
+    tournamentOrgSlug: (tournamentRow?.organizations as any)?.slug ?? null,
+  };
+}
+
 /**
  * Completes a guardian's self-claim (RBAC Phase 3) for the CURRENT
  * session, if one is pending: creates their public.users row if it
