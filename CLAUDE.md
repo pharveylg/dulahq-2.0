@@ -488,9 +488,49 @@ feature at all yet — building it is in scope, not deferred. Phasing:
   fee payment; the guardian's bell showed both, `notifications.sent_at`/
   `read_at` behaved correctly) and cleaned up the test rows afterward.
   `tsc`/`build`/`tests/rls` (21/21) all stayed clean throughout.
-- **Phase 5d — documents feature.** Not started. `document_uploads` exists
-  as a table only — zero application code references it anywhere except
-  generated types. Build upload/list/review UI, then wire notifications.
+- **Phase 5d — documents feature. Done.** `document_uploads` existed as a
+  table only (zero application code, per this doc's own earlier note) with
+  RLS that predated Phase 0's permission catalog — write was
+  `can_admin_club()` only (club_admin exclusively, even though
+  `role_permission_defaults` already seeded `manage_documents` for both
+  club_admin AND staff, unused until now), and read let any guardian/
+  player-self through unconditionally with no per-relationship gate
+  (every other player-scoped table already cut over to
+  `has_guardian_permission()` in phase6b/6c). `phase6h` migration cuts it
+  over to the catalog entries Phase 0 already defined for this
+  (`view_documents` on the guardian side, `manage_documents` on the staff
+  side) — found and fixed as part of building the feature, same as
+  Phase 5c's real bug, not a hypothetical.
+
+  New "Documents" tab on the canonical `PlayerProfile.tsx` (6th tab,
+  alongside Overview/Development/Fees/Membership/Family — the spec's own
+  data model lists Documents as a peer of Membership/Fees/Guardians, not
+  nested under one of them). `src/components/player-profile/Documents.tsx`
+  + `documents-actions.ts`: `uploadDocument()` reads a real `File` from
+  `FormData` (`file.arrayBuffer()` → base64 into `file_data`, matching the
+  column's existing inline-storage design — no blob storage added), capped
+  at 8MB; `reviewDocument()` sets approved/rejected + a note (rejection
+  requires one) and records `reviewed_by`/`reviewed_by_role` from the
+  caller's own `users` row; `deleteDocument()` removes a mistake. Both
+  upload and review call `notifyAboutPlayer()` (`document.uploaded`,
+  `document.reviewed`). Only club_admin/staff (`manage_documents`) can
+  upload or review; players/guardians get a read-only status list — matches
+  the RLS write policy exactly, and matches the spec's own "Registration —
+  Complete / Tournament Waiver — Missing" status-tracking model rather than
+  a self-service family upload flow (nothing in the spec or the existing
+  write policy supports guardians uploading their own documents).
+
+  Verified live: RLS write policy confirmed directly via SQL impersonation
+  (a club_admin's insert matching what `uploadDocument()` produces
+  succeeds) since the sandboxed preview browser can't drive a native file
+  picker to exercise the upload form's own click-through — inserted that
+  row for real, then drove the rest of the flow through the actual UI: the
+  Documents tab listed it with a pending badge, "Approve" flipped it to
+  Approved and cleared the badge, and the guardian's notification bell
+  received `document.reviewed`. Confirmed the guardian/player view renders
+  read-only (no upload/approve/reject controls) and the empty state
+  renders correctly. Cleaned up the test row afterward. `tsc`/`build`/
+  `tests/rls` (21/21) all stayed clean.
 - **Phase 5e — movement, travel half.** Not started. Hook into
   `trips`/`trip_passengers`; also check whether a "move player between
   teams" action exists at all — it may need to be built from scratch.
