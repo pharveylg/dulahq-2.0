@@ -1332,3 +1332,135 @@ describe('bugs found while verifying the P0 batch live (phase6z1/6z2)', () => {
     expect(data ?? []).toHaveLength(0);
   });
 });
+
+/**
+ * Club entitlement P1 batch (docs/club-entitlement-gap-analysis.md).
+ */
+describe('club_staff_directory includes the caller\'s own row even without can_read_club (phase7c)', () => {
+  it('a plain coach sees their OWN name, not just everyone else\'s', async () => {
+    const { data, error } = await coachA1Client.rpc('club_staff_directory', { p_club_id: clubA.id });
+    expect(error).toBeNull();
+    const own = (data ?? []).find((d: any) => d.user_id === coachA1UserId);
+    expect(own?.name).toBeTruthy();
+    // and still cannot see a teammate's row via this same call, since they
+    // don't hold can_read_club -- only the self branch let them through.
+    expect((data ?? []).length).toBe(1);
+  });
+});
+
+describe('staff_profiles (P1-7)', () => {
+  let profileClubStaffId: string;
+
+  it('finds the coach\'s own club_staff row', async () => {
+    const row = must(await adminClient.from('club_staff').select('id')
+      .eq('club_id', clubA.id).eq('user_id', coachA1UserId).single(), 'coach club_staff row');
+    profileClubStaffId = row.id;
+  });
+
+  it('the coach CAN write their own profile', async () => {
+    const { error } = await coachA1Client.from('staff_profiles').upsert({
+      club_staff_id: profileClubStaffId, club_id: clubA.id, org_id: orgA.id,
+      phone: '0900-000-0000', bio: 'Test bio',
+    });
+    expect(error).toBeNull();
+  });
+
+  it('a DIFFERENT coach CANNOT write into it', async () => {
+    const { error } = await teamManagerA1Client
+      .from('staff_profiles')
+      .update({ bio: 'hacked' })
+      .eq('club_staff_id', profileClubStaffId);
+    // RLS filters rather than raising on UPDATE with no matching row visible
+    // for write -- confirm nothing actually changed.
+    const row = must(await adminClient.from('staff_profiles').select('bio')
+      .eq('club_staff_id', profileClubStaffId).single(), 'profile after attempted hack');
+    expect(row.bio).toBe('Test bio');
+    expect(error).toBeNull();
+  });
+
+  it('the club manager CAN write someone else\'s profile (the can_admin_club fallback)', async () => {
+    const { error } = await clubAdminAClient.from('staff_profiles').upsert({
+      club_staff_id: profileClubStaffId, club_id: clubA.id, org_id: orgA.id, bio: 'Set by manager',
+    });
+    expect(error).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('staff_profiles').delete().eq('club_staff_id', profileClubStaffId);
+  });
+});
+
+describe('staff_holding_permission (P1-8)', () => {
+  it('resolves the coach and team_manager, who both hold finalize_tournament_roster', async () => {
+    const { data, error } = await adminClient.rpc('staff_holding_permission', {
+      p_club_id: clubA.id, p_permission_key: 'finalize_tournament_roster', p_team_id: teamA1.id,
+    });
+    expect(error).toBeNull();
+    expect(data).toEqual(expect.arrayContaining([coachA1UserId, teamManagerA1UserId]));
+  });
+
+  it('does not resolve a coach assigned to a different team', async () => {
+    const { data } = await adminClient.rpc('staff_holding_permission', {
+      p_club_id: clubA.id, p_permission_key: 'finalize_tournament_roster', p_team_id: teamA2.id,
+    });
+    expect(data ?? []).not.toContain(coachA1UserId);
+  });
+});
+
+describe('set_staff_account_status (P1-11)', () => {
+  it('a plain coach CANNOT suspend anyone (lacks manage_account_status)', async () => {
+    const { error } = await coachA1Client.rpc('set_staff_account_status', {
+      p_club_id: clubA.id, p_target_user_id: teamManagerA1UserId, p_status: 'suspended',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('nobody can change their own status', async () => {
+    const { error } = await clubAdminAClient.rpc('set_staff_account_status', {
+      p_club_id: clubA.id, p_target_user_id: clubAdminAUserId, p_status: 'suspended',
+    });
+    expect(error).not.toBeNull();
+  });
+});
+
+describe('support_requests (P1-10)', () => {
+  let requestId: string;
+
+  it('the club manager CAN file a request', async () => {
+    const { data, error } = await clubAdminAClient.from('support_requests').insert({
+      org_id: orgA.id, created_by: clubAdminAUserId, category: 'bug', subject: 'RLS test', body: 'testing',
+    }).select('id').single();
+    expect(error).toBeNull();
+    requestId = data!.id;
+  });
+
+  it('a plain coach CANNOT file one (lacks submit_support_request)', async () => {
+    const { error } = await coachA1Client.from('support_requests').insert({
+      org_id: orgA.id, created_by: coachA1UserId, category: 'bug', subject: 'should fail', body: 'testing',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('a club_manager at a DIFFERENT org cannot see it', async () => {
+    const { data } = await clubStaffBClient.from('support_requests').select('id').eq('id', requestId);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('the creator can reply to their own request', async () => {
+    const { error } = await clubAdminAClient.from('support_request_messages').insert({
+      request_id: requestId, author_user_id: clubAdminAUserId, body: 'follow-up',
+    });
+    expect(error).toBeNull();
+  });
+
+  it('a club_manager cannot change the request status -- platform-owned', async () => {
+    const { error } = await clubAdminAClient.from('support_requests').update({ status: 'resolved' }).eq('id', requestId);
+    const row = must(await adminClient.from('support_requests').select('status').eq('id', requestId).single(), 'status after attempted client edit');
+    expect(row.status).toBe('open');
+    expect(error).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('support_requests').delete().eq('id', requestId);
+  });
+});

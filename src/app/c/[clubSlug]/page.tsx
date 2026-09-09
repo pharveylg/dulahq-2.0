@@ -8,7 +8,6 @@ import StaffRow from './StaffRow';
 import Trips from './Trips';
 import Announcements from './Announcements';
 import MediaGallery from './MediaGallery';
-import ClubDashboardStats from './ClubDashboardStats';
 import ActionCenter from './ActionCenter';
 import ClubPageTabs from './ClubPageTabs';
 import Finances from './Finances';
@@ -16,6 +15,7 @@ import Reports from './Reports';
 import Meetings from './Meetings';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
 import { parseClubBranding, resolveLogoKey } from '@/lib/club-branding';
+import { computeAttendancePct } from '@/lib/attendance-stats';
 
 /**
  * Guest overview (§6.C) for a signed-out visitor. Only public_clubs (the
@@ -103,9 +103,10 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   // The IT surface is permission-gated, not role-gated: a club_it_admin gets
   // there via impersonate_user, a club_manager via view_audit_log oversight.
   const supabaseForPerms = await createClient();
-  const [{ data: canImpersonate }, { data: canViewAudit }] = await Promise.all([
+  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canSubmitSupport }] = await Promise.all([
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'submit_support_request', p_club_id: clubId }),
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
 
@@ -128,6 +129,28 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const directoryByUser = new Map((directoryRows ?? []).map((d) => [d.user_id, d]));
   const activeStaffRows = (staffRows ?? []).filter((s) => s.status === 'active');
+
+  // P1-7 (gap analysis §1): staff_profiles, one row per club_staff.id.
+  // Photo URLs are resolved server-side per request, same reasoning as
+  // media/branding above -- R2 objects aren't public and a signed URL
+  // expires in an hour, so there's nothing worth caching.
+  const staffIds = activeStaffRows.map((s) => s.id);
+  const { data: profileRows } = staffIds.length
+    ? await supabase.from('staff_profiles').select('club_staff_id, phone, bio, photo_key, certifications').in('club_staff_id', staffIds)
+    : { data: [] };
+  const profileByStaffId = new Map(
+    await Promise.all(
+      (profileRows ?? []).map(async (p) => [
+        p.club_staff_id,
+        {
+          phone: p.phone,
+          bio: p.bio,
+          photoUrl: p.photo_key ? await getDownloadUrl(p.photo_key) : null,
+          certifications: (p.certifications as any[]) ?? [],
+        },
+      ] as const)
+    )
+  );
   const archivedStaffRows = (staffRows ?? []).filter((s) => s.status !== 'active');
 
   const { data: clubTeams } = await supabase
@@ -259,9 +282,6 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           .in('training_sessions.team_id', teamIds)
           .gte('training_sessions.starts_at', thirtyDaysAgo)
       : { data: [] };
-    const eligibleAttendance = (attendanceRows ?? []).filter((a) => !['injured', 'suspended'].includes(a.status));
-    const attendedCount = eligibleAttendance.filter((a) => a.status === 'present' || a.status === 'late').length;
-
     dashboard = {
       playerCount: playerIds.length,
       pendingInvites: (inviteRows ?? []).map((r: any) => ({
@@ -272,7 +292,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
       playersWithoutEvaluation: playerIds.filter((id) => !evaluatedPlayerIds.has(id)).length,
       activeGoals: (goalRows ?? []).filter((g) => !['achieved', 'archived'].includes(g.status)).length,
       goalsNeedingAttention: (goalRows ?? []).filter((g) => g.status === 'needs_attention').length,
-      attendancePct30d: eligibleAttendance.length ? Math.round((attendedCount / eligibleAttendance.length) * 100) : null,
+      attendancePct30d: computeAttendancePct(attendanceRows ?? []),
     };
   }
 
@@ -377,16 +397,15 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
       .map((team) => {
         const teamPlayerIds = new Set(playersByTeam.get(team.id) ?? []);
         const teamAttendance = (acAttendanceRows ?? []).filter(
-          (a: any) => a.training_sessions?.team_id === team.id && !['injured', 'suspended'].includes(a.status)
+          (a: any) => a.training_sessions?.team_id === team.id
         );
-        const teamAttended = teamAttendance.filter((a: any) => a.status === 'present' || a.status === 'late').length;
         const teamGoals = goalsByTeam.get(team.id) ?? [];
         return {
           teamId: team.id,
           teamSlug: team.slug,
           teamName: team.name,
           playerCount: teamPlayerIds.size,
-          attendancePct: teamAttendance.length ? Math.round((teamAttended / teamAttendance.length) * 100) : null,
+          attendancePct: computeAttendancePct(teamAttendance),
           activeGoals: teamGoals.filter((g: any) => !['achieved', 'archived'].includes(g.status)).length,
           goalsNeedingAttention: teamGoals.filter((g: any) => g.status === 'needs_attention').length,
         };
@@ -498,14 +517,13 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
     const teams = (clubTeams ?? []).map((t) => {
       const teamPlayerIds = new Set(playerIdsByTeam.get(t.id) ?? []);
-      const teamAttendance = (reportAttendance ?? []).filter((a: any) => teamPlayerIds.has(a.player_id) && !['injured', 'suspended'].includes(a.status));
-      const teamAttended = teamAttendance.filter((a: any) => a.status === 'present' || a.status === 'late').length;
+      const teamAttendance = (reportAttendance ?? []).filter((a: any) => teamPlayerIds.has(a.player_id));
       const teamGoals = (reportGoals ?? []).filter((g) => teamPlayerIds.has(g.player_id));
       return {
         teamId: t.id,
         teamName: t.name,
         playerCount: teamPlayerIds.size,
-        attendancePct: teamAttendance.length ? Math.round((teamAttended / teamAttendance.length) * 100) : null,
+        attendancePct: computeAttendancePct(teamAttendance),
         evaluationsCount: (reportEvaluations ?? []).filter((e) => teamPlayerIds.has(e.player_id)).length,
         activeGoals: teamGoals.filter((g) => !['achieved', 'archived'].includes(g.status)).length,
         goalsNeedingAttention: teamGoals.filter((g) => g.status === 'needs_attention').length,
@@ -592,10 +610,15 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
               IT administration →
             </Link>
           )}
+          {!!canSubmitSupport && (
+            <Link href={`/c/${club.slug}/support`} className="btn" style={{ textDecoration: 'none' }}>
+              Support →
+            </Link>
+          )}
         </div>
 
         <ClubPageTabs
-          hasDashboard={!!dashboard || !!actionCenter}
+          hasDashboard={!!actionCenter}
           counts={{
             teams: clubTeams?.length ?? 0,
             staff: staffRows?.length ?? 0,
@@ -604,24 +627,14 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             photos: mediaItems.length,
             meetings: meetings.length,
           }}
-          dashboardSlot={(dashboard || actionCenter) && (
-            <>
-              {actionCenter && (
-                <ActionCenter
-                  clubSlug={club.slug}
-                  todaySessions={actionCenter.todaySessions}
-                  upcomingSessions={actionCenter.upcomingSessions}
-                  actionItems={actionCenter.actionItems}
-                  teamSnapshots={actionCenter.teamSnapshots}
-                />
-              )}
-              {dashboard && (
-                <div style={{ marginTop: actionCenter ? 28 : 0 }}>
-                  {actionCenter && <div className="section-label">Club-wide</div>}
-                  <ClubDashboardStats teamCount={clubTeams?.length ?? 0} staffCount={staffRows?.length ?? 0} dashboard={dashboard} />
-                </div>
-              )}
-            </>
+          dashboardSlot={actionCenter && (
+            <ActionCenter
+              clubSlug={club.slug}
+              todaySessions={actionCenter.todaySessions}
+              upcomingSessions={actionCenter.upcomingSessions}
+              actionItems={actionCenter.actionItems}
+              teamSnapshots={actionCenter.teamSnapshots}
+            />
           )}
           teamsSlot={
             <>
@@ -671,6 +684,8 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                       assignedTeams={assignedTeamsByUser.get(s.user_id) ?? []}
                       teamsWithPrimary={[...teamsWithPrimary]}
                       canManageStaff={canManage}
+                      profile={profileByStaffId.get(s.id) ?? null}
+                      isSelf={s.user_id === user.id}
                     />
                   );
                 })}
@@ -711,7 +726,13 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             <Finances clubId={club.id} feeCharges={financesData.feeCharges} expenses={financesData.expenses} canManage={canManageFinances} />
           )}
           reportsSlot={reportsData && (
-            <Reports teams={reportsData.teams} financials={reportsData.financials} />
+            <Reports
+              teams={reportsData.teams}
+              financials={reportsData.financials}
+              dashboard={dashboard}
+              teamCount={clubTeams?.length ?? 0}
+              staffCount={activeStaffRows.length}
+            />
           )}
           meetingsSlot={
             <>

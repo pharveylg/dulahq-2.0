@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import ViewAsPanel, { type AccessReadout } from './ViewAsPanel';
+import AccountStatusPanel from './AccountStatusPanel';
 
 /**
  * IT administration (Club Admin spec §24). Deliberately a separate route
@@ -17,12 +18,13 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
   const { data: club } = await supabase.from('clubs').select('id, name, slug').eq('slug', clubSlug).maybeSingle();
   if (!club) notFound();
 
-  const [{ data: canImpersonate }, { data: canViewAudit }] = await Promise.all([
+  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canManageAccountStatus }] = await Promise.all([
     supabase.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: club.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: club.id }),
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_account_status', p_club_id: club.id }),
   ]);
 
-  if (!canImpersonate && !canViewAudit) notFound();
+  if (!canImpersonate && !canViewAudit && !canManageAccountStatus) notFound();
 
   const { data: directoryRows } = await supabase.rpc('it_club_directory', { p_club_id: club.id });
   const { data: activeRows } = await supabase.rpc('my_active_impersonation');
@@ -80,6 +82,7 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
     name: d.name,
     email: d.email,
     role: d.role,
+    status: d.status,
     isPlatformAdmin: d.is_platform_admin,
   }));
 
@@ -128,6 +131,13 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
             );
           })}
         </div>
+
+        {canManageAccountStatus && (
+          <>
+            <div className="section-label" style={{ marginTop: 28 }}>Accounts</div>
+            <AccountStatusPanel clubId={club.id} accounts={directory.filter((d) => d.userId !== dulaUser.id)} />
+          </>
+        )}
 
         {canViewAudit && (
           <>

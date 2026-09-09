@@ -603,6 +603,16 @@ carry forward into Tournament scoping.
 
 **P1 — Important before entitlement expansion.**
 
+> **Status (2026-09-09): 7, 8, 9, 10, 11, 12 done — see CLAUDE.md §0k (and
+> §0j for #9, which landed as part of the P0-6 settings work).** #13 is
+> deliberately held for the Tournament/org-hierarchy pass, per the user's
+> own direction that IT's scoping question belongs together with that
+> redesign rather than fixed in isolation now. Verifying #7 live caught a
+> real regression in §0j's own P0-1 fix (`club_staff_directory()` had
+> dropped the self-visibility branch its base policy always had); verifying
+> #10 caught a silent FK/embedding bug matching the RETURNING-trap pattern
+> from Phase 5c. RLS suite: 87 → 103.
+
 | # | Problem | Owner | Proposed capability | Shared or Club-specific | Permission impact | Tournament impact | Replaces/consolidates |
 |---|---|---|---|---|---|---|---|
 | 7 | No staff profile beyond name/email/role; no photo, phone, bio, or qualifications | Product + Engineering | A role-specific profile record (photo, phone, short bio, certifications) layered on `club_staff`, not duplicating `users` | Club-specific | None new | A qualifications record is exactly what a Tournament official profile will also want — design the shape to be reused, not to be Club-only by construction | New capability; no existing flow to replace |

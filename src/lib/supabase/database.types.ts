@@ -2918,6 +2918,61 @@ export type Database = {
           },
         ]
       }
+      staff_profiles: {
+        Row: {
+          club_staff_id: string
+          club_id: string
+          org_id: string
+          phone: string | null
+          bio: string | null
+          photo_key: string | null
+          certifications: Json
+          updated_at: string
+        }
+        Insert: {
+          club_staff_id: string
+          club_id: string
+          org_id: string
+          phone?: string | null
+          bio?: string | null
+          photo_key?: string | null
+          certifications?: Json
+          updated_at?: string
+        }
+        Update: {
+          club_staff_id?: string
+          club_id?: string
+          org_id?: string
+          phone?: string | null
+          bio?: string | null
+          photo_key?: string | null
+          certifications?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_profiles_club_staff_id_fkey"
+            columns: ["club_staff_id"]
+            isOneToOne: true
+            referencedRelation: "club_staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_profiles_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_profiles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sports: {
         Row: {
           created_at: string
@@ -3036,6 +3091,88 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "permissions"
             referencedColumns: ["key"]
+          },
+        ]
+      }
+      support_requests: {
+        Row: {
+          id: string
+          org_id: string
+          created_by: string
+          category: string
+          subject: string
+          body: string
+          status: string
+          affected_entity_type: string | null
+          affected_entity_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          created_by: string
+          category: string
+          subject: string
+          body: string
+          status?: string
+          affected_entity_type?: string | null
+          affected_entity_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          created_by?: string
+          category?: string
+          subject?: string
+          body?: string
+          status?: string
+          affected_entity_type?: string | null
+          affected_entity_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_request_messages: {
+        Row: {
+          id: string
+          request_id: string
+          author_user_id: string
+          body: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          request_id: string
+          author_user_id: string
+          body: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          request_id?: string
+          author_user_id?: string
+          body?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_request_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "support_requests"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -4329,8 +4466,17 @@ export type Database = {
           name: string | null
           email: string | null
           role: string
+          status: string
           is_platform_admin: boolean
         }[]
+      }
+      staff_holding_permission: {
+        Args: { p_club_id: string; p_permission_key: string; p_team_id?: string | null }
+        Returns: string[]
+      }
+      set_staff_account_status: {
+        Args: { p_club_id: string; p_target_user_id: string; p_status: string }
+        Returns: undefined
       }
       club_audit_log: {
         Args: { p_club_id: string }

@@ -39,3 +39,22 @@ export async function endViewAs(sessionId: string) {
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
+
+/**
+ * P1-11 (gap analysis): a reversible, IT-owned security lockout
+ * (active <-> suspended), deliberately separate from the club manager's
+ * "Remove" (active -> archived, permanent -- phase6z). Every guard lives in
+ * set_staff_account_status() itself: the permission check, the self-action
+ * refusal, and the "archived is not reversible from here" rule.
+ */
+export async function setStaffAccountStatus(clubId: string, targetUserId: string, status: 'active' | 'suspended') {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('set_staff_account_status', {
+    p_club_id: clubId,
+    p_target_user_id: targetUserId,
+    p_status: status,
+  });
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/c/[clubSlug]', 'layout');
+  return { success: true };
+}

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { notifyStaff } from '@/lib/notify';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -45,6 +46,37 @@ export async function decideAcknowledgement(approvalRequestId: string, decision:
     p_entity_id: approvalRequestId,
     p_after: { decision, player_id: updated.player_id, entry_id: updated.subject_id, decline_reason: declineReason ?? null },
   });
+
+  // P1-8 (gap analysis §5): a decline is the one outcome here a coach or
+  // team manager actually needs to know about right away -- an approval
+  // sits fine until they next open the roster; a decline means whoever
+  // they were counting on can't play, and previously they'd only find out
+  // by happening to check. Club-less entries (entrant_org_id with no
+  // club_id) have no club staff to notify at all -- skipped, not an error.
+  if (decision === 'declined') {
+    const { data: entry } = await supabase
+      .from('tournament_entries')
+      .select('club_id, team_id, clubs(slug), teams(slug)')
+      .eq('id', updated.subject_id)
+      .maybeSingle();
+    if (entry?.club_id && entry?.team_id && updated.player_id) {
+      const { data: player } = await supabase.from('players').select('name').eq('id', updated.player_id).maybeSingle();
+      const clubSlug = (entry as any).clubs?.slug;
+      const teamSlug = (entry as any).teams?.slug;
+      await notifyStaff({
+        clubId: entry.club_id,
+        orgId: updated.org_id,
+        permissionKey: 'finalize_tournament_roster',
+        teamId: entry.team_id,
+        template: 'tournament_roster.acknowledgement_declined',
+        payload: {
+          title: 'Guardian declined tournament roster',
+          body: `${player?.name ?? 'A player'}'s guardian declined — ${declineReason?.trim() ?? ''}`,
+        },
+        linkPath: clubSlug && teamSlug ? `/c/${clubSlug}/teams/${teamSlug}/tournaments/${updated.subject_id}` : undefined,
+      });
+    }
+  }
 
   revalidatePath('/guardian', 'layout');
   return { success: true };

@@ -2,12 +2,21 @@
 
 import { useState, useTransition } from 'react';
 import { removeStaff, assignStaffToTeam, unassignStaffFromTeam, setTeamPrimaryCoach } from './actions';
+import { upsertMyStaffProfile } from './staff-profile-actions';
 
 type Staff = {
   id: string;
   role: string;
   user_id: string;
   users: { name: string | null; email: string } | null;
+};
+
+type Certification = { name: string; issuer: string; expiresOn: string | null };
+type StaffProfile = {
+  phone: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  certifications: Certification[];
 };
 
 type Team = { id: string; name: string };
@@ -18,6 +27,94 @@ type Assignment = { teamId: string; isPrimary: boolean };
 // reached. It belongs on this list.
 const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager'];
 
+/**
+ * P1-7 (gap analysis §1): self-editable phone/bio/photo/certifications,
+ * layered on club_staff without duplicating anything users/club_staff
+ * already own. Read-only for everyone viewing someone else's row; the edit
+ * form only appears on the viewer's own row (isSelf).
+ */
+function ProfileEditor({ clubId, staffId, profile }: { clubId: string; staffId: string; profile: StaffProfile | null }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [certs, setCerts] = useState<Certification[]>(profile?.certifications ?? []);
+  const [certName, setCertName] = useState('');
+  const [certIssuer, setCertIssuer] = useState('');
+  const [certExpires, setCertExpires] = useState('');
+
+  function addCert() {
+    if (!certName.trim()) return;
+    setCerts((c) => [...c, { name: certName.trim(), issuer: certIssuer.trim(), expiresOn: certExpires || null }]);
+    setCertName('');
+    setCertIssuer('');
+    setCertExpires('');
+  }
+
+  function removeCert(i: number) {
+    setCerts((c) => c.filter((_, idx) => idx !== i));
+  }
+
+  function handleSave(formData: FormData) {
+    setError(null);
+    formData.set('certifications', JSON.stringify(certs));
+    startTransition(async () => {
+      const result = await upsertMyStaffProfile(clubId, formData);
+      if (result?.error) setError(result.error);
+      else setEditing(false);
+    });
+  }
+
+  if (!editing) {
+    return (
+      <button className="btn" style={{ fontSize: 11.5 }} onClick={() => setEditing(true)}>
+        {profile ? 'Edit my profile' : 'Add my profile'}
+      </button>
+    );
+  }
+
+  return (
+    <form action={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {profile?.photoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={profile.photoUrl} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }} />
+        )}
+        <input name="photo" type="file" accept="image/jpeg,image/png,image/webp" style={{ fontSize: 12 }} />
+      </div>
+      <input name="phone" placeholder="Phone" defaultValue={profile?.phone ?? ''} style={{ fontSize: 12.5 }} />
+      <textarea name="bio" placeholder="Short bio" defaultValue={profile?.bio ?? ''} rows={2} style={{ fontSize: 12.5, resize: 'vertical' }} />
+
+      <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Certifications</div>
+      {certs.map((c, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+          <span style={{ flex: 1 }}>
+            {c.name}{c.issuer ? ` — ${c.issuer}` : ''}{c.expiresOn ? ` (expires ${c.expiresOn})` : ''}
+          </span>
+          <button type="button" onClick={() => removeCert(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+            ×
+          </button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <input placeholder="Name" value={certName} onChange={(e) => setCertName(e.target.value)} style={{ fontSize: 12, flex: '1 1 100px' }} />
+        <input placeholder="Issuer" value={certIssuer} onChange={(e) => setCertIssuer(e.target.value)} style={{ fontSize: 12, flex: '1 1 90px' }} />
+        <input type="date" value={certExpires} onChange={(e) => setCertExpires(e.target.value)} style={{ fontSize: 12, flex: '1 1 100px' }} />
+        <button type="button" className="btn" style={{ fontSize: 11 }} onClick={addCert}>Add</button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="submit" className="btn btn-primary" disabled={pending} style={{ fontSize: 12 }}>
+          {pending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => setEditing(false)} disabled={pending}>
+          Cancel
+        </button>
+      </div>
+      {error && <span className="error-text">{error}</span>}
+    </form>
+  );
+}
+
 export default function StaffRow({
   clubId,
   staff,
@@ -25,6 +122,8 @@ export default function StaffRow({
   assignedTeams: assignments,
   teamsWithPrimary,
   canManageStaff,
+  profile,
+  isSelf,
 }: {
   clubId: string;
   staff: Staff;
@@ -32,6 +131,8 @@ export default function StaffRow({
   assignedTeams: Assignment[];
   teamsWithPrimary: string[];
   canManageStaff: boolean;
+  profile?: StaffProfile | null;
+  isSelf?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -82,9 +183,18 @@ export default function StaffRow({
   return (
     <div className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div className="list-row-main">
-          <div className="list-row-title">{staff.users?.name ?? staff.users?.email ?? 'Unknown'}</div>
-          <div className="list-row-meta">{staff.users?.email}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {profile?.photoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.photoUrl} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }} />
+          )}
+          <div className="list-row-main">
+            <div className="list-row-title">{staff.users?.name ?? staff.users?.email ?? 'Unknown'}</div>
+            <div className="list-row-meta">
+              {staff.users?.email}
+              {profile?.phone ? ` · ${profile.phone}` : ''}
+            </div>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={`chip chip-${staff.role}`}>{staff.role}</span>
@@ -93,6 +203,22 @@ export default function StaffRow({
           </button>
         </div>
       </div>
+
+      {profile?.bio && <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 0 2px' }}>{profile.bio}</p>}
+      {profile && profile.certifications.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginLeft: 2 }}>
+          {profile.certifications.map((c, i) => (
+            <span key={i} className="chip" style={{ fontSize: 10.5 }} title={c.expiresOn ? `Expires ${c.expiresOn}` : undefined}>
+              {c.name}{c.issuer ? ` (${c.issuer})` : ''}
+            </span>
+          ))}
+        </div>
+      )}
+      {isSelf && (
+        <div style={{ marginLeft: 2 }}>
+          <ProfileEditor clubId={clubId} staffId={staff.id} profile={profile ?? null} />
+        </div>
+      )}
 
       {needsTeamAssignment && (
         <div style={{ paddingLeft: 2 }}>

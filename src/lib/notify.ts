@@ -138,6 +138,65 @@ export async function notifyAboutPlayer({ playerId, template, payload, linkPath,
   return { notified: targets.length };
 }
 
+export type NotifyStaffInput = {
+  clubId: string;
+  orgId: string;
+  /** A staff permission key (permissions.category='staff') -- resolved via
+   *  staff_holding_permission(), the same eligibility logic
+   *  has_staff_permission() uses, just enumerating everyone who holds it
+   *  instead of checking one caller. */
+  permissionKey: string;
+  /** Narrows a team-scope permission to one team's assigned staff (still
+   *  club-wide staff too, e.g. club_manager) -- omit for a club-scope key. */
+  teamId?: string;
+  template: string;
+  payload: Record<string, unknown> & { title: string; body: string };
+  linkPath?: string;
+};
+
+/**
+ * P1-8 (gap analysis §5): the staff-facing counterpart to
+ * notifyAboutPlayer() -- nothing before this could tell a coach or team
+ * manager anything at all; the only inbound channel was reading
+ * Announcements on the chance they thought to look. Resolves recipients
+ * via staff_holding_permission() rather than iterating club_staff and
+ * calling has_staff_permission() once per row -- that function is keyed to
+ * auth.uid(), so it can only ever answer "does the *caller* hold this",
+ * never "does person X".
+ */
+export async function notifyStaff({ clubId, orgId, permissionKey, teamId, template, payload, linkPath }: NotifyStaffInput) {
+  const supabase = await createClient();
+
+  const { data: recipientIds, error: resolveError } = await supabase.rpc('staff_holding_permission', {
+    p_club_id: clubId,
+    p_permission_key: permissionKey,
+    p_team_id: teamId ?? null,
+  });
+  if (resolveError) {
+    console.error('notifyStaff: staff_holding_permission failed', resolveError);
+    return { notified: 0 };
+  }
+
+  for (const userId of recipientIds ?? []) {
+    const { data: notificationId, error } = await supabase.rpc('create_notification', {
+      p_org_id: orgId,
+      p_recipient_user_id: userId,
+      p_recipient_guardian_id: null,
+      p_channel: 'in_app',
+      p_template: template,
+      p_payload: payload as unknown as Record<string, string | number | boolean | null>,
+      p_link_path: linkPath ?? null,
+    });
+    if (error) {
+      console.error('notifyStaff: create_notification failed', error);
+      continue;
+    }
+    await sendPush(orgId, userId, payload.title, payload.body, linkPath, notificationId ?? undefined);
+  }
+
+  return { notified: (recipientIds ?? []).length };
+}
+
 async function sendPush(orgId: string, userId: string, title: string, body: string, linkPath: string | undefined, notificationRowId: string | undefined) {
   ensureVapid();
   if (!vapidConfigured) return;

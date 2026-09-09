@@ -1272,6 +1272,120 @@ same limitation recorded in §0f) rather than through the UI.
 
 ---
 
+## 0k. Club entitlement P1 batch (2026-09-09)
+
+Five of the seven P1 items from `docs/club-entitlement-gap-analysis.md`
+(7, 8, 10, 11, 12 — #9 was already covered by §0j's P0-6 settings work; #13,
+IT's club-scoping, is deliberately held for the Tournament/org-hierarchy pass
+per the user's own framing: "it will always be org then club/tournament").
+Same pattern as every phase before it: verifying each item live surfaced
+real bugs beyond the original scope.
+
+### P1-11 — IT-owned suspend/reactivate, separate from the Manager's archive
+
+`manage_account_status` (club_it_admin only) plus `set_staff_account_status()`
+toggling `active` ↔ `suspended` — deliberately not touching `archived`, which
+stays the club_manager's permanent, business-owned call (§0j). Both already
+collapse to "not active" everywhere `has_staff_permission` and friends check
+status, so no further authorization changes were needed; `it_club_directory()`
+widened to include `suspended` (not just `active`) so there's something to
+reactivate, still excluding `archived` — nothing to view-as or reactivate for
+someone who's actually gone. New "Accounts" section on the IT page. Verified
+live: suspended a staff member as the IT admin, watched their audit-visible
+status flip and the button relabel to "Reactivate", reactivated them back.
+
+### P1-7 — staff profiles (phone, bio, photo, certifications)
+
+`staff_profiles`, keyed 1:1 on `club_staff.id` (not `user_id` — the same
+person coaching at two clubs plausibly wants different info on file at each).
+Self-service by default (`staff_profiles_write`'s RLS: self OR
+`can_admin_club`), photo through R2 (`shared/files/lib/r2`, new `'profile'`
+category) same as the club logo. StaffRow.tsx shows read-only bio/phone/certs
+for everyone, an edit form only on the viewer's own row.
+
+**Found live:** routing every staff-name lookup through `club_staff_directory()`
+(§0j's own P0-1 fix) regressed a coach's ability to see *their own* name —
+the RPC was gated on `can_read_club()` alone, dropping the self-branch
+`club_staff_read`'s base policy always had. Fixed in `phase7c` by adding
+`or cs.user_id = auth.uid()` back. A fix built to close one gap silently
+opened a narrower one; caught only because P1-7 exercised a plain coach's own
+row, which §0j's own verification hadn't happened to.
+
+### P1-8 — staff notifications, real trigger wired
+
+`staff_holding_permission(club_id, permission_key, team_id?)` — mirrors
+`has_staff_permission`'s eligibility logic but enumerates every active staff
+member holding it rather than checking one caller (deliberately a parallel
+function, not `has_staff_permission` with a bolted-on target-user parameter —
+that function is keyed to `auth.uid()` at six call sites since `phase6z`, and
+overloading it risked one of them silently taking the wrong branch).
+`notifyStaff()` in `notify.ts` is the staff-facing counterpart to
+`notifyAboutPlayer()`. Wired to one real trigger: a guardian **declining** a
+tournament roster acknowledgement now notifies whoever holds
+`finalize_tournament_roster` for that team — approving can wait until the
+coach next opens the roster; a decline is exactly the thing they previously
+only found out about by happening to check. Verified live end-to-end: Mylene
+Bautista declined Angelica's Copa Gali acknowledgement with a reason; both
+Rodrigo (coach) and Benigno (team manager) got real notification rows with a
+working `link_path` straight to the roster.
+
+### P1-10 — a real support/escalation path to Platform Admin
+
+`support_requests` + `support_request_messages`, keyed on `org_id` alone —
+deliberately no `club_id` column, so a Tournament-only org needs zero schema
+changes to use the identical path once that entitlement exists. New
+`submit_support_request` permission (club_manager + club_it_admin).
+Eligibility has no club_id of its own to check against, so the RLS evaluates
+"holds the permission at *some* club in this org" by joining every club the
+caller staffs — the only nontrivial predicate in the whole feature. New
+`/c/[clubSlug]/support` (file, reply) and a "Support" tab in
+`/platformconsole` (status transitions, reply) — status is platform-owned
+once filed; the org side follows up via messages, never by editing the
+ticket.
+
+**Found live:** the platform console's queue silently rendered "no requests"
+for an org that had just filed one. `created_by`/`author_user_id` referenced
+`auth.users(id)`, not `public.users(id)` — the convention every other
+user-referencing FK in this schema follows specifically because
+`auth.users` isn't exposed to PostgREST's embedding, so
+`users!created_by(name, email)` had no relationship to find, and the page's
+own `{ data: requests }` destructure never checked `error` to surface it —
+the exact silent-failure shape Phase 5c's RETURNING trap and others have hit
+before. Fixed the FKs in `phase7f`, and added the missing error check so this
+failure mode can't hide again.
+
+### P1-12 — three dashboards down to two, one attendance formula
+
+`ClubDashboardStats.tsx` deleted; its tile grid folded into `Reports.tsx` as
+a "Club-wide" section shown only when the caller's own `dashboard` data
+exists (unchanged permission boundary — `staff`-role viewers who reach
+Reports via `canManageFinances` but aren't `club_manager` simply get `null`
+there, same as before). `ActionCenter` stays separate — action-first "what do
+I need to do today" is a genuinely different job from Reports' after-the-fact
+visibility. `src/lib/attendance-stats.ts`'s `computeAttendancePct()` replaces
+three independently-written copies of the same exclude-injured/suspended,
+count-present-or-late, round-to-percent formula (the club-wide dashboard,
+`ActionCenter`'s per-team snapshots, `Reports`' own per-team table) — the
+underlying queries genuinely can't merge (different audiences see different
+team sets), but the arithmetic had no reason to be copied three times.
+Verified live: Teams/Players/Staff tiles read 3/34/7 correctly inside Reports,
+Overview now shows only `ActionCenter`.
+
+### Verified
+
+RLS suite 87 → **103**. Every item driven live through the real UI (as the
+relevant persona, not just at the database) with a browser-automation
+limitation worth recording: this session's tab intermittently failed to
+propagate real click events after several dev-server restarts (clicks
+registered a screen coordinate but never reached React's handlers, and
+`AnimatedNumber`'s `useInView` never fired in a stale 0×0-viewport tab) —
+worked around by opening a fresh tab and, where clicks still didn't land,
+dispatching them via `element.click()` directly. Noted here rather than
+silently switched to SQL-only verification, since every item in this batch
+did get a real end-to-end pass once the workaround was in place.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |
