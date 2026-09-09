@@ -1,0 +1,432 @@
+<title>Club Entitlement Gap Analysis</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --paper:#f5f2ea;
+    --paper-raised:#ffffff;
+    --ink:#181c17;
+    --ink-soft:#4a4f47;
+    --line:#ddd7c7;
+    --line-strong:#c8c0ac;
+    --pitch:#1f6b4a;
+    --pitch-soft:#e4efe7;
+    --pitch-strong:#123f2c;
+    --p0:#9c3b2c; --p0-soft:#f6e2dc; --p0-strong:#6f2a1f;
+    --p1:#a5701a; --p1-soft:#f6ecd8; --p1-strong:#7a5312;
+    --p2:#375a78; --p2-soft:#e4ecf1; --p2-strong:#233d52;
+    --defer:#6a6a5f; --defer-soft:#eae7dd; --defer-strong:#4a4a41;
+    --mono-bg:#ece7d9;
+    --shadow: 0 1px 2px rgba(20,20,15,.06), 0 8px 24px -12px rgba(20,20,15,.12);
+    --font-display:'Fraunces', Georgia, 'Times New Roman', serif;
+    --font-body:'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+    --font-mono:'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#151814; --paper-raised:#1d211b; --ink:#eae6da; --ink-soft:#a9a698;
+      --line:#33372e; --line-strong:#454a3d;
+      --pitch:#4bbf8c; --pitch-soft:#173026; --pitch-strong:#8fe0bb;
+      --p0:#e4796a; --p0-soft:#2c1815; --p0-strong:#f4a598;
+      --p1:#d9a24f; --p1-soft:#2b2214; --p1-strong:#eec688;
+      --p2:#7fa8c9; --p2-soft:#182530; --p2-strong:#aecbe2;
+      --defer:#a3a091; --defer-soft:#26261f; --defer-strong:#c7c4b6;
+      --mono-bg:#22261f;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#151814; --paper-raised:#1d211b; --ink:#eae6da; --ink-soft:#a9a698;
+    --line:#33372e; --line-strong:#454a3d;
+    --pitch:#4bbf8c; --pitch-soft:#173026; --pitch-strong:#8fe0bb;
+    --p0:#e4796a; --p0-soft:#2c1815; --p0-strong:#f4a598;
+    --p1:#d9a24f; --p1-soft:#2b2214; --p1-strong:#eec688;
+    --p2:#7fa8c9; --p2-soft:#182530; --p2-strong:#aecbe2;
+    --defer:#a3a091; --defer-soft:#26261f; --defer-strong:#c7c4b6;
+    --mono-bg:#22261f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--paper); color:var(--ink); font-family:var(--font-body); line-height:1.55;}
+  h1,h2,h3{font-family:var(--font-display); font-weight:600; text-wrap:balance; color:var(--ink);}
+  code, .mono{font-family:var(--font-mono); font-size:.92em;}
+  a{color:var(--pitch);}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 24px 96px;}
+
+  .hero{
+    border-bottom:1px solid var(--line);
+    padding:56px 0 36px;
+    margin-bottom:8px;
+  }
+  .eyebrow{font-family:var(--font-mono); font-size:12px; letter-spacing:.06em; color:var(--pitch-strong); text-transform:uppercase; margin-bottom:10px;}
+  .hero h1{font-size:clamp(30px,4vw,44px); margin:0 0 12px; line-height:1.08;}
+  .hero p.lede{font-size:16.5px; color:var(--ink-soft); max-width:680px; margin:0 0 20px;}
+  .meta-row{display:flex; gap:10px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
+  .meta-chip{border:1px solid var(--line-strong); border-radius:100px; padding:4px 12px; background:var(--paper-raised);}
+
+  .bundles{margin-top:28px; overflow-x:auto;}
+  .bundles table{border-collapse:collapse; font-size:13px; min-width:520px;}
+  .bundles th, .bundles td{padding:7px 16px 7px 0; text-align:left; border-bottom:1px solid var(--line);}
+  .bundles th{font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); font-weight:500;}
+  .bundles td.num{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+
+  .layout{display:grid; grid-template-columns:220px 1fr; gap:48px; align-items:start; margin-top:20px;}
+  @media (max-width:860px){ .layout{grid-template-columns:1fr;} }
+
+  nav.toc{position:sticky; top:24px; font-size:13.5px;}
+  nav.toc .toc-label{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:10px;}
+  nav.toc ol{list-style:none; margin:0; padding:0; border-left:1px solid var(--line);}
+  nav.toc li{margin:0;}
+  nav.toc a{display:block; padding:6px 0 6px 14px; color:var(--ink-soft); text-decoration:none; border-left:2px solid transparent; margin-left:-1px;}
+  nav.toc a:hover{color:var(--ink); border-left-color:var(--line-strong);}
+  nav.toc .toc-extra a{color:var(--pitch-strong); font-weight:500;}
+  @media (max-width:860px){
+    nav.toc{position:static; margin-bottom:8px;}
+    nav.toc ol{display:none;}
+    nav.toc details[open] ol{display:block; margin-top:10px;}
+    nav.toc summary{cursor:pointer; font-family:var(--font-mono); font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft);}
+  }
+
+  main section{margin-bottom:52px; scroll-margin-top:20px;}
+  main section h2{font-size:23px; display:flex; align-items:baseline; gap:10px; margin:0 0 6px;}
+  main section h2 .num{font-family:var(--font-mono); font-size:14px; color:var(--pitch-strong); font-weight:500;}
+  main section > p.dek{color:var(--ink-soft); font-size:13.5px; margin:0 0 18px;}
+  main p{margin:0 0 14px; max-width:74ch;}
+  main strong{font-weight:600;}
+
+  .card{background:var(--paper-raised); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin:16px 0; box-shadow:var(--shadow);}
+  .card h4{font-family:var(--font-body); font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:0 0 8px; font-weight:600;}
+  .card.finding{border-left:3px solid var(--p0); }
+  .card.finding h4{color:var(--p0-strong);}
+
+  .tag-row{display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 4px;}
+  .tag{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 11px; border-radius:100px; white-space:nowrap;}
+  .tag.p0{background:var(--p0-soft); color:var(--p0-strong);}
+  .tag.p1{background:var(--p1-soft); color:var(--p1-strong);}
+  .tag.p2{background:var(--p2-soft); color:var(--p2-strong);}
+  .tag.defer{background:var(--defer-soft); color:var(--defer-strong);}
+  .tag.shared{background:var(--pitch-soft); color:var(--pitch-strong);}
+
+  .verdict{margin:18px 0; padding-left:16px; border-left:2px solid var(--line-strong);}
+  .verdict > div{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6px;}
+
+  .table-wrap{overflow-x:auto; margin:18px 0; border:1px solid var(--line); border-radius:10px;}
+  table.matrix{width:100%; border-collapse:collapse; font-size:13px; min-width:920px;}
+  table.matrix caption{text-align:left; padding:12px 16px; font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); background:var(--mono-bg); border-bottom:1px solid var(--line);}
+  table.matrix th{background:var(--mono-bg); text-align:left; font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); font-weight:500; padding:10px 14px; border-bottom:1px solid var(--line); position:sticky; top:0;}
+  table.matrix td{padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--ink);}
+  table.matrix tr:last-child td{border-bottom:none;}
+  table.matrix td.n{font-family:var(--font-mono); color:var(--ink-soft); width:28px;}
+  table.matrix td.badge-cell{white-space:nowrap;}
+
+  .divider{border:none; border-top:1px solid var(--line); margin:44px 0;}
+
+  .closer{background:var(--pitch-soft); border:1px solid var(--pitch); border-radius:12px; padding:26px 28px; margin-top:12px;}
+  .closer h3{color:var(--pitch-strong); font-size:19px; margin:0 0 10px;}
+  .closer ol{margin:0; padding-left:20px;}
+  .closer li{margin-bottom:10px;}
+
+  footer.doc-footer{margin-top:60px; padding-top:20px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-soft);}
+</style>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Dulà HQ — Internal Engineering Review</div>
+    <h1>Club Entitlement Gap Analysis</h1>
+    <p class="lede">A section-by-section audit of the Club entitlement against the live schema, permission catalog, and application code — prepared as the baseline before scoping the Tournament entitlement and the combined Club + Tournament entitlement.</p>
+    <div class="meta-row">
+      <span class="meta-chip">Prepared 2026-09-09</span>
+      <span class="meta-chip">Project <code class="mono">zytyakbgwaegvftblkcn</code></span>
+      <span class="meta-chip">13 areas reviewed</span>
+      <span class="meta-chip">25 recommendations</span>
+    </div>
+
+    <div class="bundles">
+      <table>
+        <thead><tr><th>Role</th><th>Permission count</th></tr></thead>
+        <tbody>
+          <tr><td>club_manager</td><td class="num">19</td></tr>
+          <tr><td>coach</td><td class="num">19</td></tr>
+          <tr><td>team_manager</td><td class="num">17</td></tr>
+          <tr><td>staff</td><td class="num">9</td></tr>
+          <tr><td>assistant_coach</td><td class="num">7</td></tr>
+          <tr><td>secretary</td><td class="num">6</td></tr>
+          <tr><td>treasurer</td><td class="num">5</td></tr>
+          <tr><td>club_it_admin</td><td class="num">2</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <p style="max-width:74ch; color:var(--ink-soft); font-size:13.5px; margin:20px 0 0;">Every claim below was checked directly against the live schema, permission catalog, and application code — not against prior documentation, which this exercise treats as a starting hypothesis rather than ground truth. Where a table exists but is empty, or a permission key exists but no code reads it, that is stated explicitly: "the schema has a column for it" and "the feature exists" are different claims.</p>
+
+  <div class="layout">
+    <nav class="toc">
+      <details open>
+      <summary>Contents</summary>
+      <div class="toc-label" style="display:none;">Contents</div>
+      <ol>
+        <li><a href="#s1">1. Member profiles</a></li>
+        <li><a href="#s2">2. Identity &amp; branding</a></li>
+        <li><a href="#s3">3. Org chart</a></li>
+        <li><a href="#s4">4. Membership lifecycle</a></li>
+        <li><a href="#s5">5. Communication</a></li>
+        <li><a href="#s6">6. Directory</a></li>
+        <li><a href="#s7">7. Documents &amp; records</a></li>
+        <li><a href="#s8">8. Settings</a></li>
+        <li><a href="#s9">9. Reporting</a></li>
+        <li><a href="#s10">10. Audit &amp; accountability</a></li>
+        <li><a href="#s11">11. IT capability</a></li>
+        <li><a href="#s12">12. Platform Admin support</a></li>
+        <li><a href="#s13">13. Cross-cutting &amp; Tournament risk</a></li>
+      </ol>
+      <ol class="toc-extra" style="border-left:1px solid var(--line); margin-top:2px;">
+        <li><a href="#priority">Prioritized recommendations</a></li>
+        <li><a href="#before">Before Tournament</a></li>
+      </ol>
+      </details>
+    </nav>
+
+    <main>
+
+      <section id="s1">
+        <h2><span class="num">01</span> Organization member profiles</h2>
+        <p><strong>What exists.</strong> <code class="mono">club_staff</code> is <code class="mono">(club_id, user_id, role, created_at, updated_at, created_by, org_id)</code> — no profile fields at all. <code class="mono">users</code> is <code class="mono">(id, name, email, role, linked_referee_id, created_at)</code>. That is the entire staff-facing data model: a name, an email, a role string. Contrast <code class="mono">players</code>, which has <code class="mono">photo_url</code>, <code class="mono">notes</code>, <code class="mono">dob</code>, <code class="mono">preferred_foot</code>, <code class="mono">development_status</code>, and a full six-tab canonical profile. There is no equivalent for a coach, team manager, treasurer, secretary, or club manager — not a stub, nothing.</p>
+
+        <div class="card finding">
+          <h4>Orphaned second staff table</h4>
+          <p style="margin:0;">A second staff table, <code class="mono">team_staff</code> — <code class="mono">(id, team_id, name, role, role_other, phone, org_id)</code> — has no <code class="mono">user_id</code> at all, so it can't participate in RLS, permissions, or assignment. It has <strong>zero rows</strong> and zero code references outside generated types. It predates <code class="mono">club_staff</code> + <code class="mono">user_assigned_teams</code> and was never retired.</p>
+        </div>
+
+        <p><strong>Committee Heads</strong> cannot exist as a role at all — the <code class="mono">club_staff.role</code> CHECK permits exactly eight roles, none of them committee-shaped, and there is no <code class="mono">committees</code> table anywhere.</p>
+
+        <div class="tag-row"><span class="tag p1">P1 — missing</span><span class="tag defer">team_staff — remove</span><span class="tag defer">Committees — defer</span></div>
+
+        <p style="margin-top:18px;"><strong>The account / membership / profile split:</strong> account (<code class="mono">users</code>: name, email, auth) is already correct. Org membership (<code class="mono">club_staff</code> + <code class="mono">user_assigned_teams</code>) covers role, team assignment, and primary-coach designation — but not status (§4) or a considered join date. A role-specific profile — photo, phone, bio, certifications with expiry — is genuinely new; nothing today is even a weak substitute.</p>
+      </section>
+
+      <section id="s2">
+        <h2><span class="num">02</span> Club identity and branding</h2>
+        <p><code class="mono">clubs.branding jsonb</code>, <code class="mono">clubs.settings jsonb</code>, <code class="mono">clubs.about text</code>, and <code class="mono">clubs.location text</code> exist. In the live data, <code class="mono">branding</code>/<code class="mono">settings</code> are <code class="mono">{}</code> on every club, while <code class="mono">about</code>/<code class="mono">location</code> hold real prose — written directly by the seed script, not through any UI. The <strong>only</strong> club-editing surface in the app is a rename form. There is no club logo field, and no team logo/badge column at all.</p>
+
+        <div class="card finding">
+          <h4>Branding precedence is undefined</h4>
+          <p style="margin:0;"><code class="mono">organizations</code> carries its own <code class="mono">logo_url</code>/<code class="mono">accent</code>, used today only by the platform-admin org list. The showcase data already has two orgs each owning two clubs — "the org has a logo, the club has none, which one prints on a roster export" is the live shape today, not a hypothetical. <code class="mono">RosterBuilder.tsx</code>'s TXT export already prints an unbranded header.</p>
+        </div>
+
+        <div class="tag-row"><span class="tag p0">P0 — missing UI</span><span class="tag p1">P1 — precedence rule, resolve before Tournament</span></div>
+      </section>
+
+      <section id="s3">
+        <h2><span class="num">03</span> Organization structure / org chart</h2>
+        <p>Nothing visual exists. The relationships are real and queryable — team assignment, primary-coach designation, functional role, effective permission — but nothing renders them as a structure. The Staff tab is a flat list with inline team chips; it does not show a team's chain or the club-wide functional roles as one picture.</p>
+        <p>The underlying data is now complete enough (post primary-coach work) that a chart is a <strong>read-only rendering problem</strong>, not a modeling problem — the same "derived, never a second dataset" pattern already used for roster state. Explicitly exclude players/guardians: this is a staff org chart, and folding families in would conflate "who runs this club" with "who is enrolled in it."</p>
+        <div class="tag-row"><span class="tag p2">P2 — missing, low risk</span></div>
+      </section>
+
+      <section id="s4">
+        <h2><span class="num">04</span> Organization membership lifecycle</h2>
+        <p>Three separate, incompatible lifecycles exist today — which is itself the finding:</p>
+        <div class="table-wrap">
+          <table class="matrix">
+            <thead><tr><th>Person type</th><th>Lifecycle today</th></tr></thead>
+            <tbody>
+              <tr><td>Guardian</td><td><code class="mono">account_status</code>: <code class="mono">active</code> / <code class="mono">no_account</code>, plus <code class="mono">invited_at</code>. A real, if minimal, state machine.</td></tr>
+              <tr><td>Player</td><td><code class="mono">memberships.status</code> exists — table has <strong>zero rows</strong>. No code path has actually exercised it, so its real vocabulary is unverified.</td></tr>
+              <tr><td>Staff</td><td><strong>Nothing.</strong> No status column. No invitation flow — a person must already hold an account. "Remove" is a hard <code class="mono">DELETE</code> from <code class="mono">club_staff</code>, which cascades away their assignment history too.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tag-row"><span class="tag p0">P0 — staff has no lifecycle, hard-deletes on removal</span></div>
+        <p>Per the request's own instruction not to build a separate flow per role, the shared shape should be <code class="mono">invited → active → suspended → archived</code>, with <code class="mono">archived</code> — never deletion — as the terminal state for anyone who held real data.</p>
+      </section>
+
+      <section id="s5">
+        <h2><span class="num">05</span> Communication and contactability</h2>
+        <p><code class="mono">Announcements.tsx</code> supports real audience targeting (<code class="mono">club, team, players, guardians, coaches, staff</code>). Guardians have a working notification path gated on a real per-relationship permission. Staff have none — nothing currently writes a staff-targeted notification row.</p>
+
+        <div class="card finding">
+          <h4>Three permissions gate nothing</h4>
+          <p style="margin:0;"><code class="mono">communicate_with_club</code>, <code class="mono">manage_availability</code>, and <code class="mono">manage_forms</code> are granted to <strong>every guardian by default</strong> and surfaced in the club admin's per-guardian permission grid — but none of the three strings appears anywhere in application code beyond the permission catalog itself. A club admin can "revoke" a capability that was never real in either direction. This is a currently false claim in the permission system, not a missing feature.</p>
+        </div>
+
+        <p>Separately, <code class="mono">announcement_reads</code> exists as a table and is referenced nowhere in application code — schema with no feature.</p>
+        <div class="tag-row"><span class="tag p0">P0 — dead permissions, fix now</span><span class="tag p1">P1 — staff notification resolver</span><span class="tag p2">P2 — wire announcement_reads</span></div>
+      </section>
+
+      <section id="s6">
+        <h2><span class="num">06</span> Organization directory</h2>
+        <p>The platform's only "directory" lists <em>organizations</em>, for the platform admin — not people, and not club-scoped. There is no club-wide staff, player, or guardian directory.</p>
+        <div class="card finding">
+          <h4>Confirmed live, not theoretical</h4>
+          <p style="margin:0;">Verifying the primary-coach UI as the club manager, <strong>every staff member except the signed-in viewer rendered as "Unknown"</strong> with a blank email. The joined <code class="mono">users(name, email)</code> query is emptied by <code class="mono">public.users</code>'s own self-row-only SELECT policy for everyone but the caller. The club manager — who owns this data — could not read their own staff's names.</p>
+        </div>
+        <div class="tag-row"><span class="tag p0">P0 — confirmed regression</span><span class="tag p2">P2 — club-wide directory once fixed</span></div>
+        <p>Fix path: a narrow <code class="mono">club_staff_directory()</code> RPC mirroring the IT role's already-established <code class="mono">it_club_directory()</code> pattern — not a broad widening of <code class="mono">public.users</code>' policy.</p>
+      </section>
+
+      <section id="s7">
+        <h2><span class="num">07</span> Documents, qualifications, organizational records</h2>
+        <p><code class="mono">document_uploads</code> is a mature, working feature for <strong>player-scoped</strong> documents — categories, role-gated writes, guardian/player read-only visibility. This should not be duplicated. It is, however, entirely player-centric: nowhere for coach certifications, club policy documents, or any staff-facing document.</p>
+        <div class="tag-row"><span class="tag p2">P2 — staff qualifications</span><span class="tag defer">Defer — club policy docs</span></div>
+        <p><strong>The clearest build-once-reuse-for-Tournament opportunity in this whole review:</strong> extend <code class="mono">document_uploads</code> with a nullable <code class="mono">subject_type</code> (<code class="mono">player</code> / <code class="mono">staff</code>, later <code class="mono">club</code>) and matching <code class="mono">subject_id</code>, rather than a parallel table — and rather than Tournament inventing its own entrant-eligibility-documents table later.</p>
+      </section>
+
+      <section id="s8">
+        <h2><span class="num">08</span> Operational settings and configuration</h2>
+        <p>Club Manager's entire settings surface is renaming the club — confirmed by reading the form directly. <code class="mono">clubs.settings jsonb</code> is <code class="mono">{}</code> everywhere and unread by any code. Club Admin (IT) has exactly two capabilities: start a "view as" session, and a permission check that is never actually consumed (see §10).</p>
+        <div class="tag-row"><span class="tag p1">P1 — settings surface is one field wide</span></div>
+        <p>Building IT settings nobody asked for "because the role exists" is exactly the anti-pattern to avoid — no integrations, API keys, or email infrastructure exist yet to administer.</p>
+      </section>
+
+      <section id="s9">
+        <h2><span class="num">09</span> Reporting and organization visibility</h2>
+        <p>The entire reporting surface is one tab: attendance %, development counts per team, and one club-wide financial summary. No staff, membership, communications, or org-activity report exists.</p>
+        <div class="card finding">
+          <h4>Three dashboards, one calculation duplicated</h4>
+          <p style="margin:0;"><code class="mono">ActionCenter</code>, <code class="mono">ClubDashboardStats</code>, and the <code class="mono">Reports</code> tab are three separate dashboard-shaped surfaces with fuzzy boundaries. <code class="mono">ActionCenter</code> and <code class="mono">Reports</code> both compute a per-team attendance percentage independently — nothing shares that math.</p>
+        </div>
+        <div class="tag-row"><span class="tag p1">P1 — consolidate dashboards</span><span class="tag p2">P2 — new report types</span></div>
+      </section>
+
+      <section id="s10">
+        <h2><span class="num">10</span> Audit, history, and accountability</h2>
+        <p><code class="mono">write_audit()</code> is used consistently for guardian relationship/permission changes, tournament acknowledgement and roster actions, player team transfer, and primary-coach designation — a real, append-only, no-UPDATE/DELETE-for-anyone log. This part is genuinely good.</p>
+        <div class="card finding">
+          <h4>Two confirmed gaps, not inferred</h4>
+          <p style="margin:0 0 10px;">Grepping <code class="mono">actions.ts</code> for staff add/remove/team-(re)assignment finds <strong>zero</strong> <code class="mono">write_audit</code> calls. Combined with §4's hard delete, a club's entire staffing history can vanish with no record it happened.</p>
+          <p style="margin:0;"><code class="mono">view_audit_log</code> is granted to <code class="mono">club_manager</code> and <code class="mono">club_it_admin</code> — and nobody who holds it can see an audit entry anywhere. The IT page checks the permission only to decide whether to show its "view as" panel, which is a different feature entirely.</p>
+        </div>
+        <div class="tag-row"><span class="tag p0">P0 — audit the 4 missing call sites</span><span class="tag p0">P0 — build the audit view</span><span class="tag p2">P2 — verify financial-action coverage</span></div>
+      </section>
+
+      <section id="s11">
+        <h2><span class="num">11</span> Club Admin / IT capability</h2>
+        <p>Exactly two permissions exist: view-as, and the unconsumed audit permission. The "view as" tool itself is well-built — a genuine inspection session, not a takeover; the actor's own identity stays attached to every audit record.</p>
+        <p>Absent: account deactivation, MFA (none exists to administer), session management beyond view-as's own bookkeeping, integrations, email infrastructure, domains, API keys, security monitoring beyond raw audit rows, and any escalation to Platform Admin.</p>
+        <div class="tag-row">
+          <span class="tag p0">P0 — audit view, directory fix</span>
+          <span class="tag p1">P1 — account deactivation</span>
+          <span class="tag defer">Defer — MFA, integrations, API keys, domains</span>
+        </div>
+        <div class="card finding">
+          <h4>A foundational collision with the next phase</h4>
+          <p style="margin:0;">IT administration is <strong>entirely <code class="mono">club_id</code>-scoped</strong>. An org with the Tournament entitlement and no Club entitlement has no club, and therefore <strong>no IT admin capability of any kind is reachable for it.</strong> See §13.</p>
+        </div>
+      </section>
+
+      <section id="s12">
+        <h2><span class="num">12</span> Organization → Platform Admin support</h2>
+        <p>Nothing exists — no ticket table, no status field, no escalation path, confirmed by exhaustive search. <code class="mono">impersonation_sessions</code> is a related but distinct mechanism and should not be stretched into a support ticket.</p>
+        <div class="tag-row"><span class="tag p1">P1 — missing, not blocking</span><span class="tag shared">Shared platform capability</span></div>
+        <p>Scope as <code class="mono">support_requests</code> + <code class="mono">support_request_messages</code>, generic over <code class="mono">org_id</code> from day one, so it needs zero changes when Tournament-only orgs exist. Reuse <code class="mono">start_impersonation()</code>'s pattern for "request temporary access" rather than building a second mechanism.</p>
+      </section>
+
+      <section id="s13">
+        <h2><span class="num">13</span> Cross-cutting gaps &amp; Tournament collision risk</h2>
+        <p>Per the request's explicit ask: where today's Club-only design will actively fight the Tournament entitlement if left unaddressed.</p>
+
+        <div class="verdict">
+          <div>Highest-priority finding in the review</div>
+          <p style="margin:0;"><strong>IT administration is club-scoped and therefore unreachable for a Tournament-only org</strong> (§11). <code class="mono">is_org_admin()</code> already exists and is club-independent — the likely fix is extending IT authority to key off org-level authority with club scoping as a narrowing, not a requirement. This should be decided deliberately now, not discovered mid-build the way the team-assignment bug was discovered mid-fix in the prior phase.</p>
+        </div>
+
+        <div class="verdict">
+          <div>Second-highest risk</div>
+          <p style="margin:0;">The role/permission model (<code class="mono">has_staff_permission</code>, scope ∈ {club, team}) is Club-shaped by construction. Tournament already has its own, separate staffing concept (<code class="mono">org_officials</code>, <code class="mono">tournament_officials</code>, <code class="mono">referees</code>) for the unrewritten Tournament Manager app. <strong>The risk isn't that these compete today — it's defining a new Tournament role model from scratch instead of extending <code class="mono">permissions.scope</code> with a <code class="mono">tournament</code>/<code class="mono">entry</code> value and reusing the existing machinery.</strong> Answer this first in the Tournament scoping pass, before any Tournament-specific tables are added.</p>
+        </div>
+
+        <p>Also flagged: the documents <code class="mono">subject_type</code> extension (§7) should land now specifically because Tournament will be its second consumer; club-vs-org branding precedence (§2) needs a rule before a combined-entitlement org has both and they conflict; the staff-notification resolver (§5) should be built generically so Tournament officials inherit it; and <code class="mono">role_assignments</code> remains completely empty — Tournament scoping should not be tempted to build against a table nothing actually writes to.</p>
+      </section>
+
+      <hr class="divider" id="priority" />
+
+      <section>
+        <h2 style="font-size:26px;">Prioritized recommendations</h2>
+        <p class="dek">P0 — critical/foundational. P1 — important before entitlement expansion. P2 — valuable, can follow. Defer — do not build yet.</p>
+
+        <div class="table-wrap">
+          <table class="matrix">
+            <caption>P0 — Critical / foundational</caption>
+            <thead><tr><th>#</th><th>Problem</th><th>Owner</th><th>Proposed capability</th><th>Scope</th><th>Tournament impact</th></tr></thead>
+            <tbody>
+              <tr><td class="n">1</td><td>Staff directory shows "Unknown" for everyone but the viewer</td><td>Engineering</td><td><code class="mono">club_staff_directory()</code> RPC mirroring the existing IT-directory pattern</td><td>Club-specific</td><td>None</td></tr>
+              <tr><td class="n">2</td><td>3 guardian permissions are granted by default and implement nothing</td><td>Product + Eng</td><td>Build minimal versions, or remove the keys from the catalog</td><td>Club-specific</td><td>None if resolved first</td></tr>
+              <tr><td class="n">3</td><td><code class="mono">view_audit_log</code> is granted; nothing renders an audit log</td><td>Engineering</td><td>A read-only audit view over existing <code class="mono">audit_log</code> rows</td><td>Club-specific view, shared infra</td><td>Directly reusable</td></tr>
+              <tr><td class="n">4</td><td>Staff add/remove/reassign writes no audit rows</td><td>Engineering</td><td>Add <code class="mono">write_audit()</code> at the 4 existing call sites</td><td>Club-specific</td><td>None</td></tr>
+              <tr><td class="n">5</td><td>Staff removal is a hard delete; no status lifecycle</td><td>Product + Eng</td><td>Add <code class="mono">status</code> to <code class="mono">club_staff</code>; archive, don't delete</td><td>Club-specific shape, reusable pattern</td><td>Template for entrant-side staff</td></tr>
+              <tr><td class="n">6</td><td>No club branding/logo editing surface</td><td>Product + Eng</td><td>Extend the settings form; decide org-vs-club precedence</td><td>Club-specific UI, shared question</td><td>Required before cross-entitlement exports</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table class="matrix">
+            <caption>P1 — Important before entitlement expansion</caption>
+            <thead><tr><th>#</th><th>Problem</th><th>Owner</th><th>Proposed capability</th><th>Scope</th><th>Tournament impact</th></tr></thead>
+            <tbody>
+              <tr><td class="n">7</td><td>No staff profile beyond name/email/role</td><td>Product + Eng</td><td>Role-specific profile record layered on <code class="mono">club_staff</code></td><td>Club-specific</td><td>Design shape reusable for officials</td></tr>
+              <tr><td class="n">8</td><td>Staff have no notification channel</td><td>Engineering</td><td><code class="mono">notifyStaff({clubId, permissionKey, ...})</code> resolver</td><td><span class="tag shared" style="padding:2px 8px;">Shared</span></td><td>Officials need the same resolver</td></tr>
+              <tr><td class="n">9</td><td>Club Manager settings is one field wide</td><td>Product + Eng</td><td>Fold into #6's settings-form work</td><td>Club-specific</td><td>None</td></tr>
+              <tr><td class="n">10</td><td>No support/escalation path to Platform Admin</td><td>Product + Eng</td><td><code class="mono">support_requests</code> + messages, generic over <code class="mono">org_id</code></td><td><span class="tag shared" style="padding:2px 8px;">Shared</span></td><td>Zero changes needed later</td></tr>
+              <tr><td class="n">11</td><td>IT admin cannot deactivate/reactivate a user</td><td>Product + Eng</td><td>An IT action consuming #5's new status column</td><td>Club-specific</td><td>Same club-id caveat as §13</td></tr>
+              <tr><td class="n">12</td><td>Three overlapping dashboards, duplicated math</td><td>Engineering</td><td>Fold stats into Reports; one shared attendance function</td><td>Club-specific</td><td>None</td></tr>
+              <tr><td class="n">13</td><td>IT admin is entirely club-scoped</td><td>Product + Eng (design first)</td><td>Decide org-scoped authority with club as a narrowing</td><td><span class="tag shared" style="padding:2px 8px;">Shared decision</span></td><td>Blocks Tournament-only orgs if left as-is</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table class="matrix">
+            <caption>P2 — Valuable, can follow later</caption>
+            <thead><tr><th>#</th><th>Item</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td class="n">14</td><td>Org chart visualization</td><td>Read-only view over existing data; exclude players/guardians</td></tr>
+              <tr><td class="n">15</td><td>Club-wide people directory</td><td>Depends on #1 landing first</td></tr>
+              <tr><td class="n">16</td><td>Wire <code class="mono">announcement_reads</code></td><td>Table already exists — cheap</td></tr>
+              <tr><td class="n">17</td><td>Coach/staff qualifications storage</td><td>Extend <code class="mono">document_uploads</code>' <code class="mono">subject_type</code>, don't add a table</td></tr>
+              <tr><td class="n">18</td><td>Missing report types</td><td>Staff, membership status, org activity, role/status</td></tr>
+              <tr><td class="n">19</td><td>Club-level policy documents</td><td>True defer — no demand signal yet</td></tr>
+              <tr><td class="n">20</td><td>Financial action audit coverage</td><td><strong>Unresolved, not deferred</strong> — verify before Tournament fees</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table class="matrix">
+            <caption>Defer / do not build</caption>
+            <thead><tr><th>#</th><th>Item</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td class="n">21</td><td>MFA administration</td><td>No MFA exists anywhere to administer</td></tr>
+              <tr><td class="n">22</td><td>Integrations, API keys, custom domains</td><td>Nothing exists yet that needs one</td></tr>
+              <tr><td class="n">23</td><td><code class="mono">team_staff</code> table</td><td>Redundant, zero rows, drop it</td></tr>
+              <tr><td class="n">24</td><td>Club-only committee model</td><td>Build once Tournament's committee needs are known</td></tr>
+              <tr><td class="n">25</td><td>Retiring legacy role tables for <code class="mono">role_assignments</code></td><td>Already correctly deferred; don't build Tournament against an empty table</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="before">
+        <div class="closer">
+          <h3>Before the Tournament pass</h3>
+          <p style="margin:0 0 14px;">Three decisions should be made before, not during, Tournament scoping, because they change the shape of everything that follows:</p>
+          <ol>
+            <li><strong>Authorization model reuse</strong> — extend <code class="mono">has_staff_permission</code>'s scope model rather than inventing a parallel one for officials/entries.</li>
+            <li><strong>IT administration's scoping</strong> — org-level authority with club as a narrowing, not a requirement, or Tournament-only orgs have no IT capability by construction.</li>
+            <li><strong>Documents' <code class="mono">subject_type</code> extension</strong> — land this as part of Club cleanup specifically because Tournament will be the second consumer.</li>
+          </ol>
+          <p style="margin:14px 0 0;">Everything else can proceed independently — but these three are the parts of the Club entitlement that Tournament will either compose with cleanly or collide with directly, and which is which depends entirely on whether they're generalized now or left Club-shaped.</p>
+        </div>
+      </section>
+
+      <footer class="doc-footer">
+        Full write-up with complete section-by-section evidence: <code class="mono">docs/club-entitlement-gap-analysis.md</code> in the repository.
+      </footer>
+
+    </main>
+  </div>
+</div>
