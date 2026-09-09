@@ -14,65 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      access_requests: {
-        Row: {
-          decided_at: string | null
-          decided_by: string | null
-          email: string
-          id: string
-          name: string
-          notes: string | null
-          org_id: string
-          phone: string | null
-          requested_by: string | null
-          role: string
-          scope_id: string | null
-          scope_type: string | null
-          status: string
-          submitted_at: string
-        }
-        Insert: {
-          decided_at?: string | null
-          decided_by?: string | null
-          email: string
-          id?: string
-          name: string
-          notes?: string | null
-          org_id: string
-          phone?: string | null
-          requested_by?: string | null
-          role: string
-          scope_id?: string | null
-          scope_type?: string | null
-          status?: string
-          submitted_at?: string
-        }
-        Update: {
-          decided_at?: string | null
-          decided_by?: string | null
-          email?: string
-          id?: string
-          name?: string
-          notes?: string | null
-          org_id?: string
-          phone?: string | null
-          requested_by?: string | null
-          role?: string
-          scope_id?: string | null
-          scope_type?: string | null
-          status?: string
-          submitted_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "access_requests_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       announcement_reads: {
         Row: {
           announcement_id: string
@@ -3645,64 +3586,173 @@ export type Database = {
           },
         ]
       }
-      tournament_members: {
+      tournament_staff: {
         Row: {
+          id: string
+          tournament_id: string
+          user_id: string
+          role: string
+          status: string
+          org_id: string
           created_at: string
           created_by: string | null
-          entry_id: string | null
-          id: string
-          org_id: string
-          role: string
-          tournament_id: string
-          user_id: string
         }
         Insert: {
-          created_at?: string
-          created_by?: string | null
-          entry_id?: string | null
           id?: string
-          org_id?: string
-          role: string
           tournament_id: string
           user_id: string
-        }
-        Update: {
+          role: string
+          status?: string
+          org_id: string
           created_at?: string
           created_by?: string | null
-          entry_id?: string | null
+        }
+        Update: {
           id?: string
-          org_id?: string
-          role?: string
           tournament_id?: string
           user_id?: string
+          role?: string
+          status?: string
+          org_id?: string
+          created_at?: string
+          created_by?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "tournament_members_entry_id_fkey"
+            foreignKeyName: "tournament_staff_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_staff_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_staff_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_staff_permission_grants: {
+        Row: {
+          id: string
+          tournament_id: string
+          user_id: string
+          permission_key: string
+          granted: boolean
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          tournament_id: string
+          user_id: string
+          permission_key: string
+          granted: boolean
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          tournament_id?: string
+          user_id?: string
+          permission_key?: string
+          granted?: boolean
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_staff_permission_grants_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_staff_permission_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_staff_permission_grants_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      tournament_entry_contacts: {
+        Row: {
+          id: string
+          entry_id: string
+          org_id: string
+          name: string
+          email: string
+          role: string
+          account_status: string
+          user_id: string | null
+          invited_at: string | null
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          entry_id: string
+          org_id: string
+          name: string
+          email: string
+          role: string
+          account_status?: string
+          user_id?: string | null
+          invited_at?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          entry_id?: string
+          org_id?: string
+          name?: string
+          email?: string
+          role?: string
+          account_status?: string
+          user_id?: string | null
+          invited_at?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_entry_contacts_entry_id_fkey"
             columns: ["entry_id"]
             isOneToOne: false
             referencedRelation: "tournament_entries"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tournament_members_org_id_fkey"
+            foreignKeyName: "tournament_entry_contacts_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tournament_members_tournament_id_fkey"
-            columns: ["tournament_id"]
+            foreignKeyName: "tournament_entry_contacts_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_tournaments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tournament_members_tournament_id_fkey"
-            columns: ["tournament_id"]
-            isOneToOne: false
-            referencedRelation: "tournaments"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -4429,6 +4479,43 @@ export type Database = {
       }
       has_staff_permission: {
         Args: { p_club_id: string; p_permission_key: string; p_team_id?: string }
+        Returns: boolean
+      }
+      is_tournament_staff: { Args: { check_tournament_id: string }; Returns: boolean }
+      is_tournament_organizer: { Args: { check_tournament_id: string }; Returns: boolean }
+      can_read_tournament: { Args: { p_org: string; p_tournament: string }; Returns: boolean }
+      can_admin_tournament: { Args: { p_org: string; p_tournament: string }; Returns: boolean }
+      has_tournament_permission: {
+        Args: { p_permission_key: string; p_tournament_id: string }
+        Returns: boolean
+      }
+      tournament_staff_directory: {
+        Args: { p_tournament_id: string }
+        Returns: { user_id: string; name: string | null; email: string; role: string; status: string }[]
+      }
+      tournament_audit_log: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          id: number
+          ts: string
+          actor_email: string | null
+          action: string
+          entity_type: string | null
+          entity_id: string | null
+          before: Json | null
+          after: Json | null
+        }[]
+      }
+      set_tournament_staff_account_status: {
+        Args: { p_tournament_id: string; p_target_user_id: string; p_status: string }
+        Returns: undefined
+      }
+      decide_tournament_entry: {
+        Args: { p_entry_id: string; p_status: string }
+        Returns: undefined
+      }
+      is_tournament_entry_contact: {
+        Args: { p_entry_id: string; min_role?: string | null }
         Returns: boolean
       }
       is_assigned_to_team: { Args: { check_team_id: string }; Returns: boolean }

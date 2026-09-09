@@ -1386,6 +1386,212 @@ did get a real end-to-end pass once the workaround was in place.
 
 ---
 
+## 0l. Tournament RBAC foundation (2026-09-09)
+
+The user's own "tournament.md" proposal, reconciled against three realities
+the proposal itself didn't account for: the Tournament Manager (Vite) app is
+frozen (§8) and keeps its own `org_members.role` (admin/team/referee/
+official/audience) untouched; two dead tournament-role vocabularies already
+sat in the schema (`tournament_members`, 0 rows, wrong vocabulary;
+`access_requests`, 0 rows, and — found while reviewing it — a *live*
+unauthenticated write hole, `WITH CHECK (org_id is not null)` with no auth
+check at all); and Club's permission-catalog architecture
+(`permissions`/`role_permission_defaults`/`has_staff_permission`) is the
+right foundation to extend, not a parallel system to invent.
+
+Both dead tables dropped as part of landing this.
+
+### Three decisions, confirmed before building
+
+1. **Team Coordinator reviews/flags; Organizer alone decides.**
+   `review_tournament_entry` (Team Coordinator) is seeded in the catalog but
+   not wired to anything yet — same "permission exists ahead of its
+   consuming feature" pattern as several Phase 0 club permissions.
+   `decide_tournament_entry` (Organizer) is the real accept/reject
+   authority, via a dedicated RPC (below).
+2. **Tournament Director / Competition Manager fold into Organizer** —
+   Organizer absorbs `manage_competition` (divisions/brackets/scheduling/
+   standings) as its own catalog entry, so it can be delegated to a
+   separate role later without inventing one from scratch, but nobody holds
+   it exclusively yet.
+3. **External Organization access is a registration-form list, not an
+   account-creation step.** A registering team lists who should get access;
+   access is provisioned automatically on entry acceptance via an
+   email-match self-claim, mirroring the guardian-invite flow's shape
+   deliberately, not the alternative (creating real accounts at submission
+   time, before anyone's decided the entry is even legitimate).
+
+### The Tournament Role layer — `tournament_staff`
+
+Mirrors `club_staff` exactly, status lifecycle included from day one
+(`invited`/`active`/`suspended`/`archived` — `club_staff` took two
+migrations, phase6z and phase7a, to get there; no reason to repeat that
+here). Nine roles: `organizer`, `tournament_it_admin`, `team_coordinator`,
+`secretary`, `treasurer`, `logistics`, `communications`,
+`volunteer_coordinator`, `referee_coordinator`. `secretary`/`treasurer` are
+deliberately the same STRING as their `club_staff` counterparts — same
+real-world role, different table, no actual (role, key) pair collision
+(confirmed, not assumed — see the scope-leak bug below, which is exactly
+what checking this for real caught).
+
+`tournament_it_admin`, not `tournament_admin` — mirrors `club_it_admin`
+precisely, avoiding the exact trap `club_admin` caused (phase6k): a bare
+"admin" string that sounds like supreme authority but structurally means
+zero business permissions.
+
+`is_tournament_staff`/`is_tournament_organizer`/`can_read_tournament`/
+`can_admin_tournament` mirror their club equivalents 1:1, including
+`can_admin_tournament`'s `is_org_admin` bootstrap path — the same problem
+`club_manager` had (nobody below org_admin could ever add the first one)
+fixed from the start instead of found live later.
+
+**`has_tournament_permission(key, tournament_id)` has no team-fence
+branch** — there's no entry-level narrowing yet (deferred until a real need
+shows up, same restraint as everywhere else in this project), so
+`permissions.scope` plays no role in it the way it does in
+`has_staff_permission`'s team-fence bypass logic. That made it safe to
+**reuse** three permission keys wholesale instead of duplicating them —
+`view_audit_log`, `manage_account_status`, `submit_support_request` are
+conceptually identical regardless of club vs. tournament context. 12 new
+keys exist for genuinely tournament-domain concepts with no club analog
+(`manage_tournament`, `manage_competition`, `decide_tournament_entry`,
+`review_tournament_entry`, `manage_tournament_staff`,
+`manage_tournament_documents`, `manage_tournament_finances`,
+`view_tournament_finances`, `manage_tournament_logistics`,
+`manage_tournament_communications`, `manage_tournament_volunteers`,
+`manage_officiating`).
+
+**A real bug found by re-checking the function's own logic, not by waiting
+for a live test:** the first version of `has_tournament_permission` had no
+scope gate at all. Since `role_permission_defaults` is one flat `(role,
+key)` table with no table-awareness, and `secretary`/`treasurer` hold rows
+spanning BOTH club and tournament meanings, a tournament treasurer calling
+`has_tournament_permission('view_player', ...)` would have returned `true`
+— not because anything granted it, but because `'treasurer'` happens to
+hold that row for an entirely different table's purpose. Confirmed live
+before fixing (`select exists(... role='treasurer' and
+permission_key='view_player') → true`), then fixed by gating on
+`perm.scope = 'tournament'` with an explicit allow-list for the three
+reused keys (whose own catalog row still says `scope='club'`, since they
+were never duplicated). Pinned by an RLS test now (`121/121`,
+"does NOT get view_player just because the role string is shared").
+
+`tournament_staff_directory()` and `tournament_audit_log()` shipped
+**with** the permission they back (`view_audit_log`), not after — phase6z's
+club version needed a whole P0 item to retrofit the read path once someone
+noticed `view_audit_log` was granted and nothing rendered it.
+`tournament_staff_directory()` also included its self-visibility branch
+from the start — phase7c had to add that back to the club version after it
+regressed a coach's own name.
+
+### Entry decisions and officiating
+
+`decide_tournament_entry(entry_id, status)` is a real RPC, not a raw RLS
+policy — audited from day one via the same `write_audit()` pattern, rather
+than needing its own P0-style retrofit later. Authorizes on
+`decide_tournament_entry` (the new permission) **or** `is_org_admin` — the
+org-admin fallback stays, same reasoning as `port_squad_to_tournament`'s own
+club-less-entry branch (phase6t): a club-less entry has no
+`tournament_staff` row bootstrapped yet either, in the general case.
+`tournament_entries.status`'s real vocabulary is `pending/accepted/
+declined/withdrawn` (its own CHECK, phase3) — not `rejected`, caught by the
+constraint on first live test and fixed same-session (phase8c1).
+
+Officiating: `tournament_officials` (assignment to *this* tournament's
+matches) gets Referee Coordinator's `manage_officiating` permission,
+OR'd alongside the existing `org_admin` path. `org_officials` (the org's
+whole pool of officials, spanning every tournament that org runs, no
+`tournament_id` column at all) deliberately **stays `org_admin`-only** —
+it isn't tournament-scoped data, so routing it through
+`has_tournament_permission` would mean picking one arbitrary tournament's
+Referee Coordinator to authorize a change to an org-wide resource, which
+has no principled answer.
+
+`support_requests`' eligibility (phase7e) is widened to also recognize
+`tournament_staff` holding `submit_support_request` — fulfilling the
+promise made when that table was built ("generic over org_id from day
+one... needs zero changes for Tournament"). The schema needed none; only
+the read/insert predicates gained a second OR-branch mirroring the
+existing club one.
+
+### External Organization access — `tournament_entry_contacts`
+
+A team registering from outside Dula HQ has no club and no org membership
+— no `club_staff`/`tournament_staff` row to hang a permission bundle on.
+The registration form lists who should get access (name/email/role ∈
+`{team_manager, coach}`); rows start `pending` (purely informational,
+matching the proposal's own "Coach... captured as team information unless
+the tournament requires it"). `decide_tournament_entry` flips the
+`team_manager` contact to `invited` automatically on acceptance — "once
+approved, access will be provisioned" as a direct consequence of the
+accept, not a second manual step. Coach contacts stay `pending` unless
+separately invited — a deliberate, non-automatic act.
+
+Access is self-claimed by email match, deliberately mirroring the
+guardian-invite flow's *shape* (an invite is nothing but a row with a
+matching email and a status flag; RLS is the entire boundary — no tokens,
+no email sending, same interim workaround the guardian flow already lives
+with) but with an **explicit, narrow predicate** rather than an inherited
+assumption. Checking `guardians_read`'s actual policy while building this
+surfaced that its own "own pending invite" claim depends on
+`is_staff_in_org(org_id)` — which a genuinely cold invitee, with zero prior
+relationship to the org, would fail. **Not fixed here** — out of scope for
+this pass, worth its own look — but not repeated: `tec_read`/
+`tec_self_claim` match purely on `lower(email) = lower(auth.jwt()->>
+'email')`, no org relationship required.
+
+`claimPendingTournamentEntryInvites()` (new, `server.ts`) mirrors
+`claimPendingGuardianInvite()`'s shape exactly, called alongside it from
+the root layout on the same "no `public.users` row yet" gate — with one
+real difference: a person can hold more than one pending invite (an
+external org submitting two teams to the same tournament, say), so it
+claims every matching row in one pass, not just the first
+(`claimPendingGuardianInvite` uses `.maybeSingle()`; this doesn't). The
+"ensure a `public.users` row exists" logic both share was factored into
+`ensureDulaUserRow()` rather than duplicated a second time.
+
+`is_tournament_entry_contact(entry_id, min_role?)` mirrors
+`is_assigned_to_team()` — a fact about one specific assignment, not a role
+with a permission bundle. Entry-scoped, not tournament-wide.
+
+### What's deliberately NOT in this pass
+
+- **No generalization of Club's existing impersonation/audit functions**
+  (`start_impersonation`, `effective_access_for`, `it_club_directory`,
+  `club_audit_log`) to also cover tournaments. Gap analysis P1-#13 stays
+  open on purpose — the user's own framing was "org then club/tournament,"
+  and unifying the IT experience across both entitlements is a UX-polish
+  pass that deserves its own review, not a side effect of landing the
+  Tournament Role layer. `tournament_it_admin` gets its own
+  `tournament_audit_log()`/`set_tournament_staff_account_status()` instead,
+  same narrow-RPC pattern already proven three times on the club side.
+- **No Tournament Organizer console UI, no external registration form UI.**
+  This pass is the authorization layer only — tables, permission catalog,
+  resolver functions, RLS. Verified end-to-end via direct RLS/RPC calls
+  (SQL impersonation and a real RLS test suite run), the same verification
+  depth every schema-only phase in this project has used; there's no
+  consuming page yet to click through.
+- **`review_tournament_entry` is seeded, not wired.** No UI or workflow
+  consumes it yet — matches how several Phase 0 club permissions existed
+  before their features did.
+
+### Verified
+
+RLS suite 103 → **121**. `npx tsc --noEmit` and `npm run build` both clean.
+Every authorization boundary confirmed via direct RPC/RLS calls against a
+real tournament and a real club-backed entry in the showcase org: a
+club_manager refused to bootstrap themselves as Organizer, an org_admin
+successfully bootstrapping one; the scope-leak bug reproduced and then
+disproven after the fix; `tournament_staff_directory`'s self-branch;
+`decide_tournament_entry` refusing a non-organizer and succeeding (audited)
+for the Organizer; `tournament_officials` writes refused before
+`manage_officiating` was granted and allowed after; the full
+`tournament_entry_contacts` claim cycle (invite → wrong-email refusal →
+matching-email self-claim → `is_tournament_entry_contact` recognizing it).
+Showcase data restored after every test.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

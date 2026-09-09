@@ -1464,3 +1464,215 @@ describe('support_requests (P1-10)', () => {
     await adminClient.from('support_requests').delete().eq('id', requestId);
   });
 });
+
+/**
+ * Tournament RBAC (2026-09-09, "tournament.md" proposal review). The
+ * Tournament Role layer (tournament_staff), mirroring club_staff's proven
+ * shape -- and the External Organization access mechanism
+ * (tournament_entry_contacts), which has no club_staff/tournament_staff
+ * equivalent to reuse since a cold external contact belongs to no org at
+ * all.
+ */
+describe('tournament_staff (Tournament Role layer)', () => {
+  let tournamentId: string;
+  let entryId: string;
+
+  it('sets up a tournament and an accepted club-backed entry', async () => {
+    const tournament = must(await adminClient
+      .from('tournaments')
+      .insert({ name: 'RLS Tournament RBAC Cup', org_id: orgA.id, slug: `rls-trbac-${crypto.randomUUID().slice(0, 8)}` })
+      .select().single(), 'tournaments trbac');
+    tournamentId = tournament.id;
+
+    const entry = must(await adminClient
+      .from('tournament_entries')
+      .insert({
+        tournament_id: tournamentId,
+        host_org_id: orgA.id,
+        entrant_org_id: orgA.id,
+        club_id: clubA.id,
+        team_id: teamA1.id,
+        team_name: 'Club A - U15',
+        status: 'accepted',
+      })
+      .select().single(), 'tournament_entries trbac');
+    entryId = entry.id;
+  });
+
+  it('a club_manager CANNOT bootstrap themselves as Organizer -- only org_admin can', async () => {
+    const { error } = await clubAdminAClient.from('tournament_staff').insert({
+      tournament_id: tournamentId, user_id: clubAdminAUserId, role: 'organizer', org_id: orgA.id,
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('the org admin CAN bootstrap the first Organizer', async () => {
+    const { error } = await orgAdminAClient.from('tournament_staff').insert({
+      tournament_id: tournamentId, user_id: coachA1UserId, role: 'organizer', org_id: orgA.id,
+    });
+    expect(error).toBeNull();
+  });
+
+  it('the Organizer holds manage_competition and decide_tournament_entry', async () => {
+    const organizerClient = coachA1Client;
+    const manage = await organizerClient.rpc('has_tournament_permission', { p_permission_key: 'manage_competition', p_tournament_id: tournamentId });
+    const decide = await organizerClient.rpc('has_tournament_permission', { p_permission_key: 'decide_tournament_entry', p_tournament_id: tournamentId });
+    expect(manage.data).toBe(true);
+    expect(decide.data).toBe(true);
+  });
+
+  it('a tournament treasurer does NOT get view_player just because the role string is shared with club_staff', async () => {
+    must(await adminClient.from('tournament_staff').insert({
+      tournament_id: tournamentId, user_id: teamManagerA1UserId, role: 'treasurer', org_id: orgA.id,
+    }).select().single(), 'tournament_staff treasurer');
+
+    const finances = await teamManagerA1Client.rpc('has_tournament_permission', { p_permission_key: 'manage_tournament_finances', p_tournament_id: tournamentId });
+    const leak = await teamManagerA1Client.rpc('has_tournament_permission', { p_permission_key: 'view_player', p_tournament_id: tournamentId });
+    expect(finances.data).toBe(true);
+    expect(leak.data).toBe(false);
+  });
+
+  it('tournament_staff_directory shows a treasurer their OWN name even without organizer/org_admin visibility', async () => {
+    const { data, error } = await teamManagerA1Client.rpc('tournament_staff_directory', { p_tournament_id: tournamentId });
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+    expect((data as any[])[0].role).toBe('treasurer');
+  });
+
+  it('set_tournament_staff_account_status: a treasurer cannot suspend anyone (lacks manage_account_status)', async () => {
+    const { error } = await teamManagerA1Client.rpc('set_tournament_staff_account_status', {
+      p_tournament_id: tournamentId, p_target_user_id: coachA1UserId, p_status: 'suspended',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('decide_tournament_entry: a non-organizer is refused', async () => {
+    const { error } = await teamManagerA1Client.rpc('decide_tournament_entry', { p_entry_id: entryId, p_status: 'declined' });
+    expect(error).not.toBeNull();
+  });
+
+  it('decide_tournament_entry: the Organizer can accept, and it is audited', async () => {
+    const { error } = await coachA1Client.rpc('decide_tournament_entry', { p_entry_id: entryId, p_status: 'accepted' });
+    expect(error).toBeNull();
+    const row = must(await adminClient.from('tournament_entries').select('status').eq('id', entryId).single(), 'entry after decide');
+    expect(row.status).toBe('accepted');
+  });
+
+  it('tournament_officials write requires manage_officiating or org_admin', async () => {
+    const { error: refused } = await teamManagerA1Client.from('tournament_officials').insert({
+      org_id: orgA.id, tournament_id: tournamentId, official_id: crypto.randomUUID(), role: 'referee',
+    });
+    expect(refused).not.toBeNull();
+
+    must(await adminClient.from('tournament_staff').insert({
+      tournament_id: tournamentId, user_id: coachA1UserId, role: 'referee_coordinator', org_id: orgA.id,
+    }).select().single(), 'tournament_staff referee_coordinator');
+    // coachA1 already holds organizer too (same user, two roles) -- either
+    // grants manage_officiating, which is exactly the point: role bundles
+    // are additive per person, not exclusive.
+    const officialRow = must(await adminClient.from('org_officials').insert({
+      org_id: orgA.id, full_name: 'RLS Test Referee',
+    }).select().single(), 'org_officials rls test');
+    const { error: allowed } = await coachA1Client.from('tournament_officials').insert({
+      org_id: orgA.id, tournament_id: tournamentId, official_id: officialRow.id, role: 'referee',
+    });
+    expect(allowed).toBeNull();
+    await adminClient.from('org_officials').delete().eq('id', officialRow.id);
+  });
+
+  it('support_requests: a tournament organizer can now file one (widened in phase8c)', async () => {
+    const { data, error } = await coachA1Client.from('support_requests').insert({
+      org_id: orgA.id, created_by: coachA1UserId, category: 'bug', subject: 'tournament RLS test', body: 'testing',
+    }).select('id').single();
+    expect(error).toBeNull();
+    if (data) await adminClient.from('support_requests').delete().eq('id', data.id);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_entries').delete().eq('id', entryId);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tournamentId);
+    await adminClient.from('tournaments').delete().eq('id', tournamentId);
+  });
+});
+
+describe('tournament_entry_contacts (External Organization access)', () => {
+  let tournamentId: string;
+  let entryId: string;
+  let contactId: string;
+  const externalEmail = `rls-external-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  let externalUser: { publicUser: { id: string } };
+  let externalClient: ReturnType<typeof createClient>;
+
+  it('sets up a club-less accepted entry with a pending team_manager contact', async () => {
+    const tournament = must(await adminClient
+      .from('tournaments')
+      .insert({ name: 'RLS External Entry Cup', org_id: orgA.id, slug: `rls-ext-${crypto.randomUUID().slice(0, 8)}` })
+      .select().single(), 'tournaments external');
+    tournamentId = tournament.id;
+
+    const entry = must(await adminClient
+      .from('tournament_entries')
+      .insert({
+        tournament_id: tournamentId,
+        host_org_id: orgA.id,
+        entrant_org_id: orgA.id,
+        team_name: 'A Visiting Team',
+        status: 'accepted',
+      })
+      .select().single(), 'tournament_entries external');
+    entryId = entry.id;
+
+    const contact = must(await adminClient.from('tournament_entry_contacts').insert({
+      entry_id: entryId, org_id: orgA.id, name: 'External Manager', email: externalEmail,
+      role: 'team_manager', account_status: 'invited', invited_at: new Date().toISOString(),
+    }).select().single(), 'tournament_entry_contacts external');
+    contactId = contact.id;
+
+    externalUser = await createTestUser(externalEmail, 'audience');
+    externalClient = await signInAs(externalEmail);
+  });
+
+  it('the invited contact can see their own invite row', async () => {
+    const { data, error } = await externalClient.from('tournament_entry_contacts').select('id, account_status').eq('id', contactId);
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+  });
+
+  it('a DIFFERENT signed-in user cannot see or claim it', async () => {
+    const { data } = await coachA1Client.from('tournament_entry_contacts').select('id').eq('id', contactId);
+    expect(data ?? []).toHaveLength(0);
+
+    const { error: updateError, count } = await coachA1Client
+      .from('tournament_entry_contacts')
+      .update({ user_id: coachA1UserId, account_status: 'active' }, { count: 'exact' })
+      .eq('id', contactId);
+    expect(updateError).toBeNull();
+    expect(count).toBe(0);
+  });
+
+  it('the matching-email contact CAN self-claim', async () => {
+    const { error } = await externalClient
+      .from('tournament_entry_contacts')
+      .update({ user_id: externalUser.publicUser.id, account_status: 'active' })
+      .eq('id', contactId);
+    expect(error).toBeNull();
+
+    const row = must(await adminClient.from('tournament_entry_contacts').select('account_status, user_id').eq('id', contactId).single(), 'contact after claim');
+    expect(row.account_status).toBe('active');
+    expect(row.user_id).toBe(externalUser.publicUser.id);
+  });
+
+  it('is_tournament_entry_contact recognizes the claimed contact, entry-scoped only', async () => {
+    const { data: ownEntry } = await externalClient.rpc('is_tournament_entry_contact', { p_entry_id: entryId, min_role: 'team_manager' });
+    expect(ownEntry).toBe(true);
+    const { data: otherEntry } = await externalClient.rpc('is_tournament_entry_contact', { p_entry_id: crypto.randomUUID() });
+    expect(otherEntry).toBe(false);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_entry_contacts').delete().eq('id', contactId);
+    await adminClient.from('tournament_entries').delete().eq('id', entryId);
+    await adminClient.from('tournaments').delete().eq('id', tournamentId);
+    await adminClient.auth.admin.deleteUser(externalUser.publicUser.id);
+  });
+});
