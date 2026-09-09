@@ -15,6 +15,7 @@ import Finances from './Finances';
 import Reports from './Reports';
 import Meetings from './Meetings';
 import { getDownloadUrl } from '../../../../shared/files/lib/r2';
+import { parseClubBranding, resolveLogoKey } from '@/lib/club-branding';
 
 /**
  * Guest overview (§6.C) for a signed-out visitor. Only public_clubs (the
@@ -70,7 +71,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
-    .select('id, slug, name, created_at')
+    .select('id, slug, name, created_at, about, location, branding, org_id')
     .eq('slug', clubSlug)
     .maybeSingle();
 
@@ -108,14 +109,26 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
 
-  // club_staff has two FKs into users (user_id, created_by) -- the embed
-  // must be disambiguated with !user_id or PostgREST rejects the whole
-  // query as ambiguous, which silently produced an empty staffRows here.
-  const { data: staffRows, error: staffError } = await supabase
-    .from('club_staff')
-    .select('id, role, user_id, users!user_id(name, email)')
-    .eq('club_id', clubId)
-    .order('role');
+  // club_staff has two FKs into users (user_id, created_by) -- an embedded
+  // `users!user_id(name, email)` join used to sit here, but public.users'
+  // own SELECT policy is self-row-only, so that embed came back null for
+  // everyone except the caller -- confirmed live: the club manager, who
+  // legitimately sees every row via can_read_club(), still read "Unknown"
+  // for six of their own seven staff. club_staff_directory() (phase6z) is
+  // gated identically to club_staff_read's own can_read_club() override, so
+  // this fixes the lookup for whoever could already see the roster; it does
+  // not change who that is.
+  const [
+    { data: staffRows, error: staffError },
+    { data: directoryRows },
+  ] = await Promise.all([
+    supabase.from('club_staff').select('id, role, user_id, status').eq('club_id', clubId).order('role'),
+    supabase.rpc('club_staff_directory', { p_club_id: clubId }),
+  ]);
+
+  const directoryByUser = new Map((directoryRows ?? []).map((d) => [d.user_id, d]));
+  const activeStaffRows = (staffRows ?? []).filter((s) => s.status === 'active');
+  const archivedStaffRows = (staffRows ?? []).filter((s) => s.status !== 'active');
 
   const { data: clubTeams } = await supabase
     .from('teams')
@@ -132,7 +145,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   // team-scope permissions, but it was never offered a team assignment, so
   // every one of those permissions was unreachable.
   const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager'];
-  const relevantStaffUserIds = (staffRows ?? [])
+  const relevantStaffUserIds = activeStaffRows
     .filter((s) => TEAM_SCOPED_ROLES.includes(s.role))
     .map((s) => s.user_id);
 
@@ -517,6 +530,20 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     }))
   );
 
+  // Club-vs-org branding precedence (docs/club-entitlement-gap-analysis.md
+  // §2, resolveLogoKey's own doc comment): club branding wins when set,
+  // falls back to the org's. The club's logo is an R2 key (signed per
+  // request, like media above); the org's is a plain URL, entered directly,
+  // not uploaded through this app.
+  const hasOwnLogo = !!parseClubBranding(club.branding).logoKey;
+  const { data: orgForBranding } = hasOwnLogo
+    ? { data: null }
+    : await supabase.from('organizations').select('logo_url').eq('id', club.org_id).maybeSingle();
+  const logoResolved = resolveLogoKey(club, orgForBranding);
+  const clubLogoUrl = logoResolved.source === 'club' && logoResolved.logoKey
+    ? await getDownloadUrl(logoResolved.logoKey)
+    : logoResolved.orgLogoUrl;
+
   return (
     <main className="page">
       <div className="container">
@@ -524,13 +551,33 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
         <div className="page-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {clubLogoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={clubLogoUrl} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border)' }} />
+            )}
             <h1>{club.name}</h1>
-            {canManage && <EditNameForm clubId={club.id} initialName={club.name} />}
+            {canManage && (
+              <EditNameForm
+                clubId={club.id}
+                initialName={club.name}
+                initialAbout={club.about}
+                initialLocation={club.location}
+                logoUrl={logoResolved.source === 'club' ? clubLogoUrl : null}
+              />
+            )}
           </div>
           <span className="chip">
             {access.isPlatformAdmin ? 'Platform admin' : access.role ? access.role.replace('_', ' ') : 'No access here'}
           </span>
         </div>
+
+        {(club.location || club.about) && (
+          <p className="subtitle" style={{ marginTop: -8, marginBottom: 16 }}>
+            {club.location}
+            {club.location && club.about ? ' — ' : ''}
+            {club.about}
+          </p>
+        )}
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           {access.isStaff && (
@@ -607,23 +654,26 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           }
           staffSlot={
             <>
-              <div className="section-label">Staff ({staffRows?.length ?? 0})</div>
+              <div className="section-label">Staff ({activeStaffRows.length})</div>
               {staffError && <p className="error-text">Couldn&apos;t load staff: {staffError.message}</p>}
               <div className="card">
-                {(!staffRows || staffRows.length === 0) && (
+                {activeStaffRows.length === 0 && (
                   <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No staff added yet.</p>
                 )}
-                {staffRows?.map((s: any) => (
-                  <StaffRow
-                    key={s.id}
-                    clubId={club.id}
-                    staff={s}
-                    clubTeams={clubTeams ?? []}
-                    assignedTeams={assignedTeamsByUser.get(s.user_id) ?? []}
-                    teamsWithPrimary={[...teamsWithPrimary]}
-                    canManageStaff={canManage}
-                  />
-                ))}
+                {activeStaffRows.map((s) => {
+                  const d = directoryByUser.get(s.user_id);
+                  return (
+                    <StaffRow
+                      key={s.id}
+                      clubId={club.id}
+                      staff={{ id: s.id, role: s.role, user_id: s.user_id, users: d ? { name: d.name, email: d.email } : null }}
+                      clubTeams={clubTeams ?? []}
+                      assignedTeams={assignedTeamsByUser.get(s.user_id) ?? []}
+                      teamsWithPrimary={[...teamsWithPrimary]}
+                      canManageStaff={canManage}
+                    />
+                  );
+                })}
               </div>
               {canManage ? (
                 <AddStaffForm clubId={club.id} />
@@ -631,6 +681,29 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                 <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
                   Only a club admin or a platform admin can manage club settings and staff.
                 </p>
+              )}
+
+              {/* Removing someone no longer deletes their row (phase6z) --
+                  it's archived, so the club keeps a record of who worked
+                  here. Read-only: no reactivation flow yet (gap analysis
+                  P1 #11, deliberately separate from this fix). */}
+              {canManage && archivedStaffRows.length > 0 && (
+                <>
+                  <div className="section-label" style={{ marginTop: 24 }}>Former staff ({archivedStaffRows.length})</div>
+                  <div className="card">
+                    {archivedStaffRows.map((s) => {
+                      const d = directoryByUser.get(s.user_id);
+                      return (
+                        <div key={s.id} className="list-row">
+                          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                            {d?.name ?? d?.email ?? 'Unknown'}
+                          </span>
+                          <span className="chip" style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.role}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </>
           }

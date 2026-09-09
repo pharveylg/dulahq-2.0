@@ -583,6 +583,15 @@ Tournament entitlement if not addressed first.
 **P0 — Critical / foundational.** Blocking or actively misleading; should not
 carry forward into Tournament scoping.
 
+> **Status (2026-09-09): all six done.** See CLAUDE.md §0j. Verifying each
+> one live surfaced two further bugs beyond the original scope: `audit_log`'s
+> RLS never actually honored `view_audit_log` for a club_manager (fixed with
+> a `club_audit_log()` RPC, same pattern as #1), and `clubs`' own UPDATE
+> policy's `WITH CHECK` had silently dropped the club_manager branch its
+> `USING` clause allowed — the plain rename button had, as far as can be
+> told, never worked for a club_manager at all. Both fixed and covered by
+> new RLS tests (suite: 77 → 87).
+
 | # | Problem | Owner | Proposed capability | Shared or Club-specific | Permission impact | Tournament impact | Replaces/consolidates |
 |---|---|---|---|---|---|---|---|
 | 1 | Staff directory shows "Unknown" for everyone but the viewer (`public.users` RLS empties the join) | Engineering | `club_staff_directory()` SECURITY DEFINER RPC, mirroring `it_club_directory()` | Club-specific (mirrors an existing pattern; the pattern itself is reusable) | None new | None | Fixes `StaffRow.tsx`'s existing (broken) query |

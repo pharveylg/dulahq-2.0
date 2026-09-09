@@ -38,7 +38,7 @@ const BUCKET = process.env.R2_BUCKET_NAME!;
  */
 export async function uploadFile(params: {
   tenantId: string;
-  category: 'exports' | 'media' | 'documents';
+  category: 'exports' | 'media' | 'documents' | 'branding';
   fileName: string;
   body: Buffer | Uint8Array;
   contentType: string;

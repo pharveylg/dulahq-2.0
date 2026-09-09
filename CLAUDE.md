@@ -1170,6 +1170,108 @@ policy. Same class of gap as §0e's `it_club_directory()`. Flagged separately.
 
 ---
 
+## 0j. Club entitlement P0 batch (2026-09-09)
+
+`docs/club-entitlement-gap-analysis.md` scoped 25 recommendations before
+Tournament-entitlement work begins. This lands the six P0 items — and, true
+to the pattern of every phase in this session so far, verifying each one live
+surfaced real bugs beyond what was originally scoped.
+
+### P0-1 — the staff directory bug, fixed
+
+`club_staff_directory()` (phase6z), gated identically to `club_staff_read`'s
+own `can_read_club()` override — this fixes the broken name lookup for
+whoever could already see the full roster; it does not widen who that is.
+Verified live: the club manager's Staff tab now shows real names for all
+seven staff, not "Unknown" for six of them.
+
+### P0-2 — three dead guardian permissions, removed
+
+`communicate_with_club`, `manage_availability`, `manage_forms` were granted
+to every guardian by default and implemented nothing anywhere in either
+codebase — not even referenced as a string. Removed from `permissions` and
+`guardian_permission_defaults` outright (confirmed zero
+`guardian_permission_grants` rows referenced them, so nothing was lost).
+
+### P0-3/P0-4 — audit, both directions
+
+Staff add/archive and team (re)assignment now call `write_audit()`
+(`scope_type='club', scope_id=<club>` consistently, so they're actually
+findable — see below). A read-only audit section was added to the IT page,
+which had checked `view_audit_log` since Phase 4 and rendered nothing with
+it.
+
+**Found while wiring the read side:** `audit_log`'s own SELECT policy is
+`is_org_admin(org_id)` only — a club_manager holding `view_audit_log` could
+not read a single row. Same shape as phase6x's team-assignment bug: a
+permission granted with no matching read path. Fixed with
+`club_audit_log()` (phase6z1), the same narrow-RPC pattern as
+`it_club_directory`/`club_staff_directory`, rather than widening
+`audit_log`'s RLS (which also protects org-wide and tournament-scoped rows
+this page has no business reading). The view is deliberately scoped to
+`scope_type='club' AND scope_id=<this club>`, not `org_id` alone — an org can
+own more than one club, and most existing `write_audit()` calls don't
+consistently tag `scope_id` yet, so a broader filter would either leak a
+sibling club's actions or require backfilling every call site. Under-showing
+is the safe default here.
+
+### P0-5 — club_staff gets a real lifecycle
+
+`club_staff.status` (`invited`/`active`/`suspended`/`archived` — only
+`active`/`archived` are live today; the other two are reserved for the
+staff-invitation and deactivation work scoped as P1/P2, so that work is
+additive, not another migration). "Remove" now archives rather than
+deletes; team assignments ARE still deleted outright on removal, since
+`user_assigned_teams` has no history concept of its own and a stale row
+there would just make an archived person look like they're still on a team.
+
+Six functions read `club_staff.role`; all six now also require
+`status = 'active'`, checked exhaustively via `pg_proc.prosrc`, not
+guessed: `is_org_member`, `is_club_staff`, `is_club_manager`,
+`has_staff_permission`, `it_club_directory`, `effective_access_for`,
+`start_impersonation`, `set_team_primary_coach`. Verified live: archiving a
+coach drops `has_staff_permission`/`is_club_staff`/`is_club_manager` to
+false immediately, while the row itself survives — a "Former staff" section
+now renders it, read-only, no reactivation flow yet.
+
+### P0-6 — club profile settings, and a second bug found live
+
+`clubs.about`/`location`/`branding` existed with zero editing UI (seeded
+directly by SQL). `EditNameForm.tsx` grew from a one-field rename into a
+full profile form (name/about/location/logo), plus `src/lib/club-branding.ts`
+establishing the org-vs-club precedence rule the gap analysis flagged as
+undecided: **club branding wins when set, falls back to the org's**. The
+logo goes through R2 (`shared/files/lib/r2` — CLAUDE.md's own §8 claim that
+"R2 was never enabled" is stale; `media-actions.ts` already uses it live for
+club photos), not inline base64 — added a `'branding'` category to
+`uploadFile`'s type union alongside the existing `exports`/`media`/`documents`.
+
+**Found while verifying live:** saving the profile form as the club manager
+failed with "You don't have permission to do that" — on a plain rename, a
+feature that predates this whole batch. `clubs_admin_write`'s `USING` clause
+correctly reads `can_admin_club(org_id, id)` (club_manager OR org_admin),
+but its `WITH CHECK` had narrowed to `is_org_admin(org_id) AND
+org_has_product(...)`, silently dropping the club_manager branch. USING and
+WITH CHECK on the same UPDATE policy describe the same intent; this asymmetry
+was never deliberate. Fixed in `phase6z2` by rewriting the policy with a
+matching `WITH CHECK`. The club rename button has, as far as can be told,
+never actually worked for a club_manager — only for an org_admin — since the
+policy was written.
+
+### Verified
+
+RLS suite 77 → **87**. Driven live end-to-end as the club manager: staff
+directory shows real names; archived a staff member and watched them move
+to "Former staff" while their permissions immediately zeroed out; the audit
+log rendered the archive action and the earlier primary-coach-change and
+impersonation events; edited the club's About text and confirmed it
+persisted after a reload (only after `phase6z2` — the first attempt is the
+bug recorded above). Logo upload verified at the RLS layer directly (a
+native file picker can't be driven from the sandboxed preview browser, the
+same limitation recorded in §0f) rather than through the UI.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |
@@ -1443,8 +1545,13 @@ migrations supersede Appendix F entirely — do not run it.
   this before the 100 GB visitor bandwidth. Not currently tracked anywhere.
 - Supabase Free: **no automatic backups, no PITR**, pauses after 7 days idle. Set
   up a nightly `pg_dump` and a keep-alive ping.
-- **Cloudflare is dropped.** R2 was never enabled and there are no Workers.
-  Storage is Supabase (1 GB free). `wrangler.toml` in this repo is dead weight.
+- **Cloudflare Workers: still not used.** R2, however, **is enabled and live**
+  — this line was stale as of §0j: `shared/files/lib/r2.ts` backs club media
+  photos (`media-actions.ts`) and now club logos (`EditNameForm.tsx`, §0j),
+  both verified working against the real bucket. Storage is a mix of
+  Supabase (1 GB free, small structured blobs like `document_uploads`) and
+  R2 (photos, logos) — not Supabase alone. `wrangler.toml` in this repo is
+  still dead weight; nothing here runs on Workers.
 - Supabase built-in email sends **2 per hour** — blocks guardian signup, password
   resets and staff invites. Wire custom SMTP (Resend free 3k/mo, Brevo 300/day)
   before onboarding any real club. **This blocks the consent flow**, which is the

@@ -1204,3 +1204,131 @@ describe('team staff assignment and the primary coach', () => {
     await adminClient.auth.admin.deleteUser(coachA2UserId!);
   });
 });
+
+/**
+ * Club entitlement P0 batch (docs/club-entitlement-gap-analysis.md).
+ *
+ * P0-5: club_staff gains a real status lifecycle. Every authorization
+ * helper that reads club_staff.role has to also honour status, or archiving
+ * someone is cosmetic -- they'd keep every permission their role bundle
+ * grants. This pins the two ends: active still works, archived doesn't.
+ */
+describe('club_staff status lifecycle (phase6z)', () => {
+  let extraCoachUserId: string | null = null;
+
+  it('a freshly-added, active staff member holds their bundle', async () => {
+    const extra = await createTestUser('coach-lifecycle@rls-test.local', 'team');
+    extraCoachUserId = extra.publicUser.id;
+    must(await adminClient.from('club_staff')
+      .insert({ club_id: clubA.id, user_id: extraCoachUserId, role: 'coach' })
+      .select().single(), 'club_staff extraCoach');
+
+    const client = await signInAs('coach-lifecycle@rls-test.local');
+    const { data } = await client.rpc('has_staff_permission', {
+      p_permission_key: 'view_team', p_club_id: clubA.id, p_team_id: teamA1.id,
+    });
+    expect(data).toBe(false); // not assigned to teamA1 yet, and view_team is team-scoped
+    await client.auth.signOut();
+  });
+
+  it('archiving removes has_staff_permission / is_club_staff / is_club_manager, even though the row still exists', async () => {
+    await adminClient.from('club_staff').update({ status: 'archived' })
+      .eq('club_id', clubA.id).eq('user_id', extraCoachUserId!);
+
+    const client = await signInAs('coach-lifecycle@rls-test.local');
+    const perm = await client.rpc('has_staff_permission', {
+      p_permission_key: 'view_team', p_club_id: clubA.id, p_team_id: teamA1.id,
+    });
+    const staff = await client.rpc('is_club_staff', { check_club_id: clubA.id });
+    const manager = await client.rpc('is_club_manager', { check_club_id: clubA.id });
+    expect(perm.data).toBe(false);
+    expect(staff.data).toBe(false);
+    expect(manager.data).toBe(false);
+
+    const { count } = await adminClient.from('club_staff')
+      .select('id', { count: 'exact', head: true })
+      .eq('club_id', clubA.id).eq('user_id', extraCoachUserId!);
+    expect(count).toBe(1); // the row survives -- it's archived, not deleted
+    await client.auth.signOut();
+  });
+
+  it('an archived coach cannot be designated a team\'s primary coach', async () => {
+    await adminClient.from('user_assigned_teams').insert({ user_id: extraCoachUserId!, team_id: teamA1.id });
+    const { error } = await clubAdminAClient.rpc('set_team_primary_coach', {
+      p_team_id: teamA1.id, p_user_id: extraCoachUserId,
+    });
+    expect(error).not.toBeNull();
+    await adminClient.from('user_assigned_teams').delete().eq('user_id', extraCoachUserId!).eq('team_id', teamA1.id);
+  });
+
+  it('club_staff_directory returns real names for whoever could already read the full roster', async () => {
+    const { data, error } = await clubAdminAClient.rpc('club_staff_directory', { p_club_id: clubA.id });
+    expect(error).toBeNull();
+    const row = (data ?? []).find((d: any) => d.user_id === coachA1UserId);
+    expect(row?.name).toBeTruthy();
+    expect(row?.email).toContain('@rls-test.local');
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('club_staff').delete().eq('user_id', extraCoachUserId!);
+    await adminClient.auth.admin.deleteUser(extraCoachUserId!);
+  });
+});
+
+/**
+ * P0-2: three guardian permissions were granted to every guardian by
+ * default and implemented nothing anywhere in the app. Removed from the
+ * catalog entirely rather than left standing.
+ */
+describe('dead guardian permissions removed (phase6z)', () => {
+  it('the three keys no longer exist in the permission catalog', async () => {
+    const { data } = await adminClient
+      .from('permissions')
+      .select('key')
+      .in('key', ['communicate_with_club', 'manage_availability', 'manage_forms']);
+    expect(data).toHaveLength(0);
+  });
+
+  it('no default bundle still references them', async () => {
+    const { data } = await adminClient
+      .from('guardian_permission_defaults')
+      .select('permission_key')
+      .in('permission_key', ['communicate_with_club', 'manage_availability', 'manage_forms']);
+    expect(data).toHaveLength(0);
+  });
+});
+
+/**
+ * Two more bugs surfaced while verifying the P0 batch live, both the same
+ * shape as phase6x's team-assignment bug: a permission or capability the
+ * app already offered a club_manager, that the underlying RLS never
+ * actually honoured.
+ */
+describe('bugs found while verifying the P0 batch live (phase6z1/6z2)', () => {
+  it('clubs_admin_write: a club_manager CAN update their own club (was WITH CHECK = org_admin only)', async () => {
+    const { data: before } = await adminClient.from('clubs').select('about').eq('id', clubA.id).single();
+    const { error } = await clubAdminAClient.from('clubs').update({ about: 'rls-test edit' }).eq('id', clubA.id);
+    expect(error).toBeNull();
+    await adminClient.from('clubs').update({ about: before?.about ?? null }).eq('id', clubA.id);
+  });
+
+  it('club_audit_log: a club_manager sees their own club-scoped rows', async () => {
+    await adminClient.rpc('write_audit', {
+      p_org_id: orgA.id,
+      p_action: 'staff.added',
+      p_scope_type: 'club',
+      p_scope_id: clubA.id,
+      p_entity_type: 'club_staff',
+      p_entity_id: crypto.randomUUID(),
+    });
+    const { data, error } = await clubAdminAClient.rpc('club_audit_log', { p_club_id: clubA.id });
+    expect(error).toBeNull();
+    expect((data ?? []).some((r: any) => r.action === 'staff.added')).toBe(true);
+  });
+
+  it('club_audit_log: a club_manager of a DIFFERENT club reads nothing for this one', async () => {
+    const { data, error } = await clubStaffBClient.rpc('club_audit_log', { p_club_id: clubA.id });
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
+  });
+});

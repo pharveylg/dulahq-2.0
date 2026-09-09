@@ -441,6 +441,7 @@ export type Database = {
           id: string
           org_id: string
           role: string
+          status: string
           updated_at: string
           user_id: string
         }
@@ -451,6 +452,7 @@ export type Database = {
           id?: string
           org_id?: string
           role: string
+          status?: string
           updated_at?: string
           user_id: string
         }
@@ -461,6 +463,7 @@ export type Database = {
           id?: string
           org_id?: string
           role?: string
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -4328,6 +4331,23 @@ export type Database = {
           role: string
           is_platform_admin: boolean
         }[]
+      }
+      club_audit_log: {
+        Args: { p_club_id: string }
+        Returns: {
+          id: number
+          ts: string
+          actor_email: string | null
+          action: string
+          entity_type: string | null
+          entity_id: string | null
+          before: Json | null
+          after: Json | null
+        }[]
+      }
+      club_staff_directory: {
+        Args: { p_club_id: string }
+        Returns: { user_id: string; name: string | null; email: string; role: string; status: string }[]
       }
       is_club_staff: { Args: { check_club_id: string }; Returns: boolean }
       is_guardian_of: { Args: { check_player_id: string }; Returns: boolean }

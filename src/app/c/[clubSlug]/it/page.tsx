@@ -55,6 +55,26 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
     .order('started_at', { ascending: false })
     .limit(10);
 
+  // gap analysis P0-3: view_audit_log was granted to club_manager and
+  // club_it_admin and consumed by nothing -- this page checked the
+  // permission to decide whether to render at all, then never rendered an
+  // audit entry. Scoped strictly to scope_type='club' AND scope_id=club.id
+  // (not org_id alone): this org can own more than one club, and most
+  // existing write_audit() calls don't consistently tag scope_id yet, so a
+  // broader org_id filter would either leak a sibling club's actions or
+  // require backfilling scope_id across every call site. Under-showing is
+  // the safe default; over-showing across clubs is not.
+  //
+  // Goes through club_audit_log() (phase6z1), not a direct select --
+  // audit_log's own RLS is is_org_admin-only, so a club_manager holding
+  // view_audit_log still couldn't read a row directly. Same class of gap as
+  // phase6x's team-assignment bug: a permission granted with no matching
+  // read path. Confirmed live before landing this: the direct-select version
+  // silently showed "no activity" for an action that had just been written.
+  const { data: auditRows } = canViewAudit
+    ? await supabase.rpc('club_audit_log', { p_club_id: club.id })
+    : { data: null };
+
   const directory = (directoryRows ?? []).map((d: any) => ({
     userId: d.user_id,
     name: d.name,
@@ -108,6 +128,31 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
             );
           })}
         </div>
+
+        {canViewAudit && (
+          <>
+            <div className="section-label" style={{ marginTop: 28 }}>Audit log</div>
+            <div className="card">
+              {(!auditRows || auditRows.length === 0) && (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                  No recorded activity for this club yet.
+                </p>
+              )}
+              {(auditRows ?? []).map((r) => (
+                <div key={r.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span className="list-row-title">{r.action}</span>
+                    <span className="list-row-meta">{new Date(r.ts).toLocaleString()}</span>
+                  </div>
+                  <div className="list-row-meta">
+                    {r.actor_email ?? 'system'} · {r.entity_type}
+                    {r.entity_id ? ` · ${r.entity_id}` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </main>
   );
