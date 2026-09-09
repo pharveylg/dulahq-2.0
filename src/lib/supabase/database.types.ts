@@ -4096,16 +4096,19 @@ export type Database = {
       }
       user_assigned_teams: {
         Row: {
+          is_primary: boolean
           org_id: string
           team_id: string
           user_id: string
         }
         Insert: {
+          is_primary?: boolean
           org_id?: string
           team_id: string
           user_id: string
         }
         Update: {
+          is_primary?: boolean
           org_id?: string
           team_id?: string
           user_id?: string
@@ -4352,6 +4355,10 @@ export type Database = {
       }
       save_push_subscription: {
         Args: { p_endpoint: string; p_p256dh: string; p_auth_key: string }
+        Returns: undefined
+      }
+      set_team_primary_coach: {
+        Args: { p_team_id: string; p_user_id: string | null }
         Returns: undefined
       }
       create_notification: {

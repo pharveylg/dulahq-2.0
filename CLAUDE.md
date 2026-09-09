@@ -759,13 +759,12 @@ the full category list, fees read-only.
 
 ### Not built (backlog, in rough priority order)
 
-- **C — Roster workflow. Done as visibility (see §0f).** The remaining
-  unbuilt piece is roster *versioning*, and `port_squad_to_tournament` still
-  carries a hardcoded `is_org_admin` bypass — the "generic admin override"
-  Club Manager spec §29 forbids.
-- **D — Coach assignment model.** No "primary coach" concept exists, so
-  "Team Manager may assign coaches but not remove the primary coach" is not
-  expressible. Needs per-team coach designation.
+- ~~**C — Roster workflow**~~ — **done**, as visibility (§0f), and the
+  versioning it deferred is now done too (§0h). `port_squad_to_tournament`'s
+  `is_org_admin` bypass was narrowed in phase6t (§0g).
+- ~~**D — Coach assignment model**~~ — **done** (§0i). `user_assigned_teams
+  .is_primary` plus `set_team_primary_coach()`; the same pass fixed a live bug
+  where nobody below org admin could assign anyone to a team at all.
 - **E — Club Admin (IT) module. Partially built — the role and "view as" are
   done (see §0e); invitations, password/MFA reset, session revocation and
   account activation are not.** Those remaining pieces need the
@@ -1020,6 +1019,154 @@ link) — not a blocker on anything built. Priced accordingly in the backlog.
 ### Verified
 
 RLS suite 47 → **54**.
+
+---
+
+## 0h. Roster versioning (2026-09-09)
+
+`phase6w`. A `tournament_roster` row was immutable once ported — §0c Phase 3's
+"no unfinalize or edit-after-port path" — so a late injury or withdrawal had
+no supported fix short of editing the database by hand.
+
+### Two ints, no second table
+
+`tournament_roster.added_in_revision` / `withdrawn_in_revision`, plus
+`tournament_entries.roster_revision`. The roster as submitted at any earlier
+revision stays reconstructible:
+
+```
+roster at revision N =
+  added_in_revision <= N
+  and (withdrawn_in_revision is null or withdrawn_in_revision > N)
+```
+
+`tournament_roster.status` has permitted `'withdrawn'` since phase5a and
+nothing had ever written it. This is what it was for. **The row is kept, never
+deleted** — that is the whole point.
+
+This does not violate §0f's derived-never-stored rule: these record *when* a
+row entered and left, which is a fact about the row, not a summary of the
+approvals elsewhere.
+
+### Why an RPC
+
+`tournament_roster`'s write policy belongs to the **host** org
+(`roster_host_write` = `is_org_admin(org_id)`), so club staff have no direct
+write path to their own ported rows at all.
+`withdraw_from_tournament_roster()`'s gate is deliberately identical to
+`port_squad_to_tournament`'s (phase6t): taking a player off is the same
+authority as putting one on, so a club-backed entry needs
+`finalize_tournament_roster` on that club/team and **the club manager is
+refused** — otherwise the admin override Club Manager spec §29 forbids on the
+way in reappears on the way out.
+
+Withdrawal also drops the candidate row, or the next finalize would port them
+straight back in. Re-adding is therefore deliberate: propose, then finalize.
+
+### Two consequences for the port, both forced by withdrawal existing
+
+- A player already on the roster returns **`already_rostered`** instead of
+  being inserted twice. Harmless while finalize was a once-per-entry act; a
+  real duplication bug now that withdraw-then-re-finalize is the supported
+  repair path.
+- A finalize that ports nobody is no longer a new revision and no longer
+  writes an audit row in two orgs, since re-finalizing an unchanged roster is
+  now an ordinary no-op.
+
+### "Locked" is still not a separate state
+
+phase6w added the withdrawal path §0f said would be needed before Finalized
+and Locked could differ — but it did not add a lock: withdrawal is available
+at every revision. Locked only becomes real if a deadline (an entry cutoff, a
+tournament start) closes the roster, and that is a fact about the
+*tournament*, not a state a coach transitions to.
+
+`roster-state.ts` gained a `withdrawn` **player** state so someone pulled off
+a roster reads differently from someone never picked — without it they fall
+back to "Not selected" and the history vanishes from the view. Withdrawn
+players are excluded from the roster rollup, or a completed roster would sit
+at "Partly finalized" forever.
+
+### Verified
+
+RLS 54 → **65**, unit 14 → **17**. Driven live end-to-end through the UI as
+the assigned coach — **the browser-auth breakage §0f flagged has resolved, so
+§0f's outstanding "re-check the three roster buttons in a browser" is done
+too.** Withdrew a player with a reason, watched 12 → 11 at revision 2 with the
+withdrawal and its reason listed as history, re-proposed and re-finalized back
+to 12 at revision 3, where the finalize reported *"1 player added to the
+roster. 11 already on it."* — the idempotence guard working. Audit landed in
+both orgs attributed to the coach with the revision on each row; the
+notification routed to the minor's guardian. Showcase data restored after.
+
+---
+
+## 0i. Primary coach, and a live team-assignment bug (2026-09-09)
+
+`phase6x` — §0d's backlog item D. Checking the database first turned up a
+second, larger problem than the one being fixed.
+
+### The bug: nobody below org admin could assign anyone to a team
+
+`user_assigned_teams`' policy was `is_org_admin(org_id)` for **every**
+command, while `StaffRow.tsx` shows an "+ Assign to team" control to the club
+manager — who is generally *not* an org admin (§0b: club staff routinely have
+no `org_members` row). Confirmed by impersonating the showcase club manager:
+refused, 42501. So that button has been failing for the role that owns the
+club, and team assignment has only ever worked for an org admin or the seed
+script's service-role key.
+
+### The feature
+
+"Primary coach" is a fact about an **assignment**, not about a person —
+`club_staff.role` is club-wide, so it cannot say who leads which team. Hence
+`user_assigned_teams.is_primary`, with a partial unique index
+(`uat_one_primary_coach_per_team`) making "one per team" enforced rather than
+intended. Backfilled from the data: every team had exactly one assigned coach,
+so nothing was guessed — a team with two would deliberately have been left
+with none for a human to designate.
+
+`assign_team_staff` is a new **team-scope** key, following phase6m's
+precedent: `manage_staff` is `scope='club'` and `has_staff_permission`
+short-circuits the team fence for club-scope keys, so granting it to a team
+manager would hand over the whole club's staff — the opposite of Team Manager
+spec §20. `club_manager` still passes it on any team via
+`has_staff_permission`'s own `cs.role='club_manager'` clause, but **only
+because the key is in its bundle too** — that clause bypasses the team fence,
+not the bundle check.
+
+The single `uat_write` policy is split, because the spec's rule is
+DELETE-specific. Team Manager spec §9 is now expressible and enforced: a team
+manager may assign and unassign coaches on their own team, but **removing the
+primary coach additionally requires `manage_staff`**. Promotion is not an
+insert-time decision — a direct insert with `is_primary` true is refused, so
+it goes through `set_team_primary_coach()`, which does demote-then-promote in
+one step (the partial unique index would reject the promote while the previous
+primary still stood, and a caller doing it in two statements can leave the
+team with no lead). A null target clears the designation. `assistant_coach` is
+deliberately ineligible: the point of the role is that it supports a lead
+coach rather than being one.
+
+**RLS filters a DELETE rather than raising it**, so a refused unassign matches
+zero rows and looks like success. `unassignStaffFromTeam` now reads the row
+count and says why — the count is the only signal there is.
+
+Also fixed: `assistant_coach` was created in phase6l with real team-scope
+permissions and then never offered a team assignment (`needsTeamAssignment`
+was `coach || team_manager`), so every one of those permissions was
+unreachable.
+
+### Verified
+
+RLS 65 → **77**. Driven live through the real UI as the club manager: assigned
+a coach to a second team (the write that used to fail), saw "Make primary"
+offered on exactly the one leaderless team, used it, and confirmed the audit
+row attributed to the club manager. Showcase data restored after.
+
+**Found while verifying, not fixed here:** the club console's Staff tab shows
+every staff member except the viewer as "Unknown" with a blank email — the
+embedded `users(name, email)` join is emptied by `public.users`' own SELECT
+policy. Same class of gap as §0e's `it_club_directory()`. Flagged separately.
 
 ---
 

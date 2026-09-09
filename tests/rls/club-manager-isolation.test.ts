@@ -54,6 +54,7 @@ let feeA2: { id: string };
 
 let guardianRecordId: string;
 let coachA1UserId: string;
+let teamManagerA1UserId: string;
 let clubAdminAUserId: string;
 let clubStaffBUserId: string;
 
@@ -202,6 +203,7 @@ beforeAll(async () => {
   const itAdminA = await createTestUser('it-a@rls-test.local', 'audience');
 
   coachA1UserId = coachA1.publicUser.id;
+  teamManagerA1UserId = teamManagerA1.publicUser.id;
   clubAdminAUserId = clubAdminA.publicUser.id;
   clubStaffBUserId = clubStaffB.publicUser.id;
 
@@ -1040,5 +1042,165 @@ describe('withdrawing a player from a finalized roster', () => {
   it('cleans up', async () => {
     await adminClient.from('tournament_entries').delete().eq('id', entryId!);
     await adminClient.from('players').delete().eq('id', adultId!);
+  });
+});
+
+/**
+ * phase6x. Two things at once, because checking the database turned the
+ * second one up while building the first.
+ *
+ * The feature: "primary coach" is a fact about an *assignment*, not about a
+ * person -- club_staff.role is club-wide -- so it lives on
+ * user_assigned_teams, and Team Manager spec §9 ("may assign coaches but not
+ * remove the primary coach") becomes expressible for the first time.
+ *
+ * The bug: user_assigned_teams' write policy was is_org_admin(org_id) for
+ * every command, so the club manager -- who is generally not an org admin --
+ * could not assign anyone to a team at all, while the UI showed them the
+ * control. The first test below is that regression.
+ */
+describe('team staff assignment and the primary coach', () => {
+  let coachA2UserId: string | null = null;
+
+  const perm = async (client: ReturnType<typeof createClient>, key: string, teamId?: string) => {
+    const { data } = await client.rpc('has_staff_permission', {
+      p_permission_key: key,
+      p_club_id: clubA.id,
+      ...(teamId ? { p_team_id: teamId } : {}),
+    });
+    return data;
+  };
+
+  it('adds a second coach at club A to have someone to assign', async () => {
+    const second = await createTestUser('coach-a2@rls-test.local', 'team');
+    coachA2UserId = second.publicUser.id;
+    must(await adminClient.from('club_staff')
+      .insert({ club_id: clubA.id, user_id: coachA2UserId, role: 'coach' })
+      .select().single(), 'club_staff coachA2');
+  });
+
+  it('assign_team_staff is held by club_manager and team_manager, not the coach', async () => {
+    expect(await perm(clubAdminAClient, 'assign_team_staff', teamA1.id)).toBe(true);
+    expect(await perm(teamManagerA1Client, 'assign_team_staff', teamA1.id)).toBe(true);
+    expect(await perm(coachA1Client, 'assign_team_staff', teamA1.id)).toBe(false);
+  });
+
+  // The regression. Before phase6x this insert was refused with 42501.
+  it('the club manager CAN assign staff to a team', async () => {
+    const { error } = await clubAdminAClient
+      .from('user_assigned_teams')
+      .insert({ user_id: coachA2UserId!, team_id: teamA1.id });
+    expect(error).toBeNull();
+  });
+
+  it('the team manager CANNOT reach a team they are not assigned to', async () => {
+    const { error } = await teamManagerA1Client
+      .from('user_assigned_teams')
+      .insert({ user_id: coachA2UserId!, team_id: teamA2.id });
+    expect(error).not.toBeNull();
+  });
+
+  it('nobody can insert themselves straight in as primary', async () => {
+    await adminClient.from('user_assigned_teams')
+      .delete().eq('user_id', coachA2UserId!).eq('team_id', teamA1.id);
+    const { error } = await clubAdminAClient
+      .from('user_assigned_teams')
+      .insert({ user_id: coachA2UserId!, team_id: teamA1.id, is_primary: true });
+    expect(error).not.toBeNull();
+
+    // put them back, unprimaried, for the rest of the block
+    must(await clubAdminAClient.from('user_assigned_teams')
+      .insert({ user_id: coachA2UserId!, team_id: teamA1.id }).select().single(), 'reassign coachA2');
+  });
+
+  it('the team manager CANNOT designate the primary coach', async () => {
+    const { error } = await teamManagerA1Client.rpc('set_team_primary_coach', {
+      p_team_id: teamA1.id,
+      p_user_id: coachA1UserId,
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('the club manager CAN, and only a coach may hold it', async () => {
+    const bad = await clubAdminAClient.rpc('set_team_primary_coach', {
+      p_team_id: teamA1.id,
+      p_user_id: teamManagerA1UserId,
+    });
+    expect(bad.error).not.toBeNull();
+
+    const { error } = await clubAdminAClient.rpc('set_team_primary_coach', {
+      p_team_id: teamA1.id,
+      p_user_id: coachA1UserId,
+    });
+    expect(error).toBeNull();
+
+    const row = must(await adminClient
+      .from('user_assigned_teams').select('is_primary')
+      .eq('team_id', teamA1.id).eq('user_id', coachA1UserId).single(), 'primary row');
+    expect(row.is_primary).toBe(true);
+  });
+
+  // The rule this phase exists for.
+  it('the team manager CANNOT remove the primary coach', async () => {
+    await teamManagerA1Client
+      .from('user_assigned_teams')
+      .delete().eq('user_id', coachA1UserId).eq('team_id', teamA1.id);
+
+    // RLS filters a DELETE rather than raising, so the proof is that the row
+    // survived -- which is exactly why the server action checks the row count.
+    const { count } = await adminClient
+      .from('user_assigned_teams')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('user_id', coachA1UserId).eq('team_id', teamA1.id);
+    expect(count).toBe(1);
+  });
+
+  it('the team manager CAN remove a non-primary coach from their own team', async () => {
+    await teamManagerA1Client
+      .from('user_assigned_teams')
+      .delete().eq('user_id', coachA2UserId!).eq('team_id', teamA1.id);
+
+    const { count } = await adminClient
+      .from('user_assigned_teams')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('user_id', coachA2UserId!).eq('team_id', teamA1.id);
+    expect(count).toBe(0);
+  });
+
+  it('handing the lead over demotes the previous holder in one step', async () => {
+    must(await clubAdminAClient.from('user_assigned_teams')
+      .insert({ user_id: coachA2UserId!, team_id: teamA1.id }).select().single(), 'reassign for handover');
+
+    const { error } = await clubAdminAClient.rpc('set_team_primary_coach', {
+      p_team_id: teamA1.id,
+      p_user_id: coachA2UserId,
+    });
+    expect(error).toBeNull();
+
+    const { data } = await adminClient
+      .from('user_assigned_teams').select('user_id, is_primary').eq('team_id', teamA1.id);
+    const primaries = (data ?? []).filter((r) => r.is_primary);
+    expect(primaries).toHaveLength(1);
+    expect(primaries[0].user_id).toBe(coachA2UserId);
+  });
+
+  it('the club manager CAN clear the designation entirely', async () => {
+    const { error } = await clubAdminAClient.rpc('set_team_primary_coach', {
+      p_team_id: teamA1.id,
+      p_user_id: null,
+    });
+    expect(error).toBeNull();
+
+    const { count } = await adminClient
+      .from('user_assigned_teams')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('team_id', teamA1.id).eq('is_primary', true);
+    expect(count).toBe(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('club_staff').delete().eq('user_id', coachA2UserId!);
+    await adminClient.from('user_assigned_teams').delete().eq('user_id', coachA2UserId!);
+    await adminClient.auth.admin.deleteUser(coachA2UserId!);
   });
 });

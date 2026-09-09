@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { removeStaff, assignStaffToTeam, unassignStaffFromTeam } from './actions';
+import { removeStaff, assignStaffToTeam, unassignStaffFromTeam, setTeamPrimaryCoach } from './actions';
 
 type Staff = {
   id: string;
@@ -11,23 +11,35 @@ type Staff = {
 };
 
 type Team = { id: string; name: string };
+type Assignment = { teamId: string; isPrimary: boolean };
+
+// phase6x: assistant_coach was created with real team-scope permissions in
+// phase6l and then never offered a team assignment, so none of them could be
+// reached. It belongs on this list.
+const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager'];
 
 export default function StaffRow({
   clubId,
   staff,
   clubTeams,
-  assignedTeamIds,
+  assignedTeams: assignments,
+  teamsWithPrimary,
+  canManageStaff,
 }: {
   clubId: string;
   staff: Staff;
   clubTeams: Team[];
-  assignedTeamIds: string[];
+  assignedTeams: Assignment[];
+  teamsWithPrimary: string[];
+  canManageStaff: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
 
-  const needsTeamAssignment = staff.role === 'coach' || staff.role === 'team_manager';
+  const needsTeamAssignment = TEAM_SCOPED_ROLES.includes(staff.role);
+  const assignedTeamIds = assignments.map((a) => a.teamId);
+  const primaryOn = new Set(assignments.filter((a) => a.isPrimary).map((a) => a.teamId));
   const assignedTeams = clubTeams.filter((t) => assignedTeamIds.includes(t.id));
   const unassignedClubTeams = clubTeams.filter((t) => !assignedTeamIds.includes(t.id));
 
@@ -59,6 +71,14 @@ export default function StaffRow({
     });
   }
 
+  function handleSetPrimary(teamId: string, makePrimary: boolean) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setTeamPrimaryCoach(clubId, teamId, makePrimary ? staff.user_id : null);
+      if (result?.error) setError(result.error);
+    });
+  }
+
   return (
     <div className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -78,19 +98,55 @@ export default function StaffRow({
         <div style={{ paddingLeft: 2 }}>
           {assignedTeams.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-              {assignedTeams.map((t) => (
-                <span key={t.id} className="chip" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                  {t.name}
-                  <button
-                    onClick={() => handleUnassign(t.id)}
-                    disabled={pending}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
-                    aria-label={`Unassign from ${t.name}`}
+              {assignedTeams.map((t) => {
+                const isPrimary = primaryOn.has(t.id);
+                // Only a coach can lead a team, and only where nobody already
+                // does — handing the role over is done from the current
+                // holder's own row, so the change reads as a handover.
+                const canOffer =
+                  canManageStaff && staff.role === 'coach' && !isPrimary && !teamsWithPrimary.includes(t.id);
+                return (
+                  <span
+                    key={t.id}
+                    className="chip"
+                    style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    {t.name}
+                    {isPrimary && (
+                      <span style={{ color: 'var(--accent)', fontWeight: 600 }} title="Primary coach for this team">
+                        · Primary
+                      </span>
+                    )}
+                    {canOffer && (
+                      <button
+                        onClick={() => handleSetPrimary(t.id, true)}
+                        disabled={pending}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 0, font: 'inherit' }}
+                      >
+                        Make primary
+                      </button>
+                    )}
+                    {isPrimary && canManageStaff && (
+                      <button
+                        onClick={() => handleSetPrimary(t.id, false)}
+                        disabled={pending}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, font: 'inherit' }}
+                        title="Leave this team without a designated lead coach"
+                      >
+                        Step down
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleUnassign(t.id)}
+                      disabled={pending}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
+                      aria-label={`Unassign from ${t.name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           )}
           {!showAssign && unassignedClubTeams.length > 0 && (

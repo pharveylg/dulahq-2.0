@@ -125,13 +125,44 @@ export async function assignStaffToTeam(clubId: string, formData: FormData) {
 
 export async function unassignStaffFromTeam(clubId: string, userId: string, teamId: string) {
   const supabase = await createClient();
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('user_assigned_teams')
-    .delete()
+    .delete({ count: 'exact' })
     .eq('user_id', userId)
     .eq('team_id', teamId);
 
   if (error) return { error: friendlyError(error) };
+
+  // A DELETE that RLS refuses matches zero rows instead of raising -- so
+  // without this a team manager trying to remove the primary coach (phase6x,
+  // Team Manager spec §9) would be told it worked. The count is the only
+  // signal there is.
+  if (count === 0) {
+    return {
+      error:
+        'That didn’t change anything — the primary coach can only be removed by someone who manages club staff.',
+    };
+  }
+
+  revalidatePath('/c/[clubSlug]', 'layout');
+  return { success: true };
+}
+
+/**
+ * phase6x. "Primary coach" is a fact about an assignment, not about a
+ * person -- club_staff.role is club-wide, so it cannot say who leads which
+ * team. The RPC does demote-then-promote in one step: the partial unique
+ * index would reject the promote while the previous primary still stood, and
+ * a caller doing it in two calls can leave the team with no lead at all.
+ */
+export async function setTeamPrimaryCoach(clubId: string, teamId: string, userId: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('set_team_primary_coach', {
+    p_team_id: teamId,
+    p_user_id: userId,
+  });
+  if (error) return { error: friendlyError(error) };
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }

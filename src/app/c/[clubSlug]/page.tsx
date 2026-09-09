@@ -127,24 +127,33 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     ? await supabase.from('teams').select('id, name').is('club_id', null).order('name')
     : { data: [] };
 
-  // Assigned-team lookups, per staff member with a coach/team_manager role.
+  // Assigned-team lookups, per staff member with a team-scoped role.
+  // assistant_coach belongs here too: phase6l created the role with real
+  // team-scope permissions, but it was never offered a team assignment, so
+  // every one of those permissions was unreachable.
+  const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager'];
   const relevantStaffUserIds = (staffRows ?? [])
-    .filter((s) => s.role === 'coach' || s.role === 'team_manager')
+    .filter((s) => TEAM_SCOPED_ROLES.includes(s.role))
     .map((s) => s.user_id);
 
   const { data: assignments } = relevantStaffUserIds.length
     ? await supabase
         .from('user_assigned_teams')
-        .select('user_id, team_id')
+        .select('user_id, team_id, is_primary')
         .in('user_id', relevantStaffUserIds)
     : { data: [] };
 
-  const assignedTeamIdsByUser = new Map<string, string[]>();
+  const assignedTeamsByUser = new Map<string, { teamId: string; isPrimary: boolean }[]>();
   for (const a of assignments ?? []) {
-    const list = assignedTeamIdsByUser.get(a.user_id) ?? [];
-    list.push(a.team_id);
-    assignedTeamIdsByUser.set(a.user_id, list);
+    const list = assignedTeamsByUser.get(a.user_id) ?? [];
+    list.push({ teamId: a.team_id, isPrimary: !!a.is_primary });
+    assignedTeamsByUser.set(a.user_id, list);
   }
+  // Which teams already have a lead, so the control can say "Make primary"
+  // against a real alternative rather than offering it everywhere.
+  const teamsWithPrimary = new Set(
+    (assignments ?? []).filter((a) => a.is_primary).map((a) => a.team_id)
+  );
 
   const { data: trips } = await supabase
     .from('trips')
@@ -610,7 +619,9 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                     clubId={club.id}
                     staff={s}
                     clubTeams={clubTeams ?? []}
-                    assignedTeamIds={assignedTeamIdsByUser.get(s.user_id) ?? []}
+                    assignedTeams={assignedTeamsByUser.get(s.user_id) ?? []}
+                    teamsWithPrimary={[...teamsWithPrimary]}
+                    canManageStaff={canManage}
                   />
                 ))}
               </div>
