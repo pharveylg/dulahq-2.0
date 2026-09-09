@@ -1558,13 +1558,19 @@ with a permission bundle. Entry-scoped, not tournament-wide.
 
 - **No generalization of Club's existing impersonation/audit functions**
   (`start_impersonation`, `effective_access_for`, `it_club_directory`,
-  `club_audit_log`) to also cover tournaments. Gap analysis P1-#13 stays
-  open on purpose — the user's own framing was "org then club/tournament,"
-  and unifying the IT experience across both entitlements is a UX-polish
-  pass that deserves its own review, not a side effect of landing the
-  Tournament Role layer. `tournament_it_admin` gets its own
-  `tournament_audit_log()`/`set_tournament_staff_account_status()` instead,
-  same narrow-RPC pattern already proven three times on the club side.
+  `club_audit_log`) to also cover tournaments — and this is now a
+  **confirmed, final decision, not a deferral.** Gap analysis P1-#13 asked
+  whether IT authority should become org-scoped, with club-scoping as a
+  narrowing; the user's explicit ruling (2026-09-09, after this build
+  landed) rejected that direction outright: **`club_it_admin` and
+  `tournament_it_admin` stay scoped to their own entitlement, each with
+  its own separate audit log** — no `org_it_admin` unification, ever.
+  `tournament_it_admin`'s own `tournament_audit_log()`/
+  `set_tournament_staff_account_status()` (same narrow-RPC pattern already
+  proven three times on the club side) already matches this ruling
+  exactly, so no further code change follows from it — it closes P1-#13
+  rather than reopening it. `docs/club-entitlement-gap-analysis.md` §11/§13
+  updated to record the resolution.
 - **No Tournament Organizer console UI, no external registration form UI.**
   This pass is the authorization layer only — tables, permission catalog,
   resolver functions, RLS. Verified end-to-end via direct RLS/RPC calls

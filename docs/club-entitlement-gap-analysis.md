@@ -463,6 +463,17 @@ administer yet:**
   any kind is reachable for it.** This is a direct collision with the stated
   next step. See §13.
 
+  **RESOLVED 2026-09-09 — this is no longer a gap.** Tournament RBAC
+  (CLAUDE.md §0l) added `tournament_it_admin` as its own tournament-scoped
+  role with its own `tournament_audit_log()`/`set_tournament_staff_
+  account_status()`, mirroring `club_it_admin` in shape but deliberately
+  **not** unifying with it. The user's explicit ruling: both IT admins stay
+  scoped to their own entitlement, each with its own separate audit log —
+  the `org_it_admin`-unification idea this section originally floated was
+  considered and rejected, not merely deferred. A Tournament-only org now
+  has full IT capability via `tournament_it_admin`; it was never going to
+  get it by widening the Club one.
+
 ---
 
 ## 12. Organization → Platform Admin support
@@ -507,15 +518,13 @@ Gaps that don't map to a single numbered section above, and — per the request'
 explicit ask — places where today's Club-only design will actively fight the
 Tournament entitlement if not addressed first.
 
-- **IT administration is club-scoped and therefore unreachable for a
-  Tournament-only org (§11).** This is the highest-priority cross-cutting
-  finding in the whole review. `is_org_admin()` already exists and is
-  club-independent; the fix is very likely "IT admin capability should key off
-  org-level authority (a new `org_it_admin`-shaped concept, or extending
-  `is_org_admin` callers) with club scoping as a *narrowing*, not a
-  *requirement*" — but that decision should be made deliberately, now, not
-  discovered mid-Tournament-build the way the phase6x team-assignment bug was
-  discovered mid-fix.
+- ~~**IT administration is club-scoped and therefore unreachable for a
+  Tournament-only org (§11).**~~ **RESOLVED 2026-09-09, the other way.**
+  This section's own guess — an `org_it_admin`-shaped unification — was
+  the wrong call. The user decided deliberately, as this section asked for,
+  and decided against it: `club_it_admin` and `tournament_it_admin` stay
+  two separate, entitlement-scoped roles, each with its own audit log. See
+  §11 and §0l of CLAUDE.md.
 
 - **The role/permission model (`has_staff_permission`, `role_permission_defaults`,
   scope ∈ {club, team}) is Club-shaped by construction.** Tournament already has
@@ -604,14 +613,21 @@ carry forward into Tournament scoping.
 **P1 — Important before entitlement expansion.**
 
 > **Status (2026-09-09): 7, 8, 9, 10, 11, 12 done — see CLAUDE.md §0k (and
-> §0j for #9, which landed as part of the P0-6 settings work).** #13 is
-> deliberately held for the Tournament/org-hierarchy pass, per the user's
-> own direction that IT's scoping question belongs together with that
-> redesign rather than fixed in isolation now. Verifying #7 live caught a
-> real regression in §0j's own P0-1 fix (`club_staff_directory()` had
-> dropped the self-visibility branch its base policy always had); verifying
-> #10 caught a silent FK/embedding bug matching the RETURNING-trap pattern
-> from Phase 5c. RLS suite: 87 → 103.
+> §0j for #9, which landed as part of the P0-6 settings work).** #13 was
+> held for the Tournament/org-hierarchy pass as planned, and **is now
+> decided — explicitly the opposite direction this table originally
+> proposed.** The user's ruling, given after Tournament RBAC (CLAUDE.md
+> §0l) landed: `club_it_admin` and `tournament_it_admin` each stay scoped
+> to their own entitlement, with their own separate audit logs — no
+> org-level `org_it_admin` unification. §0l's build already matches this
+> (`tournament_it_admin` got its own `tournament_audit_log()` rather than
+> a generalized one), so no further code change follows from the ruling;
+> it closes the open question this row raised rather than reopening
+> anything. Verifying #7 live caught a real regression in §0j's own P0-1
+> fix (`club_staff_directory()` had dropped the self-visibility branch its
+> base policy always had); verifying #10 caught a silent FK/embedding bug
+> matching the RETURNING-trap pattern from Phase 5c. RLS suite: 87 → 103
+> (→ 121 once Tournament RBAC landed, see CLAUDE.md §0l).
 
 | # | Problem | Owner | Proposed capability | Shared or Club-specific | Permission impact | Tournament impact | Replaces/consolidates |
 |---|---|---|---|---|---|---|---|
@@ -621,7 +637,7 @@ carry forward into Tournament scoping.
 | 10 | No support/escalation path from an org to Platform Admin | Product + Engineering | `support_requests` + `support_request_messages` tables; club_manager/club_it_admin can submit; Platform Admin triages in `platformconsole`; reuse `start_impersonation()`'s pattern for "request temporary access" rather than building a second one | **Shared platform capability**, generic over `org_id` from day one | New permission `submit_support_request` (club scope, granted to club_manager + club_it_admin by default) | None — designed to need zero changes for Tournament | New; no existing flow |
 | 11 | IT admin has no way to deactivate/reactivate a user | Product + Engineering | An IT action consuming #5's new staff status column; Club Manager decides someone has left, IT admin executes the access change | Club-specific | Consumes existing `manage_staff`/new status column; no new IT permission needed if scoped as "act on an existing status" | Same club-id-scoping caveat as §13's IT gap applies | Extends #5, doesn't duplicate it |
 | 12 | Three overlapping dashboard surfaces (ActionCenter / ClubDashboardStats / Reports) with duplicated attendance math | Engineering | Fold `ClubDashboardStats` into `Reports` as its club-wide section; extract one shared attendance-percentage function | Club-specific | None | None | Consolidates 2 of the 3 existing surfaces into 1 |
-| 13 | IT administration is entirely `club_id`-scoped, unreachable for a Tournament-only org | Product + Engineering (design decision first) | Decide whether IT authority becomes org-scoped with club-scoping as a narrowing, before any Tournament-side IT capability is built | **Must be resolved as a shared platform decision** before Tournament scoping begins | Affects `impersonate_user`/`view_audit_log` scope semantics | Directly blocks Tournament-only orgs from having any IT capability if left as-is | Not a replacement — a scoping decision that the current club-only implementation needs revisited, not rewritten from scratch |
+| 13 | ~~IT administration is entirely `club_id`-scoped, unreachable for a Tournament-only org~~ **RESOLVED 2026-09-09 — not a gap.** | Product decision | **Decided: stay split.** `club_it_admin` and `tournament_it_admin` are each scoped to their own entitlement, each with its own audit log — no `org_it_admin` unification. A Tournament-only org gets IT capability via `tournament_it_admin` (CLAUDE.md §0l), not by generalizing the Club one. | Deliberately **not** shared — the ruling is that these stay two separate, narrower capabilities rather than one org-wide one | `impersonate_user`/`view_audit_log` stay club-scoped; `tournament_it_admin` holds the equivalent tournament-scoped keys, resolved by its own `has_tournament_permission()`, not by widening the club ones | None — a Tournament-only org already has full IT capability via `tournament_it_admin`, so there was never really a blocker once §0l landed | Not a replacement — the row is closed, not superseded |
 
 **P2 — Valuable but can follow later.**
 
