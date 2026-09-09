@@ -17,6 +17,7 @@ import {
 const base: PlayerStateInput = {
   isCandidate: false,
   isFinalized: false,
+  wasWithdrawn: false,
   needsConsent: false,
   hasGuardian: false,
   approvalStatus: null,
@@ -57,6 +58,18 @@ describe('derivePlayerState', () => {
     expect(derivePlayerState({ ...minor, approvalStatus: 'expired' })).toBe('proposed');
     expect(derivePlayerState({ ...minor, approvalStatus: 'cancelled' })).toBe('proposed');
   });
+
+  // phase6w. Withdrawal deletes the candidate row, so without this the player
+  // would silently read as "Not selected" and the fact that they were pulled
+  // off a finalized roster -- and why -- would disappear from the view.
+  it('someone pulled off a finalized roster is withdrawn, not merely unselected', () => {
+    expect(derivePlayerState({ ...base, wasWithdrawn: true })).toBe('withdrawn');
+  });
+
+  it('re-proposing a withdrawn player puts them back in the workflow', () => {
+    expect(derivePlayerState({ ...base, wasWithdrawn: true, isCandidate: true })).toBe('proposed');
+    expect(derivePlayerState({ ...base, wasWithdrawn: true, isFinalized: true })).toBe('finalized');
+  });
 });
 
 describe('deriveRosterState', () => {
@@ -69,6 +82,13 @@ describe('deriveRosterState', () => {
 
   it('is finalized only when every proposed player is ported', () => {
     expect(roster('finalized', 'finalized', 'not_selected')).toBe('finalized');
+  });
+
+  // A withdrawn player is history. Counted as "involved" they would hold a
+  // complete roster at 'partially_finalized' forever.
+  it('a withdrawal does not hold a finished roster open', () => {
+    expect(roster('finalized', 'finalized', 'withdrawn')).toBe('finalized');
+    expect(roster('withdrawn')).toBe('draft');
   });
 
   it('is partly finalized while some are ported and some are not', () => {

@@ -3408,6 +3408,7 @@ export type Database = {
           entrant_org_id: string | null
           host_org_id: string
           id: string
+          roster_revision: number
           status: string
           team_id: string | null
           team_name: string
@@ -3423,6 +3424,7 @@ export type Database = {
           entrant_org_id?: string | null
           host_org_id: string
           id?: string
+          roster_revision?: number
           status?: string
           team_id?: string | null
           team_name: string
@@ -3438,6 +3440,7 @@ export type Database = {
           entrant_org_id?: string | null
           host_org_id?: string
           id?: string
+          roster_revision?: number
           status?: string
           team_id?: string | null
           team_name?: string
@@ -3625,6 +3628,7 @@ export type Database = {
       }
       tournament_roster: {
         Row: {
+          added_in_revision: number
           consent_on_file: boolean
           created_at: string
           created_by: string | null
@@ -3640,8 +3644,10 @@ export type Database = {
           source_org_id: string | null
           status: string
           tournament_id: string
+          withdrawn_in_revision: number | null
         }
         Insert: {
+          added_in_revision?: number
           consent_on_file?: boolean
           created_at?: string
           created_by?: string | null
@@ -3657,8 +3663,10 @@ export type Database = {
           source_org_id?: string | null
           status?: string
           tournament_id: string
+          withdrawn_in_revision?: number | null
         }
         Update: {
+          added_in_revision?: number
           consent_on_file?: boolean
           created_at?: string
           created_by?: string | null
@@ -3674,6 +3682,7 @@ export type Database = {
           source_org_id?: string | null
           status?: string
           tournament_id?: string
+          withdrawn_in_revision?: number | null
         }
         Relationships: [
           {
@@ -4388,6 +4397,17 @@ export type Database = {
       roster_consent_granted: {
         Args: { p_entry_id: string; p_player_id: string }
         Returns: boolean
+      }
+      withdraw_from_tournament_roster: {
+        Args: {
+          p_reason: string
+          p_roster_id: string
+        }
+        Returns: {
+          new_revision: number
+          withdrawn_name: string
+          withdrawn_player_id: string
+        }[]
       }
       write_audit: {
         Args: {

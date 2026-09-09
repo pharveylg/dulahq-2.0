@@ -191,6 +191,7 @@ export async function finalizeRoster(entryId: string, orgId: string) {
   if (portError) return { error: friendlyError(portError) };
 
   const portedIds = (portResults ?? []).filter((r: any) => r.outcome === 'ported').map((r: any) => r.player_id);
+  const alreadyOn = (portResults ?? []).filter((r: any) => r.outcome === 'already_rostered').length;
   const label = await tournamentLabelFor(supabase, entryId);
   await Promise.all(
     portedIds.map((playerId: string) =>
@@ -207,6 +208,7 @@ export async function finalizeRoster(entryId: string, orgId: string) {
 
   const parts: string[] = [];
   if (portedIds.length > 0) parts.push(`${portedIds.length} player${portedIds.length === 1 ? '' : 's'} added to the roster`);
+  if (alreadyOn > 0) parts.push(`${alreadyOn} already on it`);
   if (pending > 0) parts.push(`${pending} still waiting on a guardian`);
   if (notYours > 0) parts.push(`${notYours} could not be ported`);
   if (parts.length === 0) parts.push('Nothing changed.');
@@ -216,12 +218,63 @@ export async function finalizeRoster(entryId: string, orgId: string) {
 }
 
 /**
+ * Roster versioning (phase6w). Until it existed, a finalized roster was
+ * immutable -- a late injury or withdrawal had no supported fix short of
+ * editing the database by hand.
+ *
+ * The row is kept, marked `withdrawn` and stamped with the revision it left
+ * in, so the roster as submitted at any earlier revision is still
+ * reconstructible. The RPC is the only write path: tournament_roster's write
+ * policy belongs to the *host* org, so club staff cannot touch their own
+ * ported rows directly, and the RPC re-checks finalize_tournament_roster on
+ * the entry's club/team -- the same gate the port itself uses, since taking a
+ * player off is the same authority as putting one on.
+ */
+export async function withdrawFromRoster(rosterId: string, reason: string) {
+  const trimmed = reason.trim();
+  if (!trimmed) return { error: 'Say why this player is being withdrawn.' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('withdraw_from_tournament_roster', {
+    p_roster_id: rosterId,
+    p_reason: trimmed,
+  });
+  if (error) return { error: friendlyError(error) };
+
+  const result = (data ?? [])[0] as
+    | { withdrawn_player_id: string | null; withdrawn_name: string; new_revision: number }
+    | undefined;
+
+  // player_id is nullable on tournament_roster (ON DELETE SET NULL), so a row
+  // whose player has since been deleted has nobody to notify.
+  if (result?.withdrawn_player_id) {
+    await notifyAboutPlayer({
+      playerId: result.withdrawn_player_id,
+      template: 'tournament_roster.withdrawn',
+      payload: { title: 'Removed from tournament roster', body: trimmed },
+    });
+  }
+
+  revalidatePath('/c/[clubSlug]', 'layout');
+  return {
+    success: true,
+    message: `${result?.withdrawn_name ?? 'Player'} withdrawn — roster is now revision ${result?.new_revision ?? '?'}.`,
+  };
+}
+
+/**
  * The export itself happens client-side (a Blob download, RosterBuilder.tsx)
  * -- there's no server round-trip to hang an audit call on otherwise, so
  * this one-line action exists purely to record that it happened, per the
  * Coach Module spec §20's "export generation" audit item.
  */
-export async function recordRosterExport(entryId: string, orgId: string, format: 'txt' | 'pdf', playerCount: number) {
+export async function recordRosterExport(
+  entryId: string,
+  orgId: string,
+  format: 'txt' | 'pdf',
+  playerCount: number,
+  revision: number
+) {
   const supabase = await createClient();
   await supabase.rpc('write_audit', {
     p_org_id: orgId,
@@ -229,7 +282,9 @@ export async function recordRosterExport(entryId: string, orgId: string, format:
     p_scope_type: 'tournament',
     p_entity_type: 'tournament_entry',
     p_entity_id: entryId,
-    p_after: { format, player_count: playerCount },
+    // Which revision left the building is the point of logging the export at
+    // all now that a roster can change after it is finalized (phase6w).
+    p_after: { format, player_count: playerCount, revision },
   });
   return { success: true };
 }

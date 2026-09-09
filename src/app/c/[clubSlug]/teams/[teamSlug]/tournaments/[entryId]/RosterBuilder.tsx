@@ -7,6 +7,7 @@ import {
   requestAcknowledgements,
   finalizeRoster,
   recordRosterExport,
+  withdrawFromRoster,
 } from '../actions';
 import {
   derivePlayerState,
@@ -27,10 +28,25 @@ type PlayerRow = {
   hasGuardian: boolean;
   isCandidate: boolean;
   isFinalized: boolean;
+  wasWithdrawn: boolean;
   approvalStatus: string | null;
   declineReason: string | null;
 };
-type FinalRosterPlayer = { id: string; name: string; jersey: string | null; position: string | null };
+type FinalRosterPlayer = {
+  id: string;
+  playerId: string | null;
+  name: string;
+  jersey: string | null;
+  position: string | null;
+  addedInRevision: number;
+};
+type WithdrawnPlayer = {
+  id: string;
+  name: string;
+  reason: string | null;
+  addedInRevision: number;
+  withdrawnInRevision: number | null;
+};
 
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: 'text/plain' });
@@ -62,6 +78,8 @@ export default function RosterBuilder({
   canFinalize,
   players,
   finalizedRoster,
+  withdrawnRoster,
+  rosterRevision,
 }: {
   entryId: string;
   orgId: string;
@@ -74,16 +92,28 @@ export default function RosterBuilder({
   canFinalize: boolean;
   players: PlayerRow[];
   finalizedRoster: FinalRosterPlayer[];
+  withdrawnRoster: WithdrawnPlayer[];
+  rosterRevision: number;
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // Withdrawal is irreversible for that row and has to say why, so it opens an
+  // inline reason field rather than firing on the first click.
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
 
   const withState = players.map((p) => ({ ...p, state: derivePlayerState(p) }));
   const rosterState = deriveRosterState(withState.map((p) => p.state));
   const proposed = withState.filter((p) => p.isCandidate || p.isFinalized);
   const available = withState.filter((p) => !p.isCandidate && !p.isFinalized);
+
+  // Withdrawal addresses a tournament_roster row, not a player, so the
+  // proposed list needs the id of the row a finalized player actually holds.
+  const rosterIdByPlayer = new Map(
+    finalizedRoster.filter((r) => r.playerId).map((r) => [r.playerId as string, r.id])
+  );
 
   function run(fn: () => Promise<{ error?: string; message?: string } | undefined>) {
     setError(null);
@@ -111,13 +141,16 @@ export default function RosterBuilder({
       `Tournament: ${tournamentName}`,
       `Category: ${categoryName ?? '—'}`,
       `Team: ${teamName}`,
+      // Which revision this sheet is stops mattering only if rosters can't
+      // change after finalization, and since phase6w they can.
+      `Roster revision: ${rosterRevision}`,
       `Generated: ${new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}`,
       '',
       '#   Jersey  Position   Name',
       ...finalizedRoster.map((p, i) => `${String(i + 1).padEnd(4)}${(p.jersey ?? '—').padEnd(8)}${(p.position ?? '—').padEnd(11)}${p.name}`),
     ];
     downloadText(`${tournamentName.replace(/\s+/g, '-')}-${teamName.replace(/\s+/g, '-')}-roster.txt`, lines.join('\n'));
-    void recordRosterExport(entryId, orgId, 'txt', finalizedRoster.length);
+    void recordRosterExport(entryId, orgId, 'txt', finalizedRoster.length, rosterRevision);
   }
 
   const awaitingCount = withState.filter((p) => p.state === 'awaiting_guardian').length;
@@ -135,6 +168,7 @@ export default function RosterBuilder({
         <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
           {proposed.length} proposed · {finalizedRoster.length} finalized
           {awaitingCount > 0 ? ` · ${awaitingCount} awaiting a guardian` : ''}
+          {rosterRevision > 0 ? ` · revision ${rosterRevision}` : ''}
         </span>
       </div>
 
@@ -142,36 +176,90 @@ export default function RosterBuilder({
         <>
           <div className="section-label">Proposed roster ({proposed.length})</div>
           <div className="card" style={{ marginBottom: 16 }}>
-            {proposed.map((p) => (
-              <div key={p.id} className="list-row">
-                <span style={{ fontSize: 13 }}>
-                  {p.name}
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {' '}{[p.jersey && `#${p.jersey}`, p.position].filter(Boolean).join(' · ')}
-                  </span>
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {!p.needsConsent && <span className="chip" style={{ fontSize: 10 }}>Adult</span>}
-                  <span
-                    className="chip"
-                    style={{ fontSize: 10, ...toneStyle(PLAYER_STATE_TONE[p.state]) }}
-                    title={p.declineReason ?? undefined}
-                  >
-                    {PLAYER_STATE_LABEL[p.state]}
-                  </span>
-                  {canFill && !p.isFinalized && (
-                    <button
-                      className="btn"
-                      style={{ fontSize: 10.5, color: 'var(--text-muted)' }}
-                      disabled={pending}
-                      onClick={() => run(() => removeRosterCandidate(entryId, p.id))}
+            {proposed.map((p) => {
+              const rosterId = rosterIdByPlayer.get(p.id);
+              return (
+                <div key={p.id}>
+                  <div className="list-row">
+                    <span style={{ fontSize: 13 }}>
+                      {p.name}
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {' '}{[p.jersey && `#${p.jersey}`, p.position].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {!p.needsConsent && <span className="chip" style={{ fontSize: 10 }}>Adult</span>}
+                      <span
+                        className="chip"
+                        style={{ fontSize: 10, ...toneStyle(PLAYER_STATE_TONE[p.state]) }}
+                        title={p.declineReason ?? undefined}
+                      >
+                        {PLAYER_STATE_LABEL[p.state]}
+                      </span>
+                      {canFill && !p.isFinalized && (
+                        <button
+                          className="btn"
+                          style={{ fontSize: 10.5, color: 'var(--text-muted)' }}
+                          disabled={pending}
+                          onClick={() => run(() => removeRosterCandidate(entryId, p.id))}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      {canFinalize && p.isFinalized && rosterId && withdrawing !== rosterId && (
+                        <button
+                          className="btn"
+                          style={{ fontSize: 10.5, color: 'var(--text-muted)' }}
+                          disabled={pending}
+                          onClick={() => { setWithdrawing(rosterId); setReason(''); }}
+                        >
+                          Withdraw
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {withdrawing === rosterId && (
+                    <div
+                      className="list-row"
+                      style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}
                     >
-                      Remove
-                    </button>
+                      <input
+                        className="input"
+                        style={{ flex: '1 1 220px', fontSize: 12.5 }}
+                        placeholder={`Why is ${p.name} being withdrawn?`}
+                        value={reason}
+                        disabled={pending}
+                        autoFocus
+                        onChange={(e) => setReason(e.target.value)}
+                      />
+                      <button
+                        className="btn"
+                        disabled={pending || reason.trim() === ''}
+                        style={{ fontSize: 11.5 }}
+                        onClick={() =>
+                          run(async () => {
+                            const result = await withdrawFromRoster(rosterId, reason);
+                            if (!result?.error) { setWithdrawing(null); setReason(''); }
+                            return result;
+                          })
+                        }
+                      >
+                        {pending ? 'Withdrawing…' : 'Confirm withdrawal'}
+                      </button>
+                      <button
+                        className="btn"
+                        style={{ fontSize: 11.5, color: 'var(--text-muted)' }}
+                        disabled={pending}
+                        onClick={() => { setWithdrawing(null); setReason(''); }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {entryAccepted && (
@@ -207,6 +295,28 @@ export default function RosterBuilder({
         </button>
       )}
 
+      {/* Withdrawn rows are kept, never deleted, so the roster as submitted at
+          an earlier revision stays reconstructible -- and so the reason a
+          player came off it survives the person who typed it. */}
+      {withdrawnRoster.length > 0 && (
+        <>
+          <div className="section-label">Withdrawn ({withdrawnRoster.length})</div>
+          <div className="card" style={{ marginBottom: 24 }}>
+            {withdrawnRoster.map((r) => (
+              <div key={r.id} className="list-row">
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  <span style={{ textDecoration: 'line-through' }}>{r.name}</span>
+                  {r.reason ? ` — ${r.reason}` : ''}
+                </span>
+                <span className="chip" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  on in r{r.addedInRevision} · off in r{r.withdrawnInRevision ?? '?'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {players.length === 0 && (
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No players on this team&apos;s roster yet.</p>
       )}
@@ -224,11 +334,21 @@ export default function RosterBuilder({
                     {[p.jersey && `#${p.jersey}`, p.position].filter(Boolean).join(' · ')}
                   </span>
                 </label>
-                {!p.needsConsent
-                  ? <span className="chip" style={{ fontSize: 10 }}>Adult</span>
-                  : !p.hasGuardian
-                    ? <span className="chip" style={{ fontSize: 10, ...toneStyle('bad') }}>No guardian on file</span>
-                    : <span className="chip" style={{ fontSize: 10 }}>Needs guardian consent</span>}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {/* Someone withdrawn from an earlier revision is back on this
+                      list, and looks identical to a player never picked unless
+                      it is said out loud. */}
+                  {p.wasWithdrawn && (
+                    <span className="chip" style={{ fontSize: 10, ...toneStyle('warn') }}>
+                      {PLAYER_STATE_LABEL.withdrawn} earlier
+                    </span>
+                  )}
+                  {!p.needsConsent
+                    ? <span className="chip" style={{ fontSize: 10 }}>Adult</span>
+                    : !p.hasGuardian
+                      ? <span className="chip" style={{ fontSize: 10, ...toneStyle('bad') }}>No guardian on file</span>
+                      : <span className="chip" style={{ fontSize: 10 }}>Needs guardian consent</span>}
+                </span>
               </div>
             ))}
           </div>

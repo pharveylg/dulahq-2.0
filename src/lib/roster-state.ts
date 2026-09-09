@@ -9,10 +9,18 @@
  * (tournament_roster). A stored status column would be a second source of
  * truth that drifts from the approvals it claims to summarise.
  *
- * The spec's "Locked" is deliberately not a separate state: a
- * tournament_roster row is already immutable (there is no unfinalize path),
- * so Finalized and Locked describe the same reality today. If an unfinalize
- * workflow is ever built, that is when the two need separating.
+ * The spec's "Locked" is still deliberately not a separate state. phase6w
+ * added the withdrawal path the original note here said would be needed
+ * before Finalized and Locked could differ -- but it did not add a lock:
+ * withdrawal is available at every revision, so "Finalized" continues to
+ * describe the whole of what is true. Locked only becomes real if a deadline
+ * (an entry cutoff, a tournament start) ever closes the roster, and that
+ * would be a fact about the *tournament*, not a state a coach transitions to.
+ *
+ * `withdrawn` below is likewise about a player, not the roster: it exists so
+ * someone taken off a finalized roster reads differently from someone who was
+ * never picked, which is history the coach needs and would otherwise vanish
+ * (withdrawal deletes the candidate row, so they fall back to "not selected").
  */
 
 export type PlayerRosterState =
@@ -22,6 +30,7 @@ export type PlayerRosterState =
   | 'awaiting_guardian'
   | 'guardian_confirmed'
   | 'guardian_declined'
+  | 'withdrawn'
   | 'finalized';
 
 export type RosterState =
@@ -35,6 +44,8 @@ export type RosterState =
 export type PlayerStateInput = {
   isCandidate: boolean;
   isFinalized: boolean;
+  /** Has a withdrawn tournament_roster row and no live one (phase6w). */
+  wasWithdrawn: boolean;
   needsConsent: boolean;
   hasGuardian: boolean;
   approvalStatus: string | null;
@@ -42,7 +53,9 @@ export type PlayerStateInput = {
 
 export function derivePlayerState(p: PlayerStateInput): PlayerRosterState {
   if (p.isFinalized) return 'finalized';
-  if (!p.isCandidate) return 'not_selected';
+  // Re-proposing a withdrawn player is a deliberate act, so a live candidacy
+  // outranks the old withdrawal -- they are back in the workflow.
+  if (!p.isCandidate) return p.wasWithdrawn ? 'withdrawn' : 'not_selected';
   if (!p.needsConsent) return 'proposed';
 
   switch (p.approvalStatus) {
@@ -61,7 +74,10 @@ export function derivePlayerState(p: PlayerStateInput): PlayerRosterState {
 }
 
 export function deriveRosterState(states: PlayerRosterState[]): RosterState {
-  const involved = states.filter((s) => s !== 'not_selected');
+  // A withdrawn player is history, not part of the roster being assembled --
+  // counted here they would hold an otherwise-finished roster short of
+  // 'finalized' forever.
+  const involved = states.filter((s) => s !== 'not_selected' && s !== 'withdrawn');
   if (involved.length === 0) return 'draft';
 
   const finalized = involved.filter((s) => s === 'finalized').length;
@@ -82,6 +98,7 @@ export const PLAYER_STATE_LABEL: Record<PlayerRosterState, string> = {
   awaiting_guardian: 'Awaiting guardian',
   guardian_confirmed: 'Guardian confirmed',
   guardian_declined: 'Guardian declined',
+  withdrawn: 'Withdrawn',
   finalized: 'Finalized',
 };
 
@@ -103,6 +120,7 @@ export const PLAYER_STATE_TONE: Record<PlayerRosterState, Tone> = {
   awaiting_guardian: 'warn',
   guardian_confirmed: 'good',
   guardian_declined: 'bad',
+  withdrawn: 'neutral',
   finalized: 'good',
 };
 

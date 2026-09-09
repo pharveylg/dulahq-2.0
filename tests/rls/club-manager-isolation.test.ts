@@ -878,3 +878,167 @@ describe('roster finalization cannot be overridden by an org admin', () => {
     await adminClient.from('tournament_entries').delete().eq('id', clubEntryId!);
   });
 });
+
+/**
+ * phase6w. Before it, a tournament_roster row was immutable -- and it still is
+ * to everyone except this RPC, since tournament_roster's write policy belongs
+ * to the HOST org (`roster_host_write` = is_org_admin(org_id)), so club staff
+ * have no direct write path to their own ported rows at all.
+ *
+ * The gate is deliberately the same one the port uses, so these pin both
+ * directions: taking a player off must be exactly as hard as putting one on,
+ * and in particular the club manager must be refused (Club Manager spec §29 --
+ * otherwise the admin override forbidden on the way in reappears on the way
+ * out).
+ */
+describe('withdrawing a player from a finalized roster', () => {
+  let entryId: string | null = null;
+  let adultId: string | null = null;
+  let rosterId: string | null = null;
+
+  it('sets up a finalized roster with one adult on it', async () => {
+    const tournament = must(await adminClient
+      .from('tournaments')
+      .insert({ name: 'RLS Withdraw Cup', org_id: orgA.id, slug: `rls-wd-${crypto.randomUUID().slice(0, 8)}` })
+      .select().single(), 'tournaments withdraw');
+
+    const entry = must(await adminClient
+      .from('tournament_entries')
+      .insert({
+        tournament_id: tournament.id,
+        host_org_id: orgA.id,
+        entrant_org_id: orgA.id,
+        club_id: clubA.id,
+        team_id: teamA1.id,
+        team_name: 'Club A - U15',
+        status: 'accepted',
+      })
+      .select().single(), 'tournament_entries withdraw');
+    entryId = entry.id;
+
+    // An explicit dob is required: requires_guardian_consent() defaults to
+    // TRUE when dob is unknown (CLAUDE.md §5), so the other player fixtures
+    // would come back consent_missing and never port.
+    const adult = must(await adminClient
+      .from('players')
+      .insert({ name: 'Adult A1', team_id: teamA1.id, dob: '1994-01-01' })
+      .select().single(), 'players adult');
+    adultId = adult.id;
+
+    const { data, error } = await coachA1Client.rpc('port_squad_to_tournament', {
+      p_entry_id: entryId!,
+      p_player_ids: [adultId!],
+    });
+    expect(error).toBeNull();
+    expect((data as any[])[0].outcome).toBe('ported');
+    rosterId = (data as any[])[0].roster_id;
+  });
+
+  it('porting the same player again is a no-op, not a duplicate row', async () => {
+    const { data } = await coachA1Client.rpc('port_squad_to_tournament', {
+      p_entry_id: entryId!,
+      p_player_ids: [adultId!],
+    });
+    expect((data as any[])[0].outcome).toBe('already_rostered');
+
+    const { count } = await adminClient
+      .from('tournament_roster')
+      .select('id', { count: 'exact', head: true })
+      .eq('entry_id', entryId!);
+    expect(count).toBe(1);
+  });
+
+  it('the club manager CANNOT withdraw a player (spec §29 applies both ways)', async () => {
+    const { error } = await clubAdminAClient.rpc('withdraw_from_tournament_roster', {
+      p_roster_id: rosterId!,
+      p_reason: 'because I said so',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('the IT admin CANNOT withdraw a player', async () => {
+    const { error } = await itAdminAClient.rpc('withdraw_from_tournament_roster', {
+      p_roster_id: rosterId!,
+      p_reason: 'support request',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('a withdrawal must say why', async () => {
+    const { error } = await coachA1Client.rpc('withdraw_from_tournament_roster', {
+      p_roster_id: rosterId!,
+      p_reason: '   ',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('the assigned coach CAN, and the row is kept as history', async () => {
+    const { data, error } = await coachA1Client.rpc('withdraw_from_tournament_roster', {
+      p_roster_id: rosterId!,
+      p_reason: 'Ankle injury',
+    });
+    expect(error).toBeNull();
+    expect((data as any[])[0].new_revision).toBe(2);
+
+    const row = must(await adminClient
+      .from('tournament_roster').select('status, added_in_revision, withdrawn_in_revision, reject_reason')
+      .eq('id', rosterId!).single(), 'withdrawn row');
+    expect(row.status).toBe('withdrawn');
+    expect(row.added_in_revision).toBe(1);
+    expect(row.withdrawn_in_revision).toBe(2);
+    expect(row.reject_reason).toBe('Ankle injury');
+  });
+
+  it('the same row cannot be withdrawn twice', async () => {
+    const { error } = await coachA1Client.rpc('withdraw_from_tournament_roster', {
+      p_roster_id: rosterId!,
+      p_reason: 'again',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  // The whole point of keeping the row: what was submitted at revision 1 is
+  // still answerable after revision 2 changed it.
+  it('the roster as submitted at revision 1 is still reconstructible', async () => {
+    const { count } = await adminClient
+      .from('tournament_roster')
+      .select('id', { count: 'exact', head: true })
+      .eq('entry_id', entryId!)
+      .lte('added_in_revision', 1)
+      .or('withdrawn_in_revision.is.null,withdrawn_in_revision.gt.1');
+    expect(count).toBe(1);
+  });
+
+  it('a withdrawn player can be re-added, as a new row at a new revision', async () => {
+    const { data } = await coachA1Client.rpc('port_squad_to_tournament', {
+      p_entry_id: entryId!,
+      p_player_ids: [adultId!],
+    });
+    expect((data as any[])[0].outcome).toBe('ported');
+
+    const { count } = await adminClient
+      .from('tournament_roster')
+      .select('id', { count: 'exact', head: true })
+      .eq('entry_id', entryId!)
+      .eq('added_in_revision', 3);
+    expect(count).toBe(1);
+  });
+
+  // The finalize deviation recorded in §0d ("only coach or team manager")
+  // has to hold on the withdrawal side too, or the two ends disagree.
+  it('the team manager on the same team CAN also withdraw', async () => {
+    const fresh = must(await adminClient
+      .from('tournament_roster').select('id').eq('entry_id', entryId!).eq('added_in_revision', 3).single(),
+      'fresh roster row');
+    const { error } = await teamManagerA1Client.rpc('withdraw_from_tournament_roster', {
+      p_roster_id: fresh.id,
+      p_reason: 'Squad change',
+    });
+    expect(error).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_entries').delete().eq('id', entryId!);
+    await adminClient.from('players').delete().eq('id', adultId!);
+  });
+});

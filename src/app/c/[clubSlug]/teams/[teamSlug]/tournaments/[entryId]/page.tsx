@@ -21,7 +21,7 @@ export default async function TournamentEntryPage({
 
   const { data: entry, error: entryError } = await supabase
     .from('tournament_entries')
-    .select('id, status, team_id, entrant_org_id, tournament_id, category_id, tournaments(name, venue, event_date), tournament_categories(name, age_group, format)')
+    .select('id, status, team_id, entrant_org_id, tournament_id, category_id, roster_revision, tournaments(name, venue, event_date), tournament_categories(name, age_group, format)')
     .eq('id', entryId)
     .maybeSingle();
 
@@ -61,7 +61,11 @@ export default async function TournamentEntryPage({
     supabase.rpc('has_staff_permission', { p_permission_key: 'request_guardian_acknowledgement', p_club_id: club.id, p_team_id: team.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'finalize_tournament_roster', p_club_id: club.id, p_team_id: team.id }),
     supabase.from('players').select('id, name, jersey, position, dob').eq('team_id', team.id).order('name'),
-    supabase.from('tournament_roster').select('id, full_name, jersey, position, player_id').eq('entry_id', entryId).order('full_name'),
+    supabase
+      .from('tournament_roster')
+      .select('id, full_name, jersey, position, player_id, status, reject_reason, added_in_revision, withdrawn_in_revision')
+      .eq('entry_id', entryId)
+      .order('full_name'),
     supabase
       .from('approval_requests')
       .select('id, player_id, status, decline_reason, requested_at, decided_at')
@@ -70,7 +74,14 @@ export default async function TournamentEntryPage({
     supabase.from('tournament_roster_candidates').select('player_id').eq('entry_id', entryId),
   ]);
 
-  const finalizedPlayerIds = new Set((finalRoster ?? []).map((r) => r.player_id).filter(Boolean));
+  // A withdrawn row is history (phase6w): it stays in tournament_roster so the
+  // roster as submitted at an earlier revision is still reconstructible, but it
+  // is not part of the roster today.
+  const liveRoster = (finalRoster ?? []).filter((r) => r.status !== 'withdrawn');
+  const withdrawnRoster = (finalRoster ?? []).filter((r) => r.status === 'withdrawn');
+
+  const finalizedPlayerIds = new Set(liveRoster.map((r) => r.player_id).filter(Boolean));
+  const withdrawnPlayerIds = new Set(withdrawnRoster.map((r) => r.player_id).filter(Boolean));
   const candidateIds = new Set((candidateRowsRaw ?? []).map((c) => c.player_id));
   const approvalByPlayer = new Map((approvalRows ?? []).map((a) => [a.player_id, a]));
 
@@ -98,12 +109,27 @@ export default async function TournamentEntryPage({
       hasGuardian: hasGuardian.has(p.id),
       isCandidate: candidateIds.has(p.id),
       isFinalized: finalizedPlayerIds.has(p.id),
+      wasWithdrawn: withdrawnPlayerIds.has(p.id) && !finalizedPlayerIds.has(p.id) && !candidateIds.has(p.id),
       approvalStatus: approval?.status ?? null,
       declineReason: approval?.decline_reason ?? null,
     };
   });
 
-  const finalizedRows = (finalRoster ?? []).map((r) => ({ id: r.id, name: r.full_name, jersey: r.jersey, position: r.position }));
+  const finalizedRows = liveRoster.map((r) => ({
+    id: r.id,
+    playerId: r.player_id,
+    name: r.full_name,
+    jersey: r.jersey,
+    position: r.position,
+    addedInRevision: r.added_in_revision,
+  }));
+  const withdrawnRows = withdrawnRoster.map((r) => ({
+    id: r.id,
+    name: r.full_name,
+    reason: r.reject_reason,
+    addedInRevision: r.added_in_revision,
+    withdrawnInRevision: r.withdrawn_in_revision,
+  }));
 
   return (
     <main className="page">
@@ -141,6 +167,8 @@ export default async function TournamentEntryPage({
           canFinalize={!!canFinalizeRes}
           players={playerRows}
           finalizedRoster={finalizedRows}
+          withdrawnRoster={withdrawnRows}
+          rosterRevision={entry.roster_revision ?? 0}
         />
       </div>
     </main>
