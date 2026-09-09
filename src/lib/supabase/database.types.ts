@@ -4187,7 +4187,7 @@ export type Database = {
         Returns: boolean
       }
       is_assigned_to_team: { Args: { check_team_id: string }; Returns: boolean }
-      is_club_admin: { Args: { check_club_id: string }; Returns: boolean }
+      is_club_manager: { Args: { check_club_id: string }; Returns: boolean }
       is_club_staff: { Args: { check_club_id: string }; Returns: boolean }
       is_guardian_of: { Args: { check_player_id: string }; Returns: boolean }
       is_org_admin: { Args: { org: string }; Returns: boolean }

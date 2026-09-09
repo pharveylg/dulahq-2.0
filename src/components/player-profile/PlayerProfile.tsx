@@ -75,12 +75,13 @@ export default async function PlayerProfile({
     viewTeam: false, manageDevelopment: false, addEvaluation: false,
     addPlayerFeedback: false, addPrivateCoachNote: false, editFootballProfile: false,
     manageFinances: false, manageMembership: false, manageStaff: false, manageDocuments: false, viewMedical: false,
+    manageTeamDocuments: false, manageTeamMembership: false,
   };
   if (viewer === 'coach' && clubId) {
     const keys = [
       'view_team', 'manage_development', 'add_evaluation', 'add_player_feedback',
       'add_private_coach_note', 'edit_player_football_profile', 'manage_finances', 'manage_membership', 'manage_staff',
-      'manage_documents', 'view_medical',
+      'manage_documents', 'view_medical', 'manage_team_documents', 'manage_team_membership',
     ] as const;
     const results = await Promise.all(
       keys.map((key) => supabase.rpc('has_staff_permission', { p_permission_key: key, p_club_id: clubId, p_team_id: teamId ?? undefined }))
@@ -90,16 +91,19 @@ export default async function PlayerProfile({
       addPlayerFeedback: !!results[3].data, addPrivateCoachNote: !!results[4].data,
       editFootballProfile: !!results[5].data, manageFinances: !!results[6].data, manageMembership: !!results[7].data,
       manageStaff: !!results[8].data, manageDocuments: !!results[9].data, viewMedical: !!results[10].data,
+      manageTeamDocuments: !!results[11].data, manageTeamMembership: !!results[12].data,
     };
   }
-  // Preserves today's exact behavior (canManage || role==='staff' for fees;
-  // canManage alone for membership/family) rather than tightening it as a
-  // side effect here -- fee_charges/memberships/guardians RLS isn't part of
-  // this cutover yet, so the UI staying at parity with what those policies
-  // actually allow is the correct choice; see CLAUDE.md §0c for when that's
-  // scoped in.
-  const canManageFees = perms.viewTeam || perms.manageFinances;
-  const canManageMembership = perms.viewTeam || perms.manageMembership;
+  // Each flag now mirrors the write policy that actually governs the table,
+  // rather than the `view_team` stand-in Phase 1 used while fee_charges /
+  // memberships RLS was still untouched (phase6m wired those up, so the
+  // stand-in would now show controls the database refuses). Fees are
+  // deliberately asymmetric: a team_manager reads their teams' charges via
+  // view_team_finance but cannot write them -- fees_write is club-scope
+  // only (manage_finances / can_admin_club), matching the Team Manager
+  // spec §23, whose finance permissions are all VIEW_/EXPORT_.
+  const canManageFees = perms.manageFinances;
+  const canManageMembership = perms.manageMembership || perms.manageTeamMembership;
   const canManageFamily = perms.viewTeam;
   const canManageNotes = perms.addPlayerFeedback || perms.addPrivateCoachNote;
   // guardian_permission_grants RLS is genuinely club_admin/platform_admin
@@ -359,7 +363,7 @@ export default async function PlayerProfile({
         documents: clubId && teamId ? (
           <Documents
             clubId={clubId} teamId={teamId} playerId={playerId} playerName={player.name} documents={documents}
-            canManageGeneral={perms.manageDocuments} canManageMedical={perms.viewMedical}
+            canManageGeneral={perms.manageDocuments || perms.manageTeamDocuments} canManageMedical={perms.viewMedical}
           />
         ) : (
           <div className="card">

@@ -43,8 +43,8 @@ export default async function TeamRosterPage({
   // memberships/training_sessions/attendance now enforces, so this page
   // never shows an edit control the database would then reject.
   const access = await getClubAccess(clubId);
-  const assignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
-  const canManage = access.isClubAdmin || assignedTeamIds.includes(teamId);
+  const assignedTeamIds = access.isClubManager ? [] : await getAssignedTeamIds();
+  const canManage = access.isClubManager || assignedTeamIds.includes(teamId);
   // Fees specifically are also settable by a plain 'staff' club_staff
   // member, not just club_admin or the assigned coach -- matches
   // widen_fee_management_to_staff_role.
@@ -140,7 +140,7 @@ export default async function TeamRosterPage({
           <span className="chip">
             {access.isPlatformAdmin
               ? 'Platform admin'
-              : access.isClubAdmin
+              : access.isClubManager
                 ? 'Club admin'
                 : canManage
                   ? `${access.role?.replace('_', ' ')} — assigned`

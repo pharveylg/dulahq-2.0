@@ -392,10 +392,13 @@ h1, h2, h3, .brand {
   transition: transform .15s var(--ease-spring);
 }
 
-.chip-club_admin { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft-border); }
+.chip-club_manager { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft-border); }
 .chip-staff { color: var(--text-muted); }
 .chip-coach { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-soft-border); }
+.chip-assistant_coach { color: var(--warn); }
 .chip-team_manager { color: var(--blue); background: var(--blue-soft); border-color: var(--blue-soft-border); }
+.chip-treasurer { color: var(--text-muted); }
+.chip-secretary { color: var(--text-muted); }
 
 .form-group {
   margin-bottom: 16px;

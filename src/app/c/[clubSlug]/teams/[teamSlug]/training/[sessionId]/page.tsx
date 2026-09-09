@@ -40,8 +40,8 @@ export default async function SessionAttendancePage({
   if (!session || session.team_id !== teamId) notFound();
 
   const access = await getClubAccess(clubId);
-  const assignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
-  const canManage = access.isClubAdmin || assignedTeamIds.includes(teamId);
+  const assignedTeamIds = access.isClubManager ? [] : await getAssignedTeamIds();
+  const canManage = access.isClubManager || assignedTeamIds.includes(teamId);
 
   const { data: players } = await supabase.from('players').select('id, name').eq('team_id', teamId).order('name');
   const { data: attendanceRows } = await supabase

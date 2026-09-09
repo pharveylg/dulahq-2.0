@@ -138,7 +138,7 @@ async function seedClubAdmin(org, club, clubSlug) {
   const name = personName('M');
   const email = `clubadmin.${clubSlug}@${EMAIL_DOMAIN}`;
   const id = await createPerson(email, name);
-  await must(admin.from('club_staff').insert({ club_id: club.id, org_id: org.id, user_id: id, role: 'club_admin' }), `club_admin ${clubSlug}`);
+  await must(admin.from('club_staff').insert({ club_id: club.id, org_id: org.id, user_id: id, role: 'club_manager' }), `club_manager ${clubSlug}`);
   return { id, email, name };
 }
 async function createTeam(org, club, slug, name, squadType) {

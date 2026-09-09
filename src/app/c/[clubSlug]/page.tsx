@@ -90,14 +90,14 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   // route param and the hrefs built for navigation use the slug.
   const clubId = club.id;
 
-  // access.isClubAdmin gates club-wide actions (rename, staff, link teams,
+  // access.isClubManager gates club-wide actions (rename, staff, link teams,
   // any-audience announcements); access.isStaff gates the broader "any
   // club_staff role" actions RLS still allows unscoped (trips, media).
   const access = await getClubAccess(clubId);
-  const canManage = access.isClubAdmin;
+  const canManage = access.isClubManager;
   const canManageWide = access.isStaff;
-  const canManageFinances = access.isClubAdmin || access.role === 'staff';
-  const myAssignedTeamIds = access.isClubAdmin ? [] : await getAssignedTeamIds();
+  const canManageFinances = access.isClubManager || access.role === 'staff';
+  const myAssignedTeamIds = access.isClubManager ? [] : await getAssignedTeamIds();
 
   // club_staff has two FKs into users (user_id, created_by) -- the embed
   // must be disambiguated with !user_id or PostgREST rejects the whole
@@ -249,7 +249,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   // club_admin (club-wide) and coach/team_manager (their assigned teams
   // only), same component, scoped by relevantTeamIds. Action-first: what's
   // flagged below drives the Action Center list, not just tile counts.
-  const relevantTeamIds = access.isClubAdmin ? (clubTeams ?? []).map((t) => t.id) : myAssignedTeamIds;
+  const relevantTeamIds = access.isClubManager ? (clubTeams ?? []).map((t) => t.id) : myAssignedTeamIds;
   const teamsById = new Map((clubTeams ?? []).map((t) => [t.id, t]));
 
   let actionCenter: {
@@ -552,7 +552,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           teamsSlot={
             <>
               <div className="section-label">
-                {access.isClubAdmin ? `Teams (${clubTeams?.length ?? 0})` : `My teams (${myAssignedTeamIds.length} of ${clubTeams?.length ?? 0})`}
+                {access.isClubManager ? `Teams (${clubTeams?.length ?? 0})` : `My teams (${myAssignedTeamIds.length} of ${clubTeams?.length ?? 0})`}
               </div>
               <div className="card">
                 {(!clubTeams || clubTeams.length === 0) && (
@@ -560,11 +560,11 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                 )}
                 {[...(clubTeams ?? [])]
                   .sort((a, b) => {
-                    if (access.isClubAdmin) return 0;
+                    if (access.isClubManager) return 0;
                     return Number(myAssignedTeamIds.includes(b.id)) - Number(myAssignedTeamIds.includes(a.id));
                   })
                   .map((t) => {
-                    const assigned = access.isClubAdmin || myAssignedTeamIds.includes(t.id);
+                    const assigned = access.isClubManager || myAssignedTeamIds.includes(t.id);
                     return (
                       <Link key={t.id} href={`/c/${club.slug}/teams/${t.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
                         <span className="list-row-title">{t.name}</span>
@@ -631,7 +631,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                 announcements={announcements}
                 teams={clubTeams ?? []}
                 canManage={canManageWide}
-                isClubAdmin={access.isClubAdmin}
+                isClubManager={access.isClubManager}
                 assignedTeamIds={myAssignedTeamIds}
               />
             </>

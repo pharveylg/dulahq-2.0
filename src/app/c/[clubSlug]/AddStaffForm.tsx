@@ -3,7 +3,17 @@
 import { useActionState, useEffect, useRef } from 'react';
 import { addStaff } from './actions';
 
-const ROLES = ['club_admin', 'staff', 'coach', 'team_manager'];
+// Must stay in step with club_staff_role_check (phase6k/phase6l). Ordered
+// roughly by breadth of authority so the picker reads as a hierarchy.
+const ROLES = [
+  'club_manager',
+  'team_manager',
+  'coach',
+  'assistant_coach',
+  'treasurer',
+  'secretary',
+  'staff',
+];
 
 type ActionState = { error?: string; success?: boolean };
 const initialState: ActionState = {};

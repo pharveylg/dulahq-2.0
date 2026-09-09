@@ -49,11 +49,15 @@ let playerA1: { id: string };
 let playerA2: { id: string };
 let playerB: { id: string };
 
+let feeA1: { id: string };
+let feeA2: { id: string };
+
 let coachA1Client: ReturnType<typeof createClient>;
 let clubAdminAClient: ReturnType<typeof createClient>;
 let clubStaffBClient: ReturnType<typeof createClient>;
 let guardianOfA1Client: ReturnType<typeof createClient>;
 let orgAdminAClient: ReturnType<typeof createClient>;
+let teamManagerA1Client: ReturnType<typeof createClient>;
 
 /**
  * Creates the auth.users row. The phase-1 trigger creates the matching
@@ -185,18 +189,37 @@ beforeAll(async () => {
     role: 'admin',
   });
 
+  // A team_manager on the SAME team as the coach -- the phase6k/6l role
+  // split is only meaningful if the two can be compared on identical data.
+  const teamManagerA1 = await createTestUser('tm-a1@rls-test.local', 'team');
+
   // Coach A1 is assigned to Team A1 via the EXISTING user_assigned_teams
   // mechanism -- this is what makes is_assigned_to_team() true for them.
-  await adminClient.from('user_assigned_teams').insert({
-    user_id: coachA1.publicUser.id,
-    team_id: teamA1.id,
-  });
+  await adminClient.from('user_assigned_teams').insert([
+    { user_id: coachA1.publicUser.id, team_id: teamA1.id },
+    { user_id: teamManagerA1.publicUser.id, team_id: teamA1.id },
+  ]);
 
   await adminClient.from('club_staff').insert([
-    { club_id: clubA.id, user_id: clubAdminA.publicUser.id, role: 'club_admin' },
-    { club_id: clubB.id, user_id: clubStaffB.publicUser.id, role: 'club_admin' },
+    { club_id: clubA.id, user_id: clubAdminA.publicUser.id, role: 'club_manager' },
+    { club_id: clubB.id, user_id: clubStaffB.publicUser.id, role: 'club_manager' },
     { club_id: clubA.id, user_id: coachA1.publicUser.id, role: 'coach' },
+    { club_id: clubA.id, user_id: teamManagerA1.publicUser.id, role: 'team_manager' },
   ]);
+
+  // One fee charge per team, so the team_manager's view_team_finance fence
+  // (phase6m) has something to include AND something to exclude.
+  feeA1 = must(await adminClient
+    .from('fee_charges')
+    .insert({ club_id: clubA.id, player_id: playerA1.id, fee_type: 'training', amount: 111 })
+    .select()
+    .single(), 'fee_charges feeA1');
+
+  feeA2 = must(await adminClient
+    .from('fee_charges')
+    .insert({ club_id: clubA.id, player_id: playerA2.id, fee_type: 'training', amount: 222 })
+    .select()
+    .single(), 'fee_charges feeA2');
 
   const guardianRecord = must(await adminClient
     .from('guardians')
@@ -211,6 +234,7 @@ beforeAll(async () => {
   });
 
   coachA1Client = await signInAs('coach-a1@rls-test.local');
+  teamManagerA1Client = await signInAs('tm-a1@rls-test.local');
   clubAdminAClient = await signInAs('admin-a@rls-test.local');
   clubStaffBClient = await signInAs('admin-b@rls-test.local');
   guardianOfA1Client = await signInAs('guardian-a1@rls-test.local');
@@ -225,6 +249,7 @@ afterAll(async () => {
   // Clubs cascade to club_staff/memberships/etc; teams.club_id is
   // ON DELETE SET NULL so deleting clubs won't cascade-delete teams --
   // clean those up explicitly along with players/users.
+  await adminClient.from('fee_charges').delete().in('id', ids(feeA1, feeA2));
   await adminClient.from('players').delete().in('id', ids(playerA1, playerA2, playerB));
   await adminClient.from('teams').delete().in('id', ids(teamA1, teamA2, teamB1));
   await adminClient.from('clubs').delete().in('id', ids(clubA, clubB));
@@ -234,6 +259,7 @@ afterAll(async () => {
   const { data: users } = await adminClient.auth.admin.listUsers();
   for (const email of [
     'coach-a1@rls-test.local',
+    'tm-a1@rls-test.local',
     'admin-a@rls-test.local',
     'admin-b@rls-test.local',
     'guardian-a1@rls-test.local',
@@ -246,12 +272,12 @@ afterAll(async () => {
 });
 
 describe('club-level isolation: clubs / club_staff', () => {
-  it('club_admin at Club B CANNOT update Club A', async () => {
+  it('club_manager at Club B CANNOT update Club A', async () => {
     const { data } = await clubStaffBClient.from('clubs').update({ name: 'Hijacked' }).eq('id', clubA.id).select();
     expect(data).toHaveLength(0);
   });
 
-  it('club_admin at Club B CANNOT see Club A staff roster', async () => {
+  it('club_manager at Club B CANNOT see Club A staff roster', async () => {
     const { data } = await clubStaffBClient.from('club_staff').select('*').eq('club_id', clubA.id);
     expect(data).toHaveLength(0);
   });
@@ -295,7 +321,7 @@ describe('org-level fencing: clubs.org_id (added 2026-08-27)', () => {
     expect(data).toHaveLength(0);
   });
 
-  it('club_admin of Club B can still read Club B even without any org_members row (club_staff fallback)', async () => {
+  it('club_manager of Club B can still read Club B even without any org_members row (club_staff fallback)', async () => {
     const { data } = await clubStaffBClient.from('clubs').select('*').eq('id', clubB.id);
     expect(data).toHaveLength(1);
   });
@@ -398,7 +424,7 @@ describe('team-level isolation: training_sessions / attendance (via existing use
     expect(error).not.toBeNull();
   });
 
-  it('club_admin (club-wide) CAN see both teams\' sessions', async () => {
+  it('club_manager (club-wide) CAN see both teams\' sessions', async () => {
     const { data } = await clubAdminAClient
       .from('training_sessions')
       .select('*')
@@ -439,13 +465,13 @@ describe('guardian-level isolation: fee_charges', () => {
 });
 
 describe('teams / players are org-fenced (phase 2 replaced the open policies)', () => {
-  it('club_admin of Club A CAN read their own club\'s team', async () => {
+  it('club_manager of Club A CAN read their own club\'s team', async () => {
     const { data, error } = await clubAdminAClient.from('teams').select('*').eq('id', teamA1.id);
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
   });
 
-  it('club_admin of Club A CAN read their own club\'s player', async () => {
+  it('club_manager of Club A CAN read their own club\'s player', async () => {
     const { data, error } = await clubAdminAClient.from('players').select('*').eq('id', playerA1.id);
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
@@ -453,13 +479,108 @@ describe('teams / players are org-fenced (phase 2 replaced the open policies)', 
 
   // Before phase 2 both of these returned the row: the policies were
   // `auth.role() = 'authenticated'`, i.e. any signed-in user, any org.
-  it('club_admin of Club B CANNOT read Club A\'s team', async () => {
+  it('club_manager of Club B CANNOT read Club A\'s team', async () => {
     const { data } = await clubStaffBClient.from('teams').select('*').eq('id', teamA1.id);
     expect(data).toHaveLength(0);
   });
 
-  it('club_admin of Club B CANNOT read Club A\'s player', async () => {
+  it('club_manager of Club B CANNOT read Club A\'s player', async () => {
     const { data } = await clubStaffBClient.from('players').select('*').eq('id', playerA1.id);
     expect(data).toHaveLength(0);
+  });
+});
+
+/**
+ * phase6k / phase6l / phase6m -- the role realignment.
+ *
+ * Before phase6l, `team_manager`'s default permission bundle was
+ * byte-identical to `coach` (19 keys, including add_private_coach_note and
+ * manage_development), which made the "development is Coach-owned" boundary
+ * in the Team Manager spec pure fiction. These tests pin the split so it
+ * can't silently regress: the coach and the team manager below are on the
+ * SAME team, so any difference is the role, not the assignment.
+ */
+describe('role realignment: team_manager is not a coach clone', () => {
+  const perm = async (
+    client: ReturnType<typeof createClient>,
+    key: string,
+    teamId?: string
+  ) => {
+    const { data } = await client.rpc('has_staff_permission', {
+      p_permission_key: key,
+      p_club_id: clubA.id,
+      ...(teamId ? { p_team_id: teamId } : {}),
+    });
+    return data;
+  };
+
+  it('coach CAN author private coach notes', async () => {
+    expect(await perm(coachA1Client, 'add_private_coach_note', teamA1.id)).toBe(true);
+  });
+
+  it('team_manager CANNOT author private coach notes', async () => {
+    expect(await perm(teamManagerA1Client, 'add_private_coach_note', teamA1.id)).toBe(false);
+  });
+
+  it('team_manager CANNOT manage development or add evaluations', async () => {
+    expect(await perm(teamManagerA1Client, 'manage_development', teamA1.id)).toBe(false);
+    expect(await perm(teamManagerA1Client, 'add_evaluation', teamA1.id)).toBe(false);
+  });
+
+  it('team_manager CAN still read development (operational visibility)', async () => {
+    expect(await perm(teamManagerA1Client, 'view_development', teamA1.id)).toBe(true);
+  });
+
+  it('attendance stays Coach-recorded: team_manager views but cannot record', async () => {
+    expect(await perm(coachA1Client, 'manage_attendance', teamA1.id)).toBe(true);
+    expect(await perm(teamManagerA1Client, 'manage_attendance', teamA1.id)).toBe(false);
+    expect(await perm(teamManagerA1Client, 'view_attendance', teamA1.id)).toBe(true);
+  });
+
+  // Product decision (recorded in CLAUDE.md §0d): finalization is coach OR
+  // team_manager, and explicitly NOT the club_manager -- this deviates from
+  // the Team Manager spec §15, which reserves it for the coach alone.
+  it('finalize_tournament_roster belongs to coach and team_manager, not club_manager', async () => {
+    expect(await perm(coachA1Client, 'finalize_tournament_roster', teamA1.id)).toBe(true);
+    expect(await perm(teamManagerA1Client, 'finalize_tournament_roster', teamA1.id)).toBe(true);
+    expect(await perm(clubAdminAClient, 'finalize_tournament_roster', teamA1.id)).toBe(false);
+  });
+
+  it('club_manager CANNOT author development records either', async () => {
+    expect(await perm(clubAdminAClient, 'add_private_coach_note', teamA1.id)).toBe(false);
+    expect(await perm(clubAdminAClient, 'manage_development', teamA1.id)).toBe(false);
+  });
+});
+
+describe('role realignment: team_manager finance is fenced to assigned teams', () => {
+  it('team_manager CAN read a fee charge for a player on their assigned team', async () => {
+    const { data, error } = await teamManagerA1Client
+      .from('fee_charges').select('*').eq('id', feeA1.id);
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+  });
+
+  // The whole reason view_team_finance had to be a NEW team-scope key
+  // rather than granting the club-scope view_finances: has_staff_permission
+  // short-circuits the team fence for club-scope keys, which would have
+  // handed the team manager the entire club's finances.
+  it('team_manager CANNOT read a fee charge for another team in the same club', async () => {
+    const { data } = await teamManagerA1Client
+      .from('fee_charges').select('*').eq('id', feeA2.id);
+    expect(data).toHaveLength(0);
+  });
+
+  it('team_manager has no club-wide finance permission', async () => {
+    const { data } = await teamManagerA1Client.rpc('has_staff_permission', {
+      p_permission_key: 'view_finances',
+      p_club_id: clubA.id,
+    });
+    expect(data).toBe(false);
+  });
+
+  it('club_manager still sees both teams\' fee charges', async () => {
+    const { data } = await clubAdminAClient
+      .from('fee_charges').select('*').in('id', [feeA1.id, feeA2.id]);
+    expect(data).toHaveLength(2);
   });
 });

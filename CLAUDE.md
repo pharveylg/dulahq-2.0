@@ -646,6 +646,150 @@ beyond tournament-only with role-based visibility by document type.
 
 ---
 
+## 0d. Role realignment against the Team Manager / Club Manager / Club Admin specs (2026-09-09)
+
+Three role specs were supplied (`Team Manager`, `Club Manager / Org Manager`,
+`Club Admin / IT Administration`). They were read against the live database
+first; the conflicts below are real, not hypothetical, and Phases A+B are
+applied. **Phases C–F are not built** — see the backlog at the end.
+
+### The naming collision, and how it was resolved
+
+`club_admin` in this codebase meant the club's **business owner**: it held all
+26 permissions and anchored the RLS spine (`is_club_admin` → `can_read_club` /
+`can_admin_club`). The Club Admin spec defines the same string as an **IT-only**
+role with explicitly zero business authority. Opposite meanings, same word.
+
+Resolution (product decision, confirmed 2026-09-09):
+
+- The existing role is renamed to what it actually is: **`club_manager`**
+  (`phase6k`). This is the specs' "Club Manager / Org Manager".
+- The internal name is **not** `org_manager`. That would sit beside the
+  existing `org_admin` / `org_members` / `is_org_member`, which mean something
+  different and broader — a tenant owning multiple clubs *plus* tournament
+  entitlements. The two specs contradict each other on whether a "Club
+  Director" tier exists (Team Manager spec §1/§28 says yes, Club Manager spec
+  §1 says no); the existing **org layer already occupies that tier**, so no new
+  role was created for it.
+- A future IT role will be **`club_it_admin`**, not `club_admin`. Every
+  historical migration in this repo will forever read `club_admin` as
+  god-mode; recycling the string invites exactly the confusion the rename
+  removes. Display name can still be "Club Admin".
+
+The rename was cheap because policies call *helpers*, not the literal: only
+four functions embedded `'club_admin'` (`is_club_admin`, `can_admin_club`,
+`can_read_club`, `has_staff_permission`) and four policies named it directly,
+against 143 policies total. `is_club_admin()` was **dropped and replaced** by
+`is_club_manager()` rather than redefined in place, so any missed reference
+fails loudly instead of silently granting access.
+
+### What was actually wrong with the roles
+
+- **`team_manager`'s bundle was byte-identical to `coach`** — 19 permissions
+  including `add_private_coach_note`, `manage_development`, `add_evaluation`.
+  The Team Manager spec's single most emphasized rule ("player development
+  remains a Coach-owned function") was fiction. Fixed in `phase6l`.
+- **`club_admin` held development-authoring and roster-finalization**, both
+  forbidden by the Club Manager spec (§19 read-only development, §29 no
+  PREPARE/FINALIZE). Fixed in `phase6l`.
+- **Club-scope vs team-scope collision.** `manage_documents` /
+  `manage_membership` / `view_finances` are all `scope='club'`, and
+  `has_staff_permission` *short-circuits the team fence* for club-scope keys.
+  Simply adding them to `team_manager` would have handed over the whole club —
+  the opposite of Team Manager spec §20. `phase6m` adds team-scope keys
+  (`view_team_finance`, `manage_team_documents`, `manage_team_membership`) that
+  route through the `p_team_id in current_user_team_ids()` branch instead.
+- **A live gap found on the way:** `fee_charges` / `payments` / `memberships`
+  RLS was gated purely on `can_read_club` / `can_admin_club`, so the club-scope
+  `manage_finances` / `view_finances` / `manage_membership` keys were consulted
+  by **no policy at all** — the `staff` role has nominally held
+  `manage_finances` since `widen_fee_management_to_staff_role` without the
+  database ever honouring it. `phase6m` wires them in. (`can_create_fees()` is
+  referenced by zero policies and stays dead; not resurrected.)
+
+### Deviation from the specs, on purpose
+
+**`finalize_tournament_roster` is `coach` OR `team_manager`, and NOT
+`club_manager`.** The Team Manager spec §15/§23 reserves finalization for the
+coach alone ("do NOT grant FINALIZE_TOURNAMENT_ROSTER"); the product decision
+overrides that. Consequence to keep in mind: the spec's
+prepare→acknowledge→review→finalize handoff loses some of its point if the
+same role can do both ends, which matters when Phase C builds the roster state
+machine.
+
+### Final bundles (phase6l / phase6m)
+
+| Role | Perms | Shape |
+|---|---|---|
+| `club_manager` | 17 | Business boss. No development authoring, no roster prepare/finalize. |
+| `coach` | 19 | **Unchanged.** Owns development, records attendance, finalizes rosters. |
+| `team_manager` | 16 | Operations + team-scoped finance(read)/docs/membership. No development authoring, no attendance recording. |
+| `assistant_coach` | 7 | New. Supports the coach, authors nothing, records attendance. |
+| `treasurer` | 5 | New. Finance specialist. |
+| `secretary` | 6 | New. Documents / membership / communications. |
+| `staff` | 8 | **Unchanged.** Generic office helper. |
+
+`club_staff.role`'s CHECK constraint now allows exactly these seven.
+
+### UI now mirrors the write policies
+
+`PlayerProfile.tsx`'s permission flags were computed from a `view_team`
+stand-in dating to Phase 1, when `fee_charges`/`memberships` RLS was still
+untouched. With `phase6m` those policies are real, so the stand-in would have
+shown controls the database refuses. `canManageFees` is now `manage_finances`
+alone (team managers read their teams' charges but cannot write them — spec
+§23's finance permissions are all VIEW_/EXPORT_), and `canManageMembership` /
+document management include the team-scope keys. Side effect: the **coach no
+longer sees fee-management controls**, which is a bug fix — `fees_write` has
+always refused them.
+
+### Verified
+
+`tests/rls/club-manager-isolation.test.ts` grew 21 → **32 tests**, including a
+`team_manager` fixture on the *same team* as the coach so any difference is the
+role and not the assignment. New coverage pins: coach can author private notes
+and team manager cannot; team manager cannot manage development or add
+evaluations but can still read development; attendance stays coach-recorded;
+finalize belongs to coach + team manager but not club manager; and the team
+manager sees their own team's fee charge but **not** another team's in the same
+club. The pre-existing cross-tenant fence tests all still pass, which is the
+proof the RLS spine survived the rename. Also verified live on `/demo`:
+development authoring controls gone for the team manager, documents offering
+the full category list, fees read-only.
+
+### Not built (backlog, in rough priority order)
+
+- **C — Roster workflow.** Spec wants 8 states (Draft → … → Coach Finalized →
+  Locked) and a versioned, immutable finalized roster. Today it's still Phase
+  3's one-shot "Submit Roster" with no state model and no versioning, and
+  `port_squad_to_tournament` still carries a hardcoded `is_org_admin` bypass —
+  the "generic admin override" Club Manager spec §29 forbids.
+- **D — Coach assignment model.** No "primary coach" concept exists, so
+  "Team Manager may assign coaches but not remove the primary coach" is not
+  expressible. Needs per-team coach designation.
+- **E — Club Admin (IT) module.** Essentially all net-new: invitations,
+  password/MFA reset, session revocation, account activation, support
+  requests, audit-read UI. Two hard constraints: it needs the **service-role
+  key in server actions** (a new attack surface — today service role is only
+  used by the RLS test suite), and invitations/resets are **blocked by the
+  2-email/hour cap** in §8 until SMTP is wired. **Impersonation should be
+  deferred** — Supabase has no first-class support and minting a session as
+  another user is genuinely dangerous; a read-only "view as" is the safer
+  substitute. Good news: `audit_log` is already append-only with no
+  UPDATE/DELETE policy for anyone, so "Club Admin cannot delete audit records"
+  is structurally satisfied.
+- **F — Seasons, committees, readiness score, the reports module.** No
+  `seasons` table exists at all despite ~10 spec references; `team_memberships`
+  (from the movement work) is the de-facto timeline. The two specs' reporting
+  sections together are dozens of report types — its own project.
+- Also unbuilt: `role_assignments` is still **completely empty**; every real
+  grant lives in the legacy `club_staff` / `org_members` / `user_assigned_teams`
+  tables, so §4's "write new grants to role_assignments" remains aspirational.
+- The specs' 16–18 item navigation was deliberately **not** built; most of it
+  has no backing data.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

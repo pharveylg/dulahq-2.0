@@ -96,8 +96,8 @@ export default function NewClubForm({ orgs, sports }: { orgs: Org[]; sports: Spo
 
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
           After creating the club, add yourself or someone else as{' '}
-          <span className="chip chip-club_admin">club_admin</span> on the club&apos;s
-          page — an admin doesn&apos;t automatically become club staff.
+          <span className="chip chip-club_manager">club_manager</span> on the club&apos;s
+          page — an org admin doesn&apos;t automatically become club staff.
         </p>
       </div>
     </main>

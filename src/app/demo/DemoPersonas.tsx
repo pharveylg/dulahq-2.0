@@ -32,9 +32,9 @@ const PERSONAS: Persona[] = [
   },
   {
     email: 'clubadmin.usna-gali-fc@dulahq-showcase.local',
-    role: 'Club admin',
+    role: 'Club manager',
     name: 'Juan Villanueva',
-    description: 'Full control of Usna Gali FC: rename it, add or remove staff, manage all three teams (U8, U15 Girls, U15 Boys), finances, everything.',
+    description: 'The club’s business owner: rename it, add or remove staff, manage all three teams (U8, U15 Girls, U15 Boys), finances, membership. Cannot author development records or finalize a tournament roster — those are the coach’s.',
     destination: (clubSlug) => `/c/${clubSlug}`,
   },
   {
@@ -48,7 +48,7 @@ const PERSONAS: Persona[] = [
     email: 'teammanager.u15-girls.usna-gali-fc@dulahq-showcase.local',
     role: 'Team manager',
     name: 'Benigno Kintanar',
-    description: 'Same team assignment as the coach account above (U15 Girls) — compare the two roles on the exact same roster.',
+    description: 'Same team assignment as the coach account above (U15 Girls) — compare the two roles on the exact same roster. Runs operations (documents, membership, fee visibility for U15 Girls only) but cannot author evaluations, goals or private coach notes.',
     destination: (clubSlug) => `/c/${clubSlug}/teams/u15-girls`,
   },
   {

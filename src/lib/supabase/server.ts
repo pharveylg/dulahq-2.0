@@ -130,15 +130,22 @@ export async function getClubCreatableOrgs() {
   return orgs ?? [];
 }
 
-export type ClubRole = 'club_admin' | 'staff' | 'coach' | 'team_manager';
+export type ClubRole =
+  | 'club_manager'
+  | 'staff'
+  | 'coach'
+  | 'team_manager'
+  | 'assistant_coach'
+  | 'treasurer'
+  | 'secretary';
 
 export type ClubAccess = {
   /** Signed in but has no club_staff row here and isn't a platform admin. */
   isSignedIn: boolean;
   isPlatformAdmin: boolean;
   role: ClubRole | null;
-  /** club_admin or platform admin -- unrestricted within this club, per RBAC Phase 1. */
-  isClubAdmin: boolean;
+  /** club_manager or platform admin -- unrestricted within this club, per RBAC Phase 1. */
+  isClubManager: boolean;
   /** Any club_staff role, or platform admin -- can see the club exists and manage assigned teams. */
   isStaff: boolean;
 };
@@ -146,30 +153,34 @@ export type ClubAccess = {
 /**
  * Resolves this session's effective access at ONE club, mirroring exactly
  * what the RLS layer now enforces (rbac_phase1_narrow_coach_to_assigned_teams):
- * platform admin and club_admin are club-wide; every other club_staff role
- * (coach/team_manager/staff) is scoped to getAssignedTeamIds() below, not
+ * platform admin and club_manager are club-wide; every other club_staff role
+ * (coach/team_manager/staff/...) is scoped to getAssignedTeamIds() below, not
  * the whole club. Used so pages don't show an edit control that RLS would
  * then silently reject -- the UI decision and the database decision read
- * from the same two facts (is_club_admin, is_assigned_to_team), not two
+ * from the same two facts (is_club_manager, is_assigned_to_team), not two
  * separately-maintained rules that can drift apart.
+ *
+ * `club_manager` is the role formerly called `club_admin` (phase6k) -- the
+ * club's business owner. The name was freed for a future IT-only role; see
+ * CLAUDE.md §0d.
  */
 export async function getClubAccess(clubId: string): Promise<ClubAccess> {
   const dulaUser = await getCurrentDulaUser();
   const platformAdmin = await isPlatformAdmin();
 
-  if (!dulaUser) return { isSignedIn: false, isPlatformAdmin: platformAdmin, role: null, isClubAdmin: platformAdmin, isStaff: platformAdmin };
+  if (!dulaUser) return { isSignedIn: false, isPlatformAdmin: platformAdmin, role: null, isClubManager: platformAdmin, isStaff: platformAdmin };
 
   const supabase = await createClient();
-  // isClubAdmin/isStaff come from the RPCs (is_club_admin/is_club_staff),
+  // isClubManager/isStaff come from the RPCs (is_club_manager/is_club_staff),
   // not a club_staff role check, so a role_assignments-only grant (§4's
   // now-preferred way to grant a club role) is reflected here exactly like
   // RLS already sees it. `role` -- the specific label ('coach' etc.) shown
   // in the UI -- still only reflects club_staff, since role_assignments.role
   // has no enforced vocabulary to safely map into ClubRole; that's fine
   // because nothing gates access on `role` itself, only on the two booleans.
-  const [{ data: staffRow }, { data: clubAdminRpc }, { data: clubStaffRpc }] = await Promise.all([
+  const [{ data: staffRow }, { data: clubManagerRpc }, { data: clubStaffRpc }] = await Promise.all([
     supabase.from('club_staff').select('role').eq('club_id', clubId).eq('user_id', dulaUser.id).maybeSingle(),
-    supabase.rpc('is_club_admin', { check_club_id: clubId }),
+    supabase.rpc('is_club_manager', { check_club_id: clubId }),
     supabase.rpc('is_club_staff', { check_club_id: clubId }),
   ]);
   const role = (staffRow?.role as ClubRole | undefined) ?? null;
@@ -178,7 +189,7 @@ export async function getClubAccess(clubId: string): Promise<ClubAccess> {
     isSignedIn: true,
     isPlatformAdmin: platformAdmin,
     role,
-    isClubAdmin: !!clubAdminRpc,
+    isClubManager: !!clubManagerRpc,
     isStaff: !!clubStaffRpc,
   };
 }

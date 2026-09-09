@@ -85,7 +85,7 @@ export default function Announcements({
   announcements,
   teams,
   canManage,
-  isClubAdmin,
+  isClubManager,
   assignedTeamIds,
 }: {
   clubId: string;
@@ -94,11 +94,11 @@ export default function Announcements({
   /** Any club_staff role -- whether to show the post form at all. */
   canManage: boolean;
   /** Club admins can post any audience; everyone else only 'team', to their own assigned team(s) -- matches the RLS exactly. */
-  isClubAdmin: boolean;
+  isClubManager: boolean;
   assignedTeamIds: string[];
 }) {
-  const audienceOptions = isClubAdmin ? AUDIENCES : ['team'];
-  const teamOptions = isClubAdmin ? teams : teams.filter((t) => assignedTeamIds.includes(t.id));
+  const audienceOptions = isClubManager ? AUDIENCES : ['team'];
+  const teamOptions = isClubManager ? teams : teams.filter((t) => assignedTeamIds.includes(t.id));
 
   const [audience, setAudience] = useState(audienceOptions[0]);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
@@ -109,7 +109,7 @@ export default function Announcements({
   const sorted = [...announcements].sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   function canEdit(a: Announcement) {
-    return isClubAdmin || (a.audience === 'team' && !!a.teamId && assignedTeamIds.includes(a.teamId));
+    return isClubManager || (a.audience === 'team' && !!a.teamId && assignedTeamIds.includes(a.teamId));
   }
 
   return (
@@ -119,7 +119,7 @@ export default function Announcements({
         <AnnouncementRow key={a.id} clubId={clubId} announcement={a} canEdit={canEdit(a)} />
       ))}
 
-      {canManage && (teamOptions.length > 0 || isClubAdmin) && (
+      {canManage && (teamOptions.length > 0 || isClubManager) && (
         <form action={formAction} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <input name="title" placeholder="Title" required />
@@ -155,7 +155,7 @@ export default function Announcements({
           {state?.error && <span className="error-text">{state.error}</span>}
         </form>
       )}
-      {canManage && !isClubAdmin && teamOptions.length === 0 && (
+      {canManage && !isClubManager && teamOptions.length === 0 && (
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 12 }}>
           You can post to teams you’re assigned to — ask a club admin to assign you to one first.
         </p>
