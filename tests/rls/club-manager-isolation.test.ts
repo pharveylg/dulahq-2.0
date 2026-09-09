@@ -794,3 +794,87 @@ describe('tournament_roster_candidates is fenced to the entry team', () => {
     await adminClient.from('tournament_entries').delete().eq('id', entryId!);
   });
 });
+
+/**
+ * phase6s -- the anon-execute regression guard.
+ *
+ * phase2g revoked EXECUTE on every SECURITY DEFINER helper from anon, and it
+ * regressed anyway, because EXECUTE defaults to PUBLIC on function creation:
+ * every function added or recreated afterwards silently reopened. By the time
+ * this test was written 25 of 46 were exposed again, including two mutating
+ * ones (expire_stale_approvals, recompute_fee_status) and three that answer
+ * questions about minors.
+ *
+ * A one-time revoke cannot hold that line -- this test is what does. It fails
+ * the moment someone adds a SECURITY DEFINER function without revoking,
+ * instead of the exposure sitting unnoticed for another few months.
+ */
+describe('no SECURITY DEFINER function is reachable by anon', () => {
+  it('counts zero anon-executable security definer functions in public', async () => {
+    const { data, error } = await clubAdminAClient.rpc('anon_executable_secdef_count');
+    expect(error).toBeNull();
+    expect(data).toBe(0);
+  });
+
+  it('anon genuinely cannot call a mutating helper', async () => {
+    const anonClient = createClient(SUPABASE_URL, ANON_KEY);
+    const { error } = await anonClient.rpc('expire_stale_approvals');
+    expect(error).not.toBeNull();
+  });
+
+  it('anon cannot probe whether a player is a minor', async () => {
+    const anonClient = createClient(SUPABASE_URL, ANON_KEY);
+    const { error } = await anonClient.rpc('requires_guardian_consent', { p_player_id: playerA1.id });
+    expect(error).not.toBeNull();
+  });
+});
+
+/**
+ * phase6t -- finalization authority is the club's, not the org admin's
+ * (Club Manager spec §29: no generic admin override).
+ */
+describe('roster finalization cannot be overridden by an org admin', () => {
+  let clubEntryId: string | null = null;
+
+  it('sets up a club-backed accepted entry', async () => {
+    const tournament = must(await adminClient
+      .from('tournaments')
+      .insert({ name: 'RLS Authz Cup', org_id: orgA.id, slug: `rls-authz-${crypto.randomUUID().slice(0, 8)}` })
+      .select().single(), 'tournaments authz');
+
+    const entry = must(await adminClient
+      .from('tournament_entries')
+      .insert({
+        tournament_id: tournament.id,
+        host_org_id: orgA.id,
+        entrant_org_id: orgA.id,
+        club_id: clubA.id,
+        team_id: teamA1.id,
+        team_name: 'Club A - U15',
+        status: 'accepted',
+      })
+      .select().single(), 'tournament_entries authz');
+    clubEntryId = entry.id;
+    expect(clubEntryId).toBeTruthy();
+  });
+
+  it('the org admin CANNOT finalize a club-backed entry', async () => {
+    const { error } = await orgAdminAClient.rpc('port_squad_to_tournament', {
+      p_entry_id: clubEntryId!,
+      p_player_ids: [],
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('the assigned coach CAN', async () => {
+    const { error } = await coachA1Client.rpc('port_squad_to_tournament', {
+      p_entry_id: clubEntryId!,
+      p_player_ids: [],
+    });
+    expect(error).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_entries').delete().eq('id', clubEntryId!);
+  });
+});

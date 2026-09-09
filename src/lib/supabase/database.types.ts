@@ -4306,6 +4306,7 @@ export type Database = {
         Args: { p_target_user_id: string; p_club_id: string }
         Returns: Json
       }
+      anon_executable_secdef_count: { Args: never; Returns: number }
       it_club_directory: {
         Args: { p_club_id: string }
         Returns: {

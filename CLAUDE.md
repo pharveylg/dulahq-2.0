@@ -932,6 +932,97 @@ controls. Worth re-checking the three buttons in a browser next session.
 
 ---
 
+## 0g. Tier 0 security + correctness batch (2026-09-09)
+
+Three items, all found by checking the live database rather than trusting
+this file's own backlog notes.
+
+### 1. 25 SECURITY DEFINER functions were callable by anon (fixed, `phase6s`)
+
+§0a records phase2g as having "regressed since, cause not identified". It had,
+and the cause is mundane: **EXECUTE defaults to PUBLIC on function creation**,
+and `anon` inherits PUBLIC — so every function added or recreated after
+phase2g silently reopened. That also means "revoke from anon" alone does
+nothing while PUBLIC still holds the grant; PUBLIC is what has to be revoked,
+which is why the fix also has to re-grant `authenticated`/`service_role`
+explicitly.
+
+What was actually exposed, worst first:
+
+- **Two mutating functions**, `expire_stale_approvals()` and
+  `recompute_fee_status(uuid)`, callable unauthenticated over REST. Bounded —
+  each writes only the value it would have computed anyway — but an anonymous
+  caller should not be able to trigger writes at all.
+- **Three minors-data oracles**: `requires_guardian_consent()` answers "is
+  this player a minor?" to anyone holding a player UUID, along with
+  `roster_consent_granted()` and `approval_is_granted()`. Not enumerable (RLS
+  blocks listing players), so low severity — but §8 singles out minors' data
+  for exactly this care.
+- The rest were predicates returning false for anon, plus four trigger
+  functions that should never be called directly.
+
+**The migration is not the fix — the test is.** A one-time revoke has now
+failed twice. `tests/rls` asserts `anon_executable_secdef_count() = 0`
+(`phase6v` adds that helper, deliberately *not* SECURITY DEFINER so it stays
+out of the set it counts) plus two direct probes proving anon really is
+refused on a mutating helper and on the minor check. Adding a SECURITY
+DEFINER function without revoking now fails the suite instead of sitting
+unnoticed.
+
+Verified no anon-facing policy calls any of these (0 matches) before
+revoking — the same finding phase2g recorded, so this cost nothing at the
+public surface.
+
+### 2. Roster finalization: the admin override is narrowed, not removed (`phase6t`)
+
+Club Manager spec §29 forbids bypassing coach finalization "through a generic
+admin override", and `port_squad_to_tournament` granted
+`is_org_admin(entrant_org_id)` unconditionally — exactly that.
+
+**Deleting it would have been a mistake**, which is why checking first
+mattered: **29 of 33 entries have no `club_id`**. Those are external teams a
+host org entered directly — no Dula HQ club, therefore no club staff who
+could ever hold `finalize_tournament_roster`. Removing the org-admin path
+would have made them permanently unfinalizable.
+
+So: a **club-backed** entry now requires `finalize_tournament_roster` on that
+club/team and an org admin cannot override the club's own coach; a
+**club-less** entry still falls back to org admin, because nobody else can
+possibly be the authority. Both directions are pinned by tests.
+
+### 3. `expire_stale_approvals()` was never scheduled (`phase6u`)
+
+§5 has said to schedule it since the approvals were built; `pg_cron` wasn't
+even installed. Harmless while no roster workflow existed — Phase C made it
+live, so guardian requests would now sit as `awaiting` past their 14-day
+deadline forever and misreport a roster as "Awaiting guardians". Now runs
+hourly.
+
+The safety property was never at risk: `approval_is_granted()` only ever
+returns true on an explicit `approved`, so an unswept stale row could never
+let a minor through. This was a reporting-accuracy fix.
+
+### Also corrected while here: what SMTP is actually for
+
+§8 says the 2-email/hour cap "blocks the consent flow". That is now **stale**.
+Phase 5 made in-app + push the notification path, so acknowledgements reach
+any guardian who has an account. More to the point: **nothing in this codebase
+sends email at all** — no Resend, no nodemailer, no `inviteUserByEmail`, no
+`resetPasswordForEmail`. `inviteGuardian()` only flips `account_status` to
+`'invited'`; the guardian is never contacted and must be told out-of-band,
+then self-registers at `/guardian-signup`.
+
+So SMTP is a prerequisite for two features that **do not exist yet** —
+guardian invitation delivery (the genuine chicken-and-egg: no account means no
+in-app or push) and password reset (there is not even a "forgot password"
+link) — not a blocker on anything built. Priced accordingly in the backlog.
+
+### Verified
+
+RLS suite 47 → **54**.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |
