@@ -1276,6 +1276,57 @@ export type Database = {
           },
         ]
       }
+      impersonation_sessions: {
+        Row: {
+          actor_user_id: string
+          club_id: string
+          ended_at: string | null
+          expires_at: string
+          id: string
+          org_id: string
+          reason: string
+          started_at: string
+          target_user_id: string
+        }
+        Insert: {
+          actor_user_id: string
+          club_id: string
+          ended_at?: string | null
+          expires_at: string
+          id?: string
+          org_id: string
+          reason: string
+          started_at?: string
+          target_user_id: string
+        }
+        Update: {
+          actor_user_id?: string
+          club_id?: string
+          ended_at?: string | null
+          expires_at?: string
+          id?: string
+          org_id?: string
+          reason?: string
+          started_at?: string
+          target_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "impersonation_sessions_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "impersonation_sessions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           away_score: number | null
@@ -4188,6 +4239,41 @@ export type Database = {
       }
       is_assigned_to_team: { Args: { check_team_id: string }; Returns: boolean }
       is_club_manager: { Args: { check_club_id: string }; Returns: boolean }
+      start_impersonation: {
+        Args: {
+          p_target_user_id: string
+          p_club_id: string
+          p_reason: string
+          p_minutes?: number
+        }
+        Returns: string
+      }
+      end_impersonation: { Args: { p_session_id: string }; Returns: undefined }
+      my_active_impersonation: {
+        Args: never
+        Returns: {
+          session_id: string
+          club_id: string
+          target_user_id: string
+          target_name: string | null
+          reason: string
+          expires_at: string
+        }[]
+      }
+      effective_access_for: {
+        Args: { p_target_user_id: string; p_club_id: string }
+        Returns: Json
+      }
+      it_club_directory: {
+        Args: { p_club_id: string }
+        Returns: {
+          user_id: string
+          name: string | null
+          email: string | null
+          role: string
+          is_platform_admin: boolean
+        }[]
+      }
       is_club_staff: { Args: { check_club_id: string }; Returns: boolean }
       is_guardian_of: { Args: { check_player_id: string }; Returns: boolean }
       is_org_admin: { Args: { org: string }; Returns: boolean }

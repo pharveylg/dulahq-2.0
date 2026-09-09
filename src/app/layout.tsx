@@ -8,6 +8,7 @@ import RegisterServiceWorker from './RegisterServiceWorker';
 import ThemeToggle, { ThemeInitScript } from './ThemeToggle';
 import NotificationBell from '@/components/NotificationBell';
 import { getMyNotifications } from '@/lib/notifications-actions';
+import ImpersonationBanner from './ImpersonationBanner';
 
 export const metadata: Metadata = {
   title: 'Dulà HQ — Club Manager',
@@ -52,6 +53,7 @@ export default async function RootLayout({
       </head>
       <body>
         <RegisterServiceWorker />
+        {authUser && <ImpersonationBanner />}
         <nav className="top-nav">
           <div className="container">
             <Link href="/" className="brand">

@@ -137,7 +137,10 @@ export type ClubRole =
   | 'team_manager'
   | 'assistant_coach'
   | 'treasurer'
-  | 'secretary';
+  | 'secretary'
+  // IT administration only -- deliberately holds no business permission.
+  // Named club_it_admin, not club_admin; see CLAUDE.md §0d.
+  | 'club_it_admin';
 
 export type ClubAccess = {
   /** Signed in but has no club_staff row here and isn't a platform admin. */

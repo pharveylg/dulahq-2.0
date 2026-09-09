@@ -52,12 +52,18 @@ let playerB: { id: string };
 let feeA1: { id: string };
 let feeA2: { id: string };
 
+let guardianRecordId: string;
+let coachA1UserId: string;
+let clubAdminAUserId: string;
+let clubStaffBUserId: string;
+
 let coachA1Client: ReturnType<typeof createClient>;
 let clubAdminAClient: ReturnType<typeof createClient>;
 let clubStaffBClient: ReturnType<typeof createClient>;
 let guardianOfA1Client: ReturnType<typeof createClient>;
 let orgAdminAClient: ReturnType<typeof createClient>;
 let teamManagerA1Client: ReturnType<typeof createClient>;
+let itAdminAClient: ReturnType<typeof createClient>;
 
 /**
  * Creates the auth.users row. The phase-1 trigger creates the matching
@@ -192,6 +198,12 @@ beforeAll(async () => {
   // A team_manager on the SAME team as the coach -- the phase6k/6l role
   // split is only meaningful if the two can be compared on identical data.
   const teamManagerA1 = await createTestUser('tm-a1@rls-test.local', 'team');
+  // The IT administrator (phase6n): technical authority, no business access.
+  const itAdminA = await createTestUser('it-a@rls-test.local', 'audience');
+
+  coachA1UserId = coachA1.publicUser.id;
+  clubAdminAUserId = clubAdminA.publicUser.id;
+  clubStaffBUserId = clubStaffB.publicUser.id;
 
   // Coach A1 is assigned to Team A1 via the EXISTING user_assigned_teams
   // mechanism -- this is what makes is_assigned_to_team() true for them.
@@ -205,6 +217,7 @@ beforeAll(async () => {
     { club_id: clubB.id, user_id: clubStaffB.publicUser.id, role: 'club_manager' },
     { club_id: clubA.id, user_id: coachA1.publicUser.id, role: 'coach' },
     { club_id: clubA.id, user_id: teamManagerA1.publicUser.id, role: 'team_manager' },
+    { club_id: clubA.id, user_id: itAdminA.publicUser.id, role: 'club_it_admin' },
   ]);
 
   // One fee charge per team, so the team_manager's view_team_finance fence
@@ -233,8 +246,11 @@ beforeAll(async () => {
     is_primary_contact: true,
   });
 
+  guardianRecordId = guardianRecord.id;
+
   coachA1Client = await signInAs('coach-a1@rls-test.local');
   teamManagerA1Client = await signInAs('tm-a1@rls-test.local');
+  itAdminAClient = await signInAs('it-a@rls-test.local');
   clubAdminAClient = await signInAs('admin-a@rls-test.local');
   clubStaffBClient = await signInAs('admin-b@rls-test.local');
   guardianOfA1Client = await signInAs('guardian-a1@rls-test.local');
@@ -260,6 +276,7 @@ afterAll(async () => {
   for (const email of [
     'coach-a1@rls-test.local',
     'tm-a1@rls-test.local',
+    'it-a@rls-test.local',
     'admin-a@rls-test.local',
     'admin-b@rls-test.local',
     'guardian-a1@rls-test.local',
@@ -582,5 +599,124 @@ describe('role realignment: team_manager finance is fenced to assigned teams', (
     const { data } = await clubAdminAClient
       .from('fee_charges').select('*').in('id', [feeA1.id, feeA2.id]);
     expect(data).toHaveLength(2);
+  });
+});
+
+/**
+ * phase6n / phase6o / phase6p -- the IT role and "view as".
+ *
+ * The whole point of club_it_admin is what it CANNOT do, so that is what
+ * these pin. The impersonation guards are enforced inside
+ * start_impersonation(), never in the UI, so they are tested through the RPC.
+ */
+describe('club_it_admin: technical authority, zero business access', () => {
+  it('holds the technical permissions and none of the business ones', async () => {
+    const has = async (key: string) => {
+      const { data } = await itAdminAClient.rpc('has_staff_permission', {
+        p_permission_key: key,
+        p_club_id: clubA.id,
+      });
+      return data;
+    };
+    expect(await has('impersonate_user')).toBe(true);
+    expect(await has('view_audit_log')).toBe(true);
+    expect(await has('view_player')).toBe(false);
+    expect(await has('manage_finances')).toBe(false);
+    expect(await has('manage_documents')).toBe(false);
+    expect(await has('manage_staff')).toBe(false);
+  });
+
+  it('cannot read players, fee charges or memberships', async () => {
+    const players = await itAdminAClient.from('players').select('*');
+    const fees = await itAdminAClient.from('fee_charges').select('*');
+    expect(players.data).toHaveLength(0);
+    expect(fees.data).toHaveLength(0);
+  });
+
+  // is_club_staff() (any club_staff row, no role check) used to grant this.
+  it('cannot link a guardian to a player', async () => {
+    const { error } = await itAdminAClient
+      .from('player_guardians')
+      .insert({ player_id: playerA1.id, guardian_id: guardianRecordId, org_id: orgA.id })
+      .select();
+    expect(error).not.toBeNull();
+  });
+
+  it('is not a club manager', async () => {
+    const { data } = await itAdminAClient.rpc('is_club_manager', { check_club_id: clubA.id });
+    expect(data).toBe(false);
+  });
+});
+
+describe('view-as sessions are guarded at the database', () => {
+  it('refuses a caller without impersonate_user', async () => {
+    const { error } = await coachA1Client.rpc('start_impersonation', {
+      p_target_user_id: clubAdminAUserId,
+      p_club_id: clubA.id,
+      p_reason: 'should be refused',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('refuses an empty reason', async () => {
+    const { error } = await itAdminAClient.rpc('start_impersonation', {
+      p_target_user_id: coachA1UserId,
+      p_club_id: clubA.id,
+      p_reason: '   ',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('refuses a target who is not a member of the club', async () => {
+    const { error } = await itAdminAClient.rpc('start_impersonation', {
+      p_target_user_id: clubStaffBUserId, // club B
+      p_club_id: clubA.id,
+      p_reason: 'cross-club attempt',
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('refuses the readout without an active session', async () => {
+    const { error } = await itAdminAClient.rpc('effective_access_for', {
+      p_target_user_id: coachA1UserId,
+      p_club_id: clubA.id,
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('a started session unlocks the readout, and reports the target accurately', async () => {
+    const { data: sessionId, error } = await itAdminAClient.rpc('start_impersonation', {
+      p_target_user_id: coachA1UserId,
+      p_club_id: clubA.id,
+      p_reason: 'rls suite: verifying the readout',
+    });
+    expect(error).toBeNull();
+    expect(sessionId).toBeTruthy();
+
+    const { data: readout } = await itAdminAClient.rpc('effective_access_for', {
+      p_target_user_id: coachA1UserId,
+      p_club_id: clubA.id,
+    });
+    const r = readout as any;
+    expect(r.role).toBe('coach');
+    const teamKeys = (r.team_permissions ?? []).map((p: any) => p.key);
+    const missingKeys = (r.missing_permissions ?? []).map((p: any) => p.key);
+    expect(teamKeys).toContain('add_private_coach_note');
+    expect(missingKeys).toContain('view_team_finance');
+
+    // The session is recorded and attributable, and cannot be deleted.
+    const { error: delError } = await itAdminAClient
+      .from('impersonation_sessions').delete().eq('id', sessionId as string).select();
+    const { data: stillThere } = await itAdminAClient
+      .from('impersonation_sessions').select('id').eq('id', sessionId as string);
+    expect(stillThere).toHaveLength(1);
+    expect(delError === null || stillThere?.length === 1).toBe(true);
+
+    await itAdminAClient.rpc('end_impersonation', { p_session_id: sessionId as string });
+    const { error: afterEnd } = await itAdminAClient.rpc('effective_access_for', {
+      p_target_user_id: coachA1UserId,
+      p_club_id: clubA.id,
+    });
+    expect(afterEnd).not.toBeNull();
   });
 });

@@ -767,17 +767,15 @@ the full category list, fees read-only.
 - **D — Coach assignment model.** No "primary coach" concept exists, so
   "Team Manager may assign coaches but not remove the primary coach" is not
   expressible. Needs per-team coach designation.
-- **E — Club Admin (IT) module.** Essentially all net-new: invitations,
-  password/MFA reset, session revocation, account activation, support
-  requests, audit-read UI. Two hard constraints: it needs the **service-role
-  key in server actions** (a new attack surface — today service role is only
-  used by the RLS test suite), and invitations/resets are **blocked by the
-  2-email/hour cap** in §8 until SMTP is wired. **Impersonation should be
-  deferred** — Supabase has no first-class support and minting a session as
-  another user is genuinely dangerous; a read-only "view as" is the safer
-  substitute. Good news: `audit_log` is already append-only with no
-  UPDATE/DELETE policy for anyone, so "Club Admin cannot delete audit records"
-  is structurally satisfied.
+- **E — Club Admin (IT) module. Partially built — the role and "view as" are
+  done (see §0e); invitations, password/MFA reset, session revocation and
+  account activation are not.** Those remaining pieces need the
+  **service-role key in server actions** (a new attack surface — today
+  service role is only used by the RLS test suite), and invitations/resets
+  are **blocked by the 2-email/hour cap** in §8 until SMTP is wired. Good
+  news: `audit_log` is already append-only with no UPDATE/DELETE policy for
+  anyone, so "Club Admin cannot delete audit records" is structurally
+  satisfied.
 - **F — Seasons, committees, readiness score, the reports module.** No
   `seasons` table exists at all despite ~10 spec references; `team_memberships`
   (from the movement work) is the de-facto timeline. The two specs' reporting
@@ -787,6 +785,85 @@ the full category list, fees read-only.
   tables, so §4's "write new grants to role_assignments" remains aspirational.
 - The specs' 16–18 item navigation was deliberately **not** built; most of it
   has no backing data.
+
+---
+
+## 0e. Club Admin (IT) role and "view as" (2026-09-09)
+
+`club_it_admin` exists (`phase6n`), plus a logged, time-limited **view-as**
+(`phase6o`/`phase6p`) and the account-layer directory it needs (`phase6q`).
+
+### Why this is a view-as and not session minting
+
+Product decision was "go with impersonation". It is built as an *inspection*
+session, not a session takeover, because **the Club Admin spec's own §10
+requirements make minting impossible**: requirement 5 says "the original Club
+Admin identity must remain attached to all audit records" and requirement 6
+says "the impersonated user must not be treated as the actor in the underlying
+audit record". `write_audit()` keys off `auth.uid()`, so if the admin's browser
+held the target's JWT every action would be attributed to the target and be
+indistinguishable from account takeover — the exact opposite of what the spec
+asks for. Verified live: after a session, the `audit_log` row's `actor_email`
+is the **admin's**, not the target's.
+
+So the admin stays themselves and never gains the target's data access. What
+they get is a readout of the target's *effective access* — role, assigned
+teams, the permissions they hold, and (the useful part for support) the
+permissions they **don't**. The demo case answers itself: a coach who can't
+open the fee ledger shows `view_finances` and `view_team_finance` under "does
+not have".
+
+If true session takeover is ever wanted it is a separate, much riskier
+decision and should get its own explicit sign-off — do not treat this as a
+stepping stone to it.
+
+### Guards, all enforced in `start_impersonation()`, never in the UI
+
+Permission (`impersonate_user`), non-empty reason, not yourself, target must
+belong to the club (no cross-tenant reach), **platform admins are never
+impersonable**, 30-minute default expiry capped at 120, and one active
+session per actor. `impersonation_sessions` has a SELECT policy only — no
+INSERT/UPDATE/DELETE policy exists for anyone, so rows are written solely by
+the SECURITY DEFINER functions and nobody, including the actor, can erase or
+backdate one. Both start and end write to `audit_log`.
+
+`effective_access_for()` refuses unless a live session exists for exactly that
+actor/target/club triple. It is **diagnostic only and must never be called
+from a policy** — it mirrors `has_staff_permission`'s club_staff branch, so if
+it drifts the result is a wrong readout, not a security hole. It deliberately
+omits the platform-admin bypass since platform admins can't be viewed as.
+
+### Two things the role forced open
+
+- `club_staff_read` requires `can_read_club`, so the IT role could not list
+  the people it exists to troubleshoot. `it_club_directory()` (`phase6q`)
+  returns exactly the account layer spec §11 permits — name, email, role —
+  and nothing else.
+- **`player_guardians`' write policy granted on `is_club_staff()`** — any
+  club_staff row, no role or team check, the same class of bug phase2j/2k
+  fixed for `can_read_club`. Harmless while every role was a business role;
+  an actual privilege leak the moment an IT role exists. Now gated on
+  `view_player`, which every business role already holds and the IT role
+  does not.
+
+### UI
+
+`/c/[clubSlug]/it` — a separate route, not a tab in the business console
+(spec §6). A **highly visible banner** (spec §10 requirement 3) renders from
+the root layout for the life of the session and is explicit that identity has
+not changed: "you are still signed in as yourself and acting with your own
+permissions." Demo persona `Luisa Villar` is now the `club_it_admin`.
+
+### Verified
+
+RLS suite 32 → **41 tests**. New coverage: the IT role holds the technical
+permissions and none of the business ones; reads zero players and zero fee
+charges; cannot link a guardian; is not a club manager; and every view-as
+guard (no permission / empty reason / non-member target / readout without a
+session / readout stops working after the session ends). Driven live
+end-to-end too: started a session as the IT admin against the coach, saw the
+banner and the readout, confirmed the audit row was attributed to the admin,
+ended the session and watched the banner disappear.
 
 ---
 

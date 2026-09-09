@@ -99,6 +99,15 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   const canManageFinances = access.isClubManager || access.role === 'staff';
   const myAssignedTeamIds = access.isClubManager ? [] : await getAssignedTeamIds();
 
+  // The IT surface is permission-gated, not role-gated: a club_it_admin gets
+  // there via impersonate_user, a club_manager via view_audit_log oversight.
+  const supabaseForPerms = await createClient();
+  const [{ data: canImpersonate }, { data: canViewAudit }] = await Promise.all([
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
+  ]);
+  const canViewItAdmin = !!canImpersonate || !!canViewAudit;
+
   // club_staff has two FKs into users (user_id, created_by) -- the embed
   // must be disambiguated with !user_id or PostgREST rejects the whole
   // query as ambiguous, which silently produced an empty staffRows here.
@@ -514,11 +523,20 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           </span>
         </div>
 
-        {access.isStaff && (
-          <Link href={`/c/${club.slug}/drills`} className="btn" style={{ display: 'inline-block', marginBottom: 20, textDecoration: 'none' }}>
-            Drill library →
-          </Link>
-        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+          {access.isStaff && (
+            <Link href={`/c/${club.slug}/drills`} className="btn" style={{ textDecoration: 'none' }}>
+              Drill library →
+            </Link>
+          )}
+          {/* Technical administration is a separate surface, not a tab in the
+              business console -- Club Admin spec §6. */}
+          {canViewItAdmin && (
+            <Link href={`/c/${club.slug}/it`} className="btn" style={{ textDecoration: 'none' }}>
+              IT administration →
+            </Link>
+          )}
+        </div>
 
         <ClubPageTabs
           hasDashboard={!!dashboard || !!actionCenter}

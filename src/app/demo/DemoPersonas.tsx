@@ -53,10 +53,10 @@ const PERSONAS: Persona[] = [
   },
   {
     email: 'staff.u15-girls.usna-gali-fc@dulahq-showcase.local',
-    role: 'Staff',
+    role: 'Club admin (IT)',
     name: 'Luisa Villar',
-    description: 'club_staff role=staff, not assigned to any single team. Can manage finances and reports club-wide, but can’t rename the club or manage other staff.',
-    destination: (clubSlug) => `/c/${clubSlug}`,
+    description: 'The technical administrator — club_it_admin. Holds no business permission at all: zero players, zero finances, zero teams. Can review the audit trail and start a logged “view as” session to troubleshoot someone’s access.',
+    destination: (clubSlug) => `/c/${clubSlug}/it`,
   },
   {
     email: 'demo-guardian.u15-girls.usna-gali-fc@dulahq-showcase.local',
