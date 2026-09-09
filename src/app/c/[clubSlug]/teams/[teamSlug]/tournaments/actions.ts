@@ -11,116 +11,178 @@ function friendlyError(error: { code?: string; message: string }) {
   return error.message;
 }
 
-/**
- * "Submit Roster" collapses the spec's separate Fill/Request-acknowledgement/
- * Finalize steps into one action, deliberately: there's nowhere to persist
- * an in-progress "coach selected but not yet submitted" candidate list
- * (no draft-roster table exists, and adding one is out of scope for this
- * pass), so every visit reconstructs state from what IS persisted --
- * approval_requests and tournament_roster. Selecting a player and hitting
- * "Submit" here:
- *
- * 1. Creates an approval_requests row (status='awaiting') for any selected
- *    minor who doesn't already have a live one for this entry -- adults
- *    (requires_guardian_consent() false) skip this entirely.
- * 2. Immediately calls port_squad_to_tournament() with the full selection.
- *    Adults and any already-approved minors port right away; a minor whose
- *    request was *just* created in step 1 comes back 'consent_missing' --
- *    not an error, just not portable yet. The coach (or whoever revisits
- *    this page once a guardian has responded) re-selects that player and
- *    hits Submit again once their status shows Approved.
- */
-export async function submitRoster(entryId: string, orgId: string, playerIds: string[]) {
-  if (playerIds.length === 0) return { error: 'Select at least one player.' };
-  const supabase = await createClient();
-  const dulaUser = await getCurrentDulaUser();
-
-  const { data: entryInfo } = await supabase
+async function tournamentLabelFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  entryId: string
+) {
+  const { data } = await supabase
     .from('tournament_entries')
     .select('tournaments(name), tournament_categories(name)')
     .eq('id', entryId)
     .maybeSingle();
-  const tournamentLabel = [
-    (entryInfo as any)?.tournaments?.name,
-    (entryInfo as any)?.tournament_categories?.name,
-  ].filter(Boolean).join(' · ') || 'the tournament';
+  return (
+    [(data as any)?.tournaments?.name, (data as any)?.tournament_categories?.name]
+      .filter(Boolean)
+      .join(' · ') || 'the tournament'
+  );
+}
 
-  // requires_guardian_consent is single-player only -- call it per player.
+/**
+ * Phase C (CLAUDE.md §0f) replaced Phase 3's single "Submit Roster" click
+ * with the three stages the workflow actually has, so each one is
+ * observable. Nobody is gated differently than before -- the product
+ * decision was visibility, not enforcement -- these are just the same two
+ * underlying operations (create approval_requests, then
+ * port_squad_to_tournament) fired when someone means to fire them, against
+ * a proposal that now persists.
+ */
+
+/** Stage 1 -- propose. Persists the selection so a second person can pick it up. */
+export async function addRosterCandidates(entryId: string, orgId: string, playerIds: string[]) {
+  if (playerIds.length === 0) return { error: 'Choose at least one player.' };
+  const dulaUser = await getCurrentDulaUser();
+  const supabase = await createClient();
+
+  const { error } = await supabase.from('tournament_roster_candidates').insert(
+    playerIds.map((playerId) => ({
+      org_id: orgId,
+      entry_id: entryId,
+      player_id: playerId,
+      added_by: dulaUser?.id,
+    }))
+  );
+  // A duplicate just means someone already proposed them; not an error worth
+  // showing.
+  if (error && error.code !== '23505') return { error: friendlyError(error) };
+
+  revalidatePath('/c/[clubSlug]', 'layout');
+  return { success: true };
+}
+
+export async function removeRosterCandidate(entryId: string, playerId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tournament_roster_candidates')
+    .delete()
+    .eq('entry_id', entryId)
+    .eq('player_id', playerId);
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/c/[clubSlug]', 'layout');
+  return { success: true };
+}
+
+/**
+ * Stage 2 -- ask the guardians. Creates an approval_requests row for every
+ * proposed minor who doesn't already have a live one. Adults are skipped
+ * (requires_guardian_consent() false); a minor with no guardian on file
+ * can't be asked at all and is reported back rather than silently dropped.
+ */
+export async function requestAcknowledgements(entryId: string, orgId: string) {
+  const supabase = await createClient();
+  const dulaUser = await getCurrentDulaUser();
+
+  const { data: candidateRows } = await supabase
+    .from('tournament_roster_candidates')
+    .select('player_id')
+    .eq('entry_id', entryId);
+  const playerIds = (candidateRows ?? []).map((c) => c.player_id);
+  if (playerIds.length === 0) return { error: 'Propose some players first.' };
+
   const needsConsent: Record<string, boolean> = {};
   for (const playerId of playerIds) {
     const { data } = await supabase.rpc('requires_guardian_consent', { p_player_id: playerId });
     needsConsent[playerId] = !!data;
   }
-
   const minorIds = playerIds.filter((id) => needsConsent[id]);
-  let noGuardianCount = 0;
+  if (minorIds.length === 0) return { success: true, message: 'No minors proposed — nothing to ask.' };
 
-  if (minorIds.length > 0) {
-    const { data: existing } = await supabase
-      .from('approval_requests')
-      .select('player_id, status')
-      .eq('subject_type', 'tournament_roster')
-      .eq('subject_id', entryId)
-      .in('player_id', minorIds);
+  const { data: existing } = await supabase
+    .from('approval_requests')
+    .select('player_id, status')
+    .eq('subject_type', 'tournament_roster')
+    .eq('subject_id', entryId)
+    .in('player_id', minorIds);
 
-    const liveStatuses = new Set(['draft', 'awaiting', 'approved']);
-    const alreadyLive = new Set((existing ?? []).filter((r) => liveStatuses.has(r.status)).map((r) => r.player_id));
-    const needsNewRequest = minorIds.filter((id) => !alreadyLive.has(id));
+  const liveStatuses = new Set(['draft', 'awaiting', 'approved']);
+  const alreadyLive = new Set((existing ?? []).filter((r) => liveStatuses.has(r.status)).map((r) => r.player_id));
+  const needsNewRequest = minorIds.filter((id) => !alreadyLive.has(id));
+  if (needsNewRequest.length === 0) return { success: true, message: 'Every proposed minor has already been asked.' };
 
-    if (needsNewRequest.length > 0) {
-      const { data: guardianLinks } = await supabase
-        .from('player_guardians')
-        .select('player_id, guardian_id, is_primary_contact')
-        .in('player_id', needsNewRequest)
-        .order('is_primary_contact', { ascending: false });
+  const { data: guardianLinks } = await supabase
+    .from('player_guardians')
+    .select('player_id, guardian_id, is_primary_contact')
+    .in('player_id', needsNewRequest)
+    .order('is_primary_contact', { ascending: false });
 
-      const guardianByPlayer = new Map<string, string>();
-      for (const link of guardianLinks ?? []) {
-        if (!guardianByPlayer.has(link.player_id)) guardianByPlayer.set(link.player_id, link.guardian_id);
-      }
-
-      const rows = needsNewRequest
-        .filter((playerId) => guardianByPlayer.has(playerId))
-        .map((playerId) => ({
-          org_id: orgId,
-          subject_type: 'tournament_roster' as const,
-          subject_id: entryId,
-          player_id: playerId,
-          approver_guardian_id: guardianByPlayer.get(playerId),
-          status: 'awaiting' as const,
-          requested_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: dulaUser?.id,
-        }));
-
-      if (rows.length > 0) {
-        const { error: insertError } = await supabase.from('approval_requests').insert(rows);
-        if (insertError) return { error: friendlyError(insertError) };
-        await supabase.rpc('write_audit', {
-          p_org_id: orgId,
-          p_action: 'tournament.acknowledgement.requested',
-          p_scope_type: 'tournament',
-          p_entity_type: 'tournament_entry',
-          p_entity_id: entryId,
-          p_after: { player_ids: rows.map((r) => r.player_id) },
-        });
-        await Promise.all(
-          rows.map((r) =>
-            notifyAboutPlayer({
-              playerId: r.player_id,
-              template: 'tournament_roster.acknowledgement_requested',
-              payload: { title: 'Tournament roster confirmation needed', body: `${tournamentLabel} needs your confirmation` },
-            })
-          )
-        );
-      }
-
-      noGuardianCount = needsNewRequest.filter((id) => !guardianByPlayer.has(id)).length;
-      if (noGuardianCount === playerIds.length) {
-        return { error: 'None of the selected players have a guardian on file to ask for consent.' };
-      }
-    }
+  const guardianByPlayer = new Map<string, string>();
+  for (const link of guardianLinks ?? []) {
+    if (!guardianByPlayer.has(link.player_id)) guardianByPlayer.set(link.player_id, link.guardian_id);
   }
+
+  const rows = needsNewRequest
+    .filter((playerId) => guardianByPlayer.has(playerId))
+    .map((playerId) => ({
+      org_id: orgId,
+      subject_type: 'tournament_roster' as const,
+      subject_id: entryId,
+      player_id: playerId,
+      approver_guardian_id: guardianByPlayer.get(playerId),
+      status: 'awaiting' as const,
+      requested_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      created_by: dulaUser?.id,
+    }));
+
+  const noGuardian = needsNewRequest.filter((id) => !guardianByPlayer.has(id));
+
+  if (rows.length > 0) {
+    const { error: insertError } = await supabase.from('approval_requests').insert(rows);
+    if (insertError) return { error: friendlyError(insertError) };
+
+    await supabase.rpc('write_audit', {
+      p_org_id: orgId,
+      p_action: 'tournament.acknowledgement.requested',
+      p_scope_type: 'tournament',
+      p_entity_type: 'tournament_entry',
+      p_entity_id: entryId,
+      p_after: { player_ids: rows.map((r) => r.player_id) },
+    });
+
+    const label = await tournamentLabelFor(supabase, entryId);
+    await Promise.all(
+      rows.map((r) =>
+        notifyAboutPlayer({
+          playerId: r.player_id,
+          template: 'tournament_roster.acknowledgement_requested',
+          payload: { title: 'Tournament roster confirmation needed', body: `${label} needs your confirmation` },
+        })
+      )
+    );
+  }
+
+  revalidatePath('/c/[clubSlug]', 'layout');
+  const parts: string[] = [];
+  if (rows.length > 0) parts.push(`${rows.length} guardian${rows.length === 1 ? '' : 's'} asked`);
+  if (noGuardian.length > 0) parts.push(`${noGuardian.length} can't be asked — no guardian on file`);
+  return { success: true, message: parts.join('. ') + '.' };
+}
+
+/**
+ * Stage 3 -- finalize. Ports every proposed player that is portable:
+ * adults, and minors whose guardian has approved. port_squad_to_tournament
+ * is the only place data crosses the org fence and it re-checks consent
+ * itself, so a minor who hasn't been approved comes back 'consent_missing'
+ * rather than slipping through.
+ */
+export async function finalizeRoster(entryId: string, orgId: string) {
+  const supabase = await createClient();
+
+  const { data: candidateRows } = await supabase
+    .from('tournament_roster_candidates')
+    .select('player_id')
+    .eq('entry_id', entryId);
+  const playerIds = (candidateRows ?? []).map((c) => c.player_id);
+  if (playerIds.length === 0) return { error: 'Propose some players first.' };
 
   const { data: portResults, error: portError } = await supabase.rpc('port_squad_to_tournament', {
     p_entry_id: entryId,
@@ -129,23 +191,24 @@ export async function submitRoster(entryId: string, orgId: string, playerIds: st
   if (portError) return { error: friendlyError(portError) };
 
   const portedIds = (portResults ?? []).filter((r: any) => r.outcome === 'ported').map((r: any) => r.player_id);
+  const label = await tournamentLabelFor(supabase, entryId);
   await Promise.all(
     portedIds.map((playerId: string) =>
       notifyAboutPlayer({
         playerId,
         template: 'tournament_roster.ported',
-        payload: { title: 'Added to tournament roster', body: tournamentLabel },
+        payload: { title: 'Added to tournament roster', body: label },
       })
     )
   );
 
-  const ported = portedIds.length;
-  const pending = (portResults ?? []).filter((r: any) => r.outcome === 'consent_missing').length - noGuardianCount;
+  const pending = (portResults ?? []).filter((r: any) => r.outcome === 'consent_missing').length;
+  const notYours = (portResults ?? []).filter((r: any) => r.outcome === 'not_your_player').length;
 
   const parts: string[] = [];
-  if (ported > 0) parts.push(`${ported} player${ported === 1 ? '' : 's'} added to the roster`);
-  if (pending > 0) parts.push(`${pending} still awaiting guardian confirmation`);
-  if (noGuardianCount > 0) parts.push(`${noGuardianCount} player${noGuardianCount === 1 ? '' : 's'} can't be asked yet — no guardian on file`);
+  if (portedIds.length > 0) parts.push(`${portedIds.length} player${portedIds.length === 1 ? '' : 's'} added to the roster`);
+  if (pending > 0) parts.push(`${pending} still waiting on a guardian`);
+  if (notYours > 0) parts.push(`${notYours} could not be ported`);
   if (parts.length === 0) parts.push('Nothing changed.');
 
   revalidatePath('/c/[clubSlug]', 'layout');

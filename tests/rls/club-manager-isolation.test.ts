@@ -720,3 +720,77 @@ describe('view-as sessions are guarded at the database', () => {
     expect(afterEnd).not.toBeNull();
   });
 });
+
+/**
+ * phase6r -- the persisted roster proposal.
+ *
+ * The table exists so a proposal survives between people; these pin that it
+ * is fenced to the entry's own team, since it now carries who a club intends
+ * to send to a tournament.
+ */
+describe('tournament_roster_candidates is fenced to the entry team', () => {
+  let entryId: string | null = null;
+
+  it('sets up an accepted entry for team A1', async () => {
+    const tournament = must(await adminClient
+      .from('tournaments')
+      .insert({ name: 'RLS Test Cup', org_id: orgA.id, slug: `rls-cup-${crypto.randomUUID().slice(0, 8)}` })
+      .select().single(), 'tournaments');
+
+    const entry = must(await adminClient
+      .from('tournament_entries')
+      .insert({
+        tournament_id: tournament.id,
+        host_org_id: orgA.id,
+        entrant_org_id: orgA.id,
+        club_id: clubA.id,
+        team_id: teamA1.id,
+        team_name: 'Club A - U15',
+        status: 'accepted',
+      })
+      .select().single(), 'tournament_entries');
+    entryId = entry.id;
+    expect(entryId).toBeTruthy();
+  });
+
+  it('the assigned coach CAN propose a player', async () => {
+    const { error } = await coachA1Client
+      .from('tournament_roster_candidates')
+      .insert({ org_id: orgA.id, entry_id: entryId!, player_id: playerA1.id })
+      .select();
+    expect(error).toBeNull();
+  });
+
+  it('the team manager on the same team CAN see the proposal', async () => {
+    const { data } = await teamManagerA1Client
+      .from('tournament_roster_candidates').select('*').eq('entry_id', entryId!);
+    expect(data).toHaveLength(1);
+  });
+
+  // fill_tournament_roster is team-scoped, so a club_manager passes (club-wide)
+  // but staff from another club must not.
+  it('a club_manager from another club CANNOT propose', async () => {
+    const { error } = await clubStaffBClient
+      .from('tournament_roster_candidates')
+      .insert({ org_id: orgA.id, entry_id: entryId!, player_id: playerA2.id })
+      .select();
+    expect(error).not.toBeNull();
+  });
+
+  it('the IT admin can neither see nor propose', async () => {
+    const { data } = await itAdminAClient
+      .from('tournament_roster_candidates').select('*').eq('entry_id', entryId!);
+    expect(data).toHaveLength(0);
+
+    const { error } = await itAdminAClient
+      .from('tournament_roster_candidates')
+      .insert({ org_id: orgA.id, entry_id: entryId!, player_id: playerA2.id })
+      .select();
+    expect(error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_roster_candidates').delete().eq('entry_id', entryId!);
+    await adminClient.from('tournament_entries').delete().eq('id', entryId!);
+  });
+});

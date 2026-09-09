@@ -759,11 +759,10 @@ the full category list, fees read-only.
 
 ### Not built (backlog, in rough priority order)
 
-- **C — Roster workflow.** Spec wants 8 states (Draft → … → Coach Finalized →
-  Locked) and a versioned, immutable finalized roster. Today it's still Phase
-  3's one-shot "Submit Roster" with no state model and no versioning, and
-  `port_squad_to_tournament` still carries a hardcoded `is_org_admin` bypass —
-  the "generic admin override" Club Manager spec §29 forbids.
+- **C — Roster workflow. Done as visibility (see §0f).** The remaining
+  unbuilt piece is roster *versioning*, and `port_squad_to_tournament` still
+  carries a hardcoded `is_org_admin` bypass — the "generic admin override"
+  Club Manager spec §29 forbids.
 - **D — Coach assignment model.** No "primary coach" concept exists, so
   "Team Manager may assign coaches but not remove the primary coach" is not
   expressible. Needs per-team coach designation.
@@ -864,6 +863,72 @@ session / readout stops working after the session ends). Driven live
 end-to-end too: started a session as the IT admin against the coach, saw the
 banner and the readout, confirmed the audit row was attributed to the admin,
 ended the session and watched the banner disappear.
+
+---
+
+## 0f. Roster workflow states (2026-09-09)
+
+Product decision: the spec's roster state machine is for **workflow
+visibility, not enforcement**. That follows from the earlier finalize
+decision — both coach and team_manager hold `finalize_tournament_roster`, so
+a state machine gating a handoff between them would be gating nothing.
+
+### Derived, never stored
+
+`phase6r` adds `tournament_roster_candidates` — and deliberately **no status
+column anywhere**. Every state is computed at read time in
+`src/lib/roster-state.ts` from the three things that are actually true: who is
+proposed (candidates), what their guardian said (`approval_requests`), and who
+has been ported (`tournament_roster`). A stored status would be a second
+source of truth that drifts from the approvals it summarises, and since
+nothing is gated on reaching a state there is nothing to gain by storing it.
+
+Per player: Not selected → Proposed → (No guardian on file) → Awaiting
+guardian → Guardian confirmed / declined → Finalized. Rolled up per roster:
+Draft → Proposed → Awaiting guardians → Ready for review → Partly finalized →
+Finalized.
+
+The spec's **"Locked" is intentionally not a separate state**: a
+`tournament_roster` row is already immutable (there is no unfinalize path), so
+Finalized and Locked describe the same reality. They only need separating if
+an unfinalize workflow is ever built.
+
+### Why a new table was needed at all
+
+Phase 3's documented reason for collapsing the workflow into one click was
+that there was "nowhere to persist an in-progress candidate list". That is
+exactly what blocked visibility: the proposal lived in one person's browser,
+so a team manager could not prepare something a coach picked up later, and no
+state existed for anyone to observe. The candidates table is that missing
+persistence and nothing more.
+
+`submitRoster` is replaced by three actions — `addRosterCandidates`,
+`requestAcknowledgements`, `finalizeRoster` — which are the same two
+underlying operations Phase 3 performed (insert `approval_requests`, then
+`port_squad_to_tournament`), split so each is observable. **No permission
+changed**; both coach and team manager hold all three.
+
+### Verified
+
+47 RLS tests (up from 41) and a new pure-function suite, `npm run test:unit`
+(14 tests), covering the derivation directly — including the case Phase 3's
+live testing surfaced, a genuine minor with no guardian on file, which must
+read differently from "we simply haven't asked yet".
+
+Workflow driven end-to-end against the live showcase data as the assigned
+coach: proposed 12 players, asked 12 guardians, and — the important one —
+attempted to finalize *before* any approval, which returned `consent_missing`
+for all 12 rather than porting them. Approving then finalizing ported all 12.
+A coach from a different team is refused on the entry, and the IT admin can
+neither see nor propose.
+
+**Caveat on UI verification:** the browser pane's client-side Supabase auth
+broke partway through this phase (sign-in requests stopped reaching the server
+at all, for both the login form and the demo buttons), so the coach's
+three-stage click-through was verified at the database rather than through the
+UI. What *was* seen rendered: the entry page showing the derived `Draft` chip,
+and correctly showing an IT admin the roster state with no player data and no
+controls. Worth re-checking the three buttons in a browser next session.
 
 ---
 

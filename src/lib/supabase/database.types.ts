@@ -1327,6 +1327,48 @@ export type Database = {
           },
         ]
       }
+      tournament_roster_candidates: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          entry_id: string
+          id: string
+          org_id: string
+          player_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          entry_id: string
+          id?: string
+          org_id: string
+          player_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          entry_id?: string
+          id?: string
+          org_id?: string
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_roster_candidates_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "tournament_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_roster_candidates_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           away_score: number | null

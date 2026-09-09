@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:rls": "vitest run tests/rls"
+    "test:rls": "vitest run tests/rls",
+    "test:unit": "vitest run tests/unit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.658.0",
