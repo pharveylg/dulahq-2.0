@@ -751,6 +751,7 @@ export type Database = {
       }
       document_uploads: {
         Row: {
+          category: string
           file_data: string | null
           file_name: string | null
           id: string
@@ -768,6 +769,7 @@ export type Database = {
           uploaded_at: string
         }
         Insert: {
+          category?: string
           file_data?: string | null
           file_name?: string | null
           id?: string
@@ -785,6 +787,7 @@ export type Database = {
           uploaded_at?: string
         }
         Update: {
+          category?: string
           file_data?: string | null
           file_name?: string | null
           id?: string
@@ -4244,6 +4247,10 @@ export type Database = {
       recompute_fee_status: {
         Args: { p_fee_charge_id: string }
         Returns: undefined
+      }
+      transfer_player_to_team: {
+        Args: { p_player_id: string; p_new_team_id: string }
+        Returns: string
       }
       requires_guardian_consent: {
         Args: { p_on?: string; p_player_id: string }

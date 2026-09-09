@@ -19,6 +19,7 @@ import Timeline from '@/app/c/[clubSlug]/teams/[teamSlug]/players/[playerId]/Tim
 import PlayerFees from '@/app/c/[clubSlug]/teams/[teamSlug]/PlayerFees';
 import PlayerMembership from '@/app/c/[clubSlug]/teams/[teamSlug]/PlayerMembership';
 import Documents from './Documents';
+import TeamHistory from './TeamHistory';
 
 export type PlayerProfileViewer = 'coach' | 'player' | 'guardian';
 
@@ -73,13 +74,13 @@ export default async function PlayerProfile({
   let perms = {
     viewTeam: false, manageDevelopment: false, addEvaluation: false,
     addPlayerFeedback: false, addPrivateCoachNote: false, editFootballProfile: false,
-    manageFinances: false, manageMembership: false, manageStaff: false, manageDocuments: false,
+    manageFinances: false, manageMembership: false, manageStaff: false, manageDocuments: false, viewMedical: false,
   };
   if (viewer === 'coach' && clubId) {
     const keys = [
       'view_team', 'manage_development', 'add_evaluation', 'add_player_feedback',
       'add_private_coach_note', 'edit_player_football_profile', 'manage_finances', 'manage_membership', 'manage_staff',
-      'manage_documents',
+      'manage_documents', 'view_medical',
     ] as const;
     const results = await Promise.all(
       keys.map((key) => supabase.rpc('has_staff_permission', { p_permission_key: key, p_club_id: clubId, p_team_id: teamId ?? undefined }))
@@ -88,7 +89,7 @@ export default async function PlayerProfile({
       viewTeam: !!results[0].data, manageDevelopment: !!results[1].data, addEvaluation: !!results[2].data,
       addPlayerFeedback: !!results[3].data, addPrivateCoachNote: !!results[4].data,
       editFootballProfile: !!results[5].data, manageFinances: !!results[6].data, manageMembership: !!results[7].data,
-      manageStaff: !!results[8].data, manageDocuments: !!results[9].data,
+      manageStaff: !!results[8].data, manageDocuments: !!results[9].data, viewMedical: !!results[10].data,
     };
   }
   // Preserves today's exact behavior (canManage || role==='staff' for fees;
@@ -140,10 +141,20 @@ export default async function PlayerProfile({
       .eq('player_id', playerId),
     supabase
       .from('document_uploads')
-      .select('id, type, name, file_name, mime_type, status, reviewed_by, review_note, uploaded_at')
+      .select('id, type, category, name, file_name, mime_type, status, reviewed_by, review_note, uploaded_at')
       .eq('player_id', playerId)
       .order('uploaded_at', { ascending: false }),
   ]);
+
+  const { data: teamMembershipRows } = await supabase
+    .from('team_memberships')
+    .select('id, team_id, jersey, position, from_date, to_date, teams(name)')
+    .eq('player_id', playerId)
+    .order('from_date', { ascending: false });
+
+  const { data: otherTeamRows } = clubId
+    ? await supabase.from('teams').select('id, name').eq('club_id', clubId).neq('id', teamId ?? '')
+    : { data: [] as any[] };
 
   const evaluationIds = (evaluations ?? []).map((e) => e.id);
   const { data: ratingRows } = evaluationIds.length
@@ -197,9 +208,14 @@ export default async function PlayerProfile({
   }));
   const memberships = (membershipRows ?? []).map((m) => ({ id: m.id, periodStart: m.period_start, periodEnd: m.period_end, status: m.status }));
   const documents = (documentRows ?? []).map((d) => ({
-    id: d.id, type: d.type, name: d.name ?? d.type, fileName: d.file_name, mimeType: d.mime_type,
+    id: d.id, type: d.type, category: d.category, name: d.name ?? d.type, fileName: d.file_name, mimeType: d.mime_type,
     status: d.status, reviewedBy: d.reviewed_by, reviewNote: d.review_note, uploadedAt: d.uploaded_at,
   }));
+  const teamStints = (teamMembershipRows ?? []).map((tm: any) => ({
+    id: tm.id, teamId: tm.team_id, teamName: tm.teams?.name ?? 'Unknown team',
+    jersey: tm.jersey, position: tm.position, fromDate: tm.from_date, toDate: tm.to_date,
+  }));
+  const otherTeams = (otherTeamRows ?? []) as { id: string; name: string }[];
   const guardians = (guardianLinks ?? []).map((l: any) => ({
     linkId: l.id, guardianId: l.guardians?.id, name: l.guardians?.name ?? 'Unknown',
     relationship: l.relationship, isPrimaryContact: l.is_primary_contact,
@@ -325,7 +341,10 @@ export default async function PlayerProfile({
           </div>
         ),
         membership: clubId && teamId ? (
-          <PlayerMembership clubId={clubId} teamId={teamId} playerId={playerId} memberships={memberships} canManage={canManageMembership} />
+          <div>
+            <TeamHistory clubSlug={club?.slug ?? null} playerId={playerId} stints={teamStints} otherTeams={otherTeams} canManage={canManageMembership} />
+            <PlayerMembership clubId={clubId} teamId={teamId} playerId={playerId} memberships={memberships} canManage={canManageMembership} />
+          </div>
         ) : (
           <div className="card">
             {memberships.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No membership periods recorded.</p>}
@@ -338,7 +357,10 @@ export default async function PlayerProfile({
           </div>
         ),
         documents: clubId && teamId ? (
-          <Documents clubId={clubId} teamId={teamId} playerId={playerId} playerName={player.name} documents={documents} canManage={perms.manageDocuments} />
+          <Documents
+            clubId={clubId} teamId={teamId} playerId={playerId} playerName={player.name} documents={documents}
+            canManageGeneral={perms.manageDocuments} canManageMedical={perms.viewMedical}
+          />
         ) : (
           <div className="card">
             {documents.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No documents on record.</p>}

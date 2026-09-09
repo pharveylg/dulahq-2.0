@@ -2,10 +2,12 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { uploadDocument, reviewDocument, deleteDocument } from '@/app/c/[clubSlug]/teams/[teamSlug]/documents-actions';
+import { MEDICAL_TYPES } from '@/lib/document-types';
 
 export type DocumentRow = {
   id: string;
   type: string;
+  category: string;
   name: string;
   fileName: string | null;
   mimeType: string | null;
@@ -16,12 +18,25 @@ export type DocumentRow = {
 };
 
 const TYPE_LABEL: Record<string, string> = {
+  birth_certificate: 'Birth Certificate',
+  government_id: 'Government ID',
+  medical_clearance: 'Medical Clearance',
+  allergy_disclosure: 'Allergy Disclosure',
+  insurance_card: 'Insurance Card',
   registration: 'Registration',
   code_of_conduct: 'Code of Conduct',
   consent_form: 'Consent Form',
   media_consent: 'Media Consent',
   tournament_waiver: 'Tournament Waiver',
   club_policy: 'Club Policy',
+  other: 'Other',
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  identity: 'Identity',
+  medical: 'Medical',
+  registration: 'Registration',
+  consent: 'Consent',
   other: 'Other',
 };
 
@@ -37,20 +52,33 @@ export default function Documents({
   playerId,
   playerName,
   documents,
-  canManage,
+  canManageGeneral,
+  canManageMedical,
 }: {
   clubId: string;
   teamId: string;
   playerId: string;
   playerName: string;
   documents: DocumentRow[];
-  canManage: boolean;
+  /** manage_documents -- club_admin/staff, every category. */
+  canManageGeneral: boolean;
+  /** view_medical -- club_admin/coach/team_manager, medical category only. */
+  canManageMedical: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const canUpload = canManageGeneral || canManageMedical;
+  const uploadableTypes = canManageGeneral
+    ? Object.keys(TYPE_LABEL)
+    : MEDICAL_TYPES;
+
+  function canManageDoc(doc: DocumentRow) {
+    return doc.category === 'medical' ? canManageGeneral || canManageMedical : canManageGeneral;
+  }
 
   function handleUpload(formData: FormData) {
     setError(null);
@@ -86,70 +114,74 @@ export default function Documents({
     <div className="card">
       {sorted.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No documents yet.</p>}
 
-      {sorted.map((doc) => (
-        <div key={doc.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <div>
-              <div className="list-row-title">{doc.name}</div>
-              <div className="list-row-meta">
-                {TYPE_LABEL[doc.type] ?? doc.type} · {doc.fileName ?? 'no file'} ·{' '}
-                {new Date(doc.uploadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+      {sorted.map((doc) => {
+        const manageable = canManageDoc(doc);
+        return (
+          <div key={doc.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div>
+                <div className="list-row-title">{doc.name}</div>
+                <div className="list-row-meta">
+                  <span className="chip" style={{ fontSize: 10, marginRight: 6 }}>{CATEGORY_LABEL[doc.category] ?? doc.category}</span>
+                  {TYPE_LABEL[doc.type] ?? doc.type} · {doc.fileName ?? 'no file'} ·{' '}
+                  {new Date(doc.uploadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
               </div>
+              <span className="chip" style={STATUS_STYLE[doc.status]}>{doc.status}</span>
             </div>
-            <span className="chip" style={STATUS_STYLE[doc.status]}>{doc.status}</span>
+
+            {doc.reviewNote && (
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
+                {doc.reviewedBy ? `${doc.reviewedBy}: ` : ''}{doc.reviewNote}
+              </p>
+            )}
+
+            {manageable && doc.status === 'pending' && reviewingId !== doc.id && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn" style={{ fontSize: 11.5 }} disabled={pending} onClick={() => handleReview(doc.id, 'approved', '')}>
+                  Approve
+                </button>
+                <button className="btn" style={{ fontSize: 11.5 }} disabled={pending} onClick={() => setReviewingId(doc.id)}>
+                  Reject…
+                </button>
+              </div>
+            )}
+
+            {manageable && reviewingId === doc.id && (
+              <form
+                className="form-row"
+                style={{ flexWrap: 'wrap' }}
+                action={(fd) => handleReview(doc.id, 'rejected', (fd.get('note') as string) ?? '')}
+              >
+                <input name="note" placeholder="Reason (required)" required style={{ flex: 1, minWidth: 160 }} />
+                <button type="submit" className="btn btn-primary" style={{ fontSize: 11.5 }} disabled={pending}>
+                  Confirm reject
+                </button>
+                <button type="button" className="btn" style={{ fontSize: 11.5 }} onClick={() => setReviewingId(null)}>
+                  Cancel
+                </button>
+              </form>
+            )}
+
+            {manageable && (
+              <button className="btn" style={{ fontSize: 11, alignSelf: 'flex-start', color: 'var(--text-muted)' }} disabled={pending} onClick={() => handleDelete(doc.id)}>
+                Remove
+              </button>
+            )}
           </div>
+        );
+      })}
 
-          {doc.reviewNote && (
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
-              {doc.reviewedBy ? `${doc.reviewedBy}: ` : ''}{doc.reviewNote}
-            </p>
-          )}
-
-          {canManage && doc.status === 'pending' && reviewingId !== doc.id && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn" style={{ fontSize: 11.5 }} disabled={pending} onClick={() => handleReview(doc.id, 'approved', '')}>
-                Approve
-              </button>
-              <button className="btn" style={{ fontSize: 11.5 }} disabled={pending} onClick={() => setReviewingId(doc.id)}>
-                Reject…
-              </button>
-            </div>
-          )}
-
-          {canManage && reviewingId === doc.id && (
-            <form
-              className="form-row"
-              style={{ flexWrap: 'wrap' }}
-              action={(fd) => handleReview(doc.id, 'rejected', (fd.get('note') as string) ?? '')}
-            >
-              <input name="note" placeholder="Reason (required)" required style={{ flex: 1, minWidth: 160 }} />
-              <button type="submit" className="btn btn-primary" style={{ fontSize: 11.5 }} disabled={pending}>
-                Confirm reject
-              </button>
-              <button type="button" className="btn" style={{ fontSize: 11.5 }} onClick={() => setReviewingId(null)}>
-                Cancel
-              </button>
-            </form>
-          )}
-
-          {canManage && (
-            <button className="btn" style={{ fontSize: 11, alignSelf: 'flex-start', color: 'var(--text-muted)' }} disabled={pending} onClick={() => handleDelete(doc.id)}>
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
-
-      {canManage && !showUpload && (
+      {canUpload && !showUpload && (
         <button className="btn" style={{ fontSize: 11.5, marginTop: sorted.length ? 12 : 0 }} onClick={() => setShowUpload(true)}>
           + Upload document
         </button>
       )}
-      {canManage && showUpload && (
+      {canUpload && showUpload && (
         <form ref={formRef} action={handleUpload} className="form-row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
           <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
-            <select name="type" defaultValue="other">
-              {Object.entries(TYPE_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            <select name="type" defaultValue={uploadableTypes[0]}>
+              {uploadableTypes.map((key) => <option key={key} value={key}>{TYPE_LABEL[key]}</option>)}
             </select>
           </div>
           <div className="form-group" style={{ flex: 1, minWidth: 160 }}>

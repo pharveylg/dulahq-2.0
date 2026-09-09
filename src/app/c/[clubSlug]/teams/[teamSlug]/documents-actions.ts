@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import { notifyAboutPlayer } from '@/lib/notify';
+import { TYPE_CATEGORY } from '@/lib/document-types';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -11,7 +12,7 @@ function friendlyError(error: { code?: string; message: string }) {
   return error.message;
 }
 
-const VALID_TYPES = ['registration', 'code_of_conduct', 'consent_form', 'media_consent', 'tournament_waiver', 'club_policy', 'other'];
+const VALID_TYPES = Object.keys(TYPE_CATEGORY);
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 export async function uploadDocument(clubId: string, teamId: string, playerId: string, playerName: string, formData: FormData) {
@@ -32,6 +33,7 @@ export async function uploadDocument(clubId: string, teamId: string, playerId: s
     player_id: playerId,
     player_name: playerName,
     type,
+    category: TYPE_CATEGORY[type],
     name,
     file_name: file.name,
     file_data: fileData,

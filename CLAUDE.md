@@ -558,6 +558,92 @@ feature at all yet — building it is in scope, not deferred. Phasing:
   allowed?) that the original notification-scoping conversation flagged
   as an open question, not a green light — out of scope for this pass.
 
+**A third round followed**, proposed before building (per the same "propose
+before build" pattern as the notification initiative): the flagged
+team-transfer gap, built properly this time, plus broadening documents
+beyond tournament-only with role-based visibility by document type.
+
+- **Player movement / team transfer. Done.** `team_memberships` had existed
+  since `phase3_free_the_player` (2026-09-07) with zero application code —
+  exactly the "one row per team stint" shape this needed, so no new table.
+  `phase6i` migration: backfilled an initial stint for every existing
+  player (`from_date` = `players.created_at`, the best available proxy,
+  not a real join date — flagged as an approximation) so history doesn't
+  start empty, then added `transfer_player_to_team(player_id,
+  new_team_id)` — a SECURITY DEFINER RPC, not a raw table update, because
+  `players_write`'s `WITH CHECK` only verifies `is_org_member(org_id)` and
+  never re-checks permission against the *destination* team; a plain
+  update would let a coach reassign a player into their own team from
+  someone else's without the destination team's staff having any say.
+  The RPC authorizes once against `manage_membership` (existing club-scope
+  permission, already used for the Membership tab — no new permission
+  key), then atomically closes the old stint, opens the new one, and
+  moves `players.team_id`, and writes `movement.team_transferred` to
+  `audit_log`. Scope: same-club, team-to-team moves only — leaving the
+  club entirely is still `updateMembershipStatus → 'transferred'`
+  (Phase 5c), and moving to a *different* club isn't modeled by this
+  schema at all (players have no cross-club identity).
+
+  UI: a new "Team History" section in the canonical `PlayerProfile.tsx`'s
+  existing Membership tab (`TeamHistory.tsx`) — chronological stints with
+  dates/jersey/position, and (coach/staff with `manage_membership` only) a
+  "Move to another team" picker scoped to the same club's other teams.
+  `movement-actions.ts`'s `transferPlayerToTeam()` calls the RPC then
+  `notifyAboutPlayer()` — no guardian approval step, matching the user's
+  explicit "parents do not need to approve but they need to be notified."
+
+  A real UX bug found live: the coach's page (`teams/[teamSlug]/players/
+  [playerId]`) is team-scoped and calls `notFound()` once the player's
+  `team_id` no longer matches that route's team — so a successful transfer
+  left the page 404ing on its own stale URL. Fixed by having the action
+  return the destination team's slug and redirecting client-side to the
+  new team's player page rather than leaving the view stranded. Verified
+  live end-to-end: moved Angelica Alvarado U15 Girls → U8 → back, watched
+  Team History accumulate both stints with correct date ranges, confirmed
+  the redirect landed on the new team's URL both times, and confirmed both
+  the `notifications` row and the `audit_log` before/after both times.
+  `tsc`/`build`/`tests/rls` (21/21) all stayed clean.
+
+- **Documents v2: any document type, role-based visibility. Done.** Phase
+  5d's `docs_read`/`docs_write` gated every document type identically on
+  `manage_documents` (club_admin/staff only, family read-only). Widened per
+  the user's ask ("not limited to tournaments... viewable across coach,
+  team manager, club mgr depending on type"): added a `category` column
+  (`phase6j` migration, backfilled from each row's existing `type`) so RLS
+  can gate by category, not just one blanket permission — a TypeScript-only
+  mapping wouldn't be enforceable at the database level. New types, grouped:
+  `identity` (birth_certificate, government_id), `medical`
+  (medical_clearance, allergy_disclosure, insurance_card), `registration`
+  (unchanged), `consent` (unchanged: code_of_conduct, consent_form,
+  media_consent, tournament_waiver), `other` (unchanged). `medical`-category
+  documents are now also visible/manageable via `view_medical` — already in
+  Phase 0's catalog, already defaulting to club_admin + coach + team_manager,
+  unused until now, so no new permission key needed; every other category
+  stays `manage_documents`-only as before (more administrative/sensitive,
+  no reason to widen). Guardian/player-self visibility is unchanged — a
+  family still sees all of their own child's documents regardless of
+  category. `TYPE_CATEGORY`/`MEDICAL_TYPES` live in `src/lib/document-
+  types.ts`, not `documents-actions.ts` — a `'use server'` file can only
+  export async functions, and a plain object export there breaks the build
+  at runtime (hit this live, fixed by moving the constant out). `Documents.tsx`
+  now takes `canManageGeneral`/`canManageMedical` separately: the upload
+  type dropdown only offers categories the viewer can actually write
+  (medical-only for a view_medical-only coach), and each row's
+  approve/reject/remove controls check the row's own category against the
+  right flag.
+
+  Verified live: as club_admin, uploaded nothing new (Phase 5d already
+  covered that path) — instead verified via SQL impersonation that RLS
+  itself splits correctly (a coach's insert of a `medical`-category row
+  succeeds, the same coach's insert of an `identity`-category row is
+  refused with 42501), then drove the rest through the real UI as the
+  coach persona: the upload form's type dropdown showed only the 3 medical
+  types, the Documents list showed only the medical row (a birth
+  certificate inserted alongside it stayed invisible), approving it
+  worked and fired `document.reviewed`, and the birth certificate was
+  confirmed untouched throughout. Cleaned up test rows afterward.
+  `tsc`/`build`/`tests/rls` (21/21) all stayed clean.
+
 ---
 
 ## 1. The two deployments
