@@ -259,8 +259,3 @@ grant select on public.billing_payment_allocations to authenticated;
 grant select on public.billing_usage_meters to authenticated;
 grant select on public.billing_usage_events to authenticated;
 grant select on public.billing_usage_periods to authenticated;
-EOF
-
-git add supabase/migrations/20260910090000_billing_domain_foundation.sql docs/billing-domain-design.md docs/platform-implementation-roadmap.md && git commit -m "Add billing domain foundation migration" && git status --short && git log -2 --oneline
-npm run build >/tmp/dulahq-build.log 2>&1; code=$?; tail -30 /tmp/dulahq-build.log; exit $code
-  

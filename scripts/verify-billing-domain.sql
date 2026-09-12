@@ -21,7 +21,14 @@ order by key;
 
 -- Every existing club/tournament should have a billing context after the
 -- provisioning migration.
-select 'clubs_without_billing_account' as check_name, count(*) as failures
+select 'organizations_without_platform_billing_account' as check_name, count(*) as failures
+from public.organizations o
+where not exists (
+  select 1 from public.billing_accounts b
+  where b.context_type = 'platform' and b.org_id = o.id
+)
+union all
+select 'clubs_without_billing_account', count(*)
 from public.clubs c
 where not exists (
   select 1 from public.billing_accounts b

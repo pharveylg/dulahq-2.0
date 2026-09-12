@@ -35,6 +35,7 @@ Review these migrations in order:
 20260910130000_billing_plans_and_rates.sql
 20260910133000_billing_subscription_provisioning.sql
 20260910140000_billing_default_plan_meters.sql
+20260910143000_billing_platform_backfill.sql
 ```
 
 These are the files that must be applied to Supabase after the project is pushed. They create and modify live database objects. Do not delete or reorder them.
