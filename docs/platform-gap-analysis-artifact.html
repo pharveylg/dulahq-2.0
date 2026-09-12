@@ -118,10 +118,10 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
       <span class="meta-chip">baseline commit: 3ade9b6 / eb05901</span>
     </div>
     <div class="stat-strip">
-      <div class="stat-tile sev-p0"><div class="stat-num">5</div><div class="stat-label">P0 findings</div></div>
+      <div class="stat-tile sev-total"><div class="stat-num">4/5</div><div class="stat-label">P0s fixed</div></div>
       <div class="stat-tile sev-p1"><div class="stat-num">6</div><div class="stat-label">P1 findings</div></div>
-      <div class="stat-tile sev-p2"><div class="stat-num">3</div><div class="stat-label">P2 / defer</div></div>
-      <div class="stat-tile sev-total"><div class="stat-num">3</div><div class="stat-label">areas covered</div></div>
+      <div class="stat-tile sev-p2"><div class="stat-num">2/3</div><div class="stat-label">P2 fixed</div></div>
+      <div class="stat-tile sev-p0"><div class="stat-num">1</div><div class="stat-label">still open (org suspend)</div></div>
     </div>
     <div class="toc">
       <a href="#sync">0 &middot; Sync notes</a>
@@ -138,19 +138,19 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
     <p class="area-sub">What changed since the last session, and two decisions this analysis is blocked on.</p>
 
     <div class="finding sev-p1">
-      <h3>Billing schema is code-complete but not applied <span class="badge p1">decision needed</span></h3>
-      <p><code class="cite">list_migrations</code> on the live project stops at <code class="cite">phase8d_tournament_entry_contacts</code> (2026-09-09). None of the 14 <code class="cite">20260910*_billing_*</code> migrations are live — matching <code class="cite">docs/implementation-handoff.md:3</code>'s own admission. Every billing screen (Platform Admin, Guardian, Club) is live application code pointed at tables that don't exist in production yet. This analysis treats billing throughout as <strong>built, not deployed</strong>.</p>
+      <h3>Billing schema turned out to already be live <span class="badge fixed">resolved 09-11</span></h3>
+      <p><code class="cite">list_migrations</code> stopped at <code class="cite">phase8d</code>, matching <code class="cite">docs/implementation-handoff.md:3</code>'s own claim — but checking directly found every table, function, and seed row from all 14 <code class="cite">billing_*</code> files already live, applied out-of-band outside the tracked migration history. Only one piece was genuinely missing: <code class="cite">provision_product_billing_account()</code>'s triggers, so a newly created club/tournament got no billing account. Applied as its own patch migration.</p>
     </div>
 
     <div class="finding sev-p0">
-      <h3>CLAUDE.md §0l and 18 RLS tests were deleted with nothing added back <span class="badge p0">recoverable</span></h3>
-      <p><code class="cite">git diff f818ac8 3ade9b6 -- CLAUDE.md</code>: 212 lines removed, 0 added &mdash; the entire Tournament RBAC foundation section. Same diff against <code class="cite">tests/rls/club-manager-isolation.test.ts</code>: 212 lines removed, 0 added &mdash; both <code class="cite">tournament_staff</code> and <code class="cite">tournament_entry_contacts</code> test blocks, gone.</p>
-      <p>The underlying schema is untouched and still live (phase8a&ndash;phase8d all present) &mdash; this is a documentation and test-coverage loss, not a functional regression. But the Tournament RBAC layer this whole analysis leans on in §3 now has <strong>zero automated regression coverage</strong>. Fully recoverable: <code class="cite">git show f818ac8:CLAUDE.md</code>.</p>
+      <h3>CLAUDE.md §0l and 18 RLS tests were deleted with nothing added back <span class="badge fixed">restored</span></h3>
+      <p><code class="cite">git diff f818ac8 3ade9b6 -- CLAUDE.md</code>: 212 lines removed, 0 added &mdash; the entire Tournament RBAC foundation section. Same diff against <code class="cite">tests/rls/club-manager-isolation.test.ts</code>: 212 lines removed, 0 added &mdash; both <code class="cite">tournament_staff</code> and <code class="cite">tournament_entry_contacts</code> test blocks, gone, along with their type definitions in <code class="cite">database.types.ts</code>.</p>
+      <p>All three restored verbatim from <code class="cite">f818ac8</code>. RLS suite back to 121 passing before the new work in §1.2 added 8 more.</p>
     </div>
 
     <div class="finding sev-note">
-      <h3>A stray, garbled file sits at the repo root</h3>
-      <p>A tracked file whose visible name ends <code class="cite">manual billing foundation"</code> (a broken private-use Unicode byte sequence) contains a <code class="cite">git diff --stat</code> output, not source &mdash; an artifact of a broken command during the commit. Harmless; recommend <code class="cite">git rm</code> once confirmed unneeded.</p>
+      <h3>A stray, garbled file sat at the repo root <span class="badge fixed">removed</span></h3>
+      <p>A tracked file whose visible name ended <code class="cite">manual billing foundation"</code> (a broken private-use Unicode byte sequence) contained a <code class="cite">git diff --stat</code> output, not source &mdash; an artifact of a broken command during the commit. <code class="cite">git rm</code>'d.</p>
     </div>
   </section>
 
@@ -165,10 +165,9 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
     </div>
 
     <div class="finding sev-p0">
-      <h3>1.2 &middot; No cross-org troubleshooting path exists for Platform Admin <span class="badge p0">headline gap</span></h3>
-      <p>Every "view as" mechanism in this codebase is club-scoped, callable only by that club's own <code class="cite">club_it_admin</code>: <code class="cite">start_impersonation()</code> takes a <code class="cite">p_club_id</code>; <code class="cite">effective_access_for()</code> requires a live session for that exact club triple. <code class="cite">tournament_it_admin</code> deliberately got its own separate, tournament-scoped audit function rather than a shared one (resolved by explicit ruling, <code class="cite">club-entitlement-gap-analysis.md</code> §13).</p>
-      <p><strong>Consequence:</strong> Platform Admin &mdash; the one role that should reach any org &mdash; has no diagnostic path into any of them beyond raw SQL with the service-role key. A Tournament-only org (no club, so no <code class="cite">club_it_admin</code> is even possible) is completely opaque to support today.</p>
-      <blockquote>Recommended shape: a third, platform-scoped tier of the same proven pattern &mdash; <code class="cite">start_platform_impersonation(org_id, target_user_id, reason)</code> keyed on <code class="cite">org_id</code> not <code class="cite">club_id</code>, resolving through both <code class="cite">has_staff_permission</code> and <code class="cite">has_tournament_permission</code>, same audit discipline (admin stays the actor, never the target), same visible banner.</blockquote>
+      <h3>1.2 &middot; No cross-org troubleshooting path existed for Platform Admin <span class="badge fixed">built 09-11</span></h3>
+      <p>Every "view as" mechanism was club-scoped, callable only by that club's own <code class="cite">club_it_admin</code>: <code class="cite">start_impersonation()</code> took a <code class="cite">p_club_id</code>; <code class="cite">effective_access_for()</code> required a live session for that exact club triple. <code class="cite">tournament_it_admin</code> deliberately has its own separate, tournament-scoped audit function rather than a shared one (resolved by explicit ruling, <code class="cite">club-entitlement-gap-analysis.md</code> §13) &mdash; both stay exactly as they were.</p>
+      <p><strong>Built as a third, additive tier</strong>: <code class="cite">start_platform_impersonation(org_id, target_user_id, reason)</code>, keyed on <code class="cite">org_id</code> not <code class="cite">club_id</code> so it reaches a Tournament-only org too. <code class="cite">effective_access_for_platform()</code> aggregates every club <em>and</em> every tournament the target touches in that org into one readout. Same audit discipline (the platform admin's email lands in <code class="cite">audit_log</code>, never the target's &mdash; verified live), same visible banner (a new tier in <code class="cite">ImpersonationBanner.tsx</code>, distinguishable from the club-scoped one). New "Troubleshoot" tab in <code class="cite">/platformconsole</code>, driven end-to-end through the real UI: picked an org showing its held entitlements inline, viewed as a team manager, got back their real permission bundle, ended the session, watched the banner clear.</p>
     </div>
 
     <div class="finding sev-p1">
@@ -177,9 +176,10 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
     </div>
 
     <div class="finding sev-p0">
-      <h3>1.4 &middot; Billing: a form that can never submit, and RLS wide open by design <span class="badge p0">P0 &times; 2</span></h3>
-      <p><strong>Bug:</strong> <code class="cite">BillingConsole.tsx:82-99</code>'s "Create invoice" form has no <code class="cite">billingAccountId</code> field, hidden or otherwise &mdash; <code class="cite">createPlatformInvoice</code> requires it and every submission will fail. Can't be tested live yet (§0), but confirmed by reading both sides of the form/action contract.</p>
-      <p><strong>By-design-but-risky:</strong> <code class="cite">billing_invoices_read</code> and siblings grant any <code class="cite">is_org_member(org_id)</code> full read &mdash; the migration's own comment admits this is temporary ("Product-specific staff narrowing is added with the corresponding Club/Tournament billing UI and policies"). As written, any coach, guardian, or player can read every invoice belonging to their org, including other families'. Needs the same staff-permission narrowing every other sensitive table here has already gone through, before these migrations reach production.</p>
+      <h3>1.4 &middot; Billing: a form that could never submit, and RLS wide open by design <span class="badge fixed">both fixed 09-11</span></h3>
+      <p><strong>Bug, fixed:</strong> <code class="cite">BillingConsole.tsx</code>'s "Create invoice" form had no <code class="cite">billingAccountId</code> field &mdash; <code class="cite">createPlatformInvoice</code> required it and every submission failed. Fixed by looking the account up server-side from <code class="cite">orgId</code> instead (a platform account is 1:1 per org).</p>
+      <p><strong>RLS, fixed:</strong> <code class="cite">billing_invoices_read</code> and siblings granted any <code class="cite">is_org_member(org_id)</code> full read &mdash; any coach, guardian, or player could read every invoice belonging to their org, other families' included. Narrowed via two new helpers mirroring <code class="cite">can_review_billing_invoice</code>'s own branching (platform admin; the named payer; or staff/tournament-staff holding a finance permission at that specific club/tournament). Verified live: a plain coach dropped from reading their club's billing account to refused; the club manager (holds <code class="cite">manage_finances</code>) unaffected.</p>
+      <p style="margin-top:10px"><strong>Left open:</strong> tournament billing's write side still authorizes on <code class="cite">is_org_admin</code> alone rather than the tournament permission catalog, and the tournament billing design doc's 6 proposed permission keys (§3.4) still don't reconcile with the 2 already-live ones &mdash; unchanged by this pass.</p>
     </div>
 
     <div class="finding sev-note">
@@ -257,11 +257,11 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
       <table>
         <thead><tr><th>#</th><th>Area</th><th>Problem</th><th>Fix</th></tr></thead>
         <tbody>
-          <tr><td class="num">1</td><td class="area">Platform</td><td>Suspending an org is read by nothing</td><td>Wire <code class="cite">organizations.status</code> into <code class="cite">is_org_member</code>/<code class="cite">org_has_product</code></td></tr>
-          <tr><td class="num">2</td><td class="area">Platform</td><td>No cross-org troubleshooting path for Platform Admin</td><td>Build <code class="cite">start_platform_impersonation</code> / <code class="cite">effective_access_for_platform</code>, org-scoped</td></tr>
-          <tr><td class="num">3</td><td class="area">Sync</td><td>CLAUDE.md §0l + 18 RLS tests deleted</td><td>Restore both from commit <code class="cite">f818ac8</code></td></tr>
-          <tr><td class="num">4</td><td class="area">Platform</td><td>Billing read policy exposes every org member's invoices to each other</td><td>Narrow with <code class="cite">has_staff_permission</code>/<code class="cite">has_tournament_permission</code> before production</td></tr>
-          <tr><td class="num">5</td><td class="area">Platform</td><td>"Create invoice" form can never submit</td><td>Look up account id server-side, or add the missing field</td></tr>
+          <tr><td class="num">1</td><td class="area">Platform</td><td><strong>Still open.</strong> Suspending an org is read by nothing</td><td>Wire <code class="cite">organizations.status</code> into <code class="cite">is_org_member</code>/<code class="cite">org_has_product</code></td></tr>
+          <tr><td class="num">2</td><td class="area">Platform</td><td><s>No cross-org troubleshooting path for Platform Admin</s></td><td><span class="badge fixed">built</span> <code class="cite">start_platform_impersonation</code> / <code class="cite">effective_access_for_platform</code>, org-scoped, additive to the club/tournament tiers</td></tr>
+          <tr><td class="num">3</td><td class="area">Sync</td><td><s>CLAUDE.md §0l + 18 RLS tests deleted</s></td><td><span class="badge fixed">restored</span> from commit <code class="cite">f818ac8</code></td></tr>
+          <tr><td class="num">4</td><td class="area">Platform</td><td><s>Billing read policy exposes every org member's invoices to each other</s></td><td><span class="badge fixed">fixed</span> narrowed with <code class="cite">has_staff_permission</code>/<code class="cite">has_tournament_permission</code>, verified live</td></tr>
+          <tr><td class="num">5</td><td class="area">Platform</td><td><s>"Create invoice" form can never submit</s></td><td><span class="badge fixed">fixed</span> account id now looked up server-side</td></tr>
         </tbody>
       </table>
     </div>
@@ -286,8 +286,8 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
       <table>
         <thead><tr><th>#</th><th>Area</th><th>Note</th></tr></thead>
         <tbody>
-          <tr><td class="num">12</td><td class="area">Sync</td><td>Stray garbled file at repo root &mdash; delete once confirmed unneeded</td></tr>
-          <tr><td class="num">13</td><td class="area">Platform</td><td>Platform-wide audit read surface &mdash; needed once §1.2 exists, not before</td></tr>
+          <tr><td class="num">12</td><td class="area">Sync</td><td><s>Stray garbled file at repo root</s> &mdash; <span class="badge fixed">removed</span></td></tr>
+          <tr><td class="num">13</td><td class="area">Platform</td><td><s>Platform-wide audit read surface</s> &mdash; <span class="badge fixed">built</span> as <code class="cite">platform_audit_log()</code> alongside §1.2</td></tr>
           <tr><td class="num">14</td><td class="area">Tournament</td><td>Venues/matches/results UI &mdash; correctly belongs to the proxied engine</td></tr>
         </tbody>
       </table>
