@@ -5,6 +5,7 @@ import Directory from './Directory';
 import ProvisionForm from './ProvisionForm';
 import SupportQueue from './SupportQueue';
 import BillingConsole from './BillingConsole';
+import Troubleshoot from './Troubleshoot';
 
 export default async function PlatformConsolePage({
   searchParams,
@@ -29,7 +30,7 @@ export default async function PlatformConsolePage({
   }
 
   const { tab } = await searchParams;
-  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : 'directory';
+  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : tab === 'troubleshoot' ? 'troubleshoot' : 'directory';
 
   const { count: openSupportCount } = await supabase
     .from('support_requests')
@@ -124,6 +125,12 @@ export default async function PlatformConsolePage({
     billingSubscriptions = (subscriptionRows ?? []).map((row: any) => ({ id: row.id, orgName: row.organizations?.name ?? 'Unknown organization', product: row.product, planName: row.billing_plans?.name ?? 'Unknown plan', status: row.status, startsAt: row.starts_at, renewsAt: row.renews_at }));
   }
 
+  let activeSession = null;
+  if (activeTab === 'troubleshoot') {
+    const { data } = await supabase.rpc('my_active_platform_impersonation');
+    activeSession = (data ?? [])[0] ?? null;
+  }
+
   return (
     <main className="page">
       <div className="container">
@@ -136,7 +143,7 @@ export default async function PlatformConsolePage({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <Link href="/platformconsole?tab=directory" className={activeTab === 'directory' ? 'btn btn-primary' : 'btn'}>
             Tenant directory
           </Link>
@@ -149,12 +156,16 @@ export default async function PlatformConsolePage({
           <Link href="/platformconsole?tab=billing" className={activeTab === 'billing' ? 'btn btn-primary' : 'btn'}>
             Billing
           </Link>
+          <Link href="/platformconsole?tab=troubleshoot" className={activeTab === 'troubleshoot' ? 'btn btn-primary' : 'btn'}>
+            Troubleshoot
+          </Link>
         </div>
 
         {activeTab === 'directory' && <Directory orgs={orgs} />}
         {activeTab === 'provision' && <ProvisionForm />}
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
         {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} />}
+        {activeTab === 'troubleshoot' && <Troubleshoot orgs={orgs} activeSession={activeSession} />}
       </div>
     </main>
   );

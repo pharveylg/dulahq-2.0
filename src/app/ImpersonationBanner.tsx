@@ -12,9 +12,17 @@ import { createClient } from '@/lib/supabase/server';
  */
 export default async function ImpersonationBanner() {
   const supabase = await createClient();
-  const { data } = await supabase.rpc('my_active_impersonation');
-  const active = (data ?? [])[0];
-  if (!active) return null;
+  const [{ data: clubSessions }, { data: platformSessions }] = await Promise.all([
+    supabase.rpc('my_active_impersonation'),
+    // Platform Admin's own cross-org tier (gap analysis 2026-09-11 §1.2) --
+    // a separate RPC/table from the club-scoped one above, but the same
+    // banner discipline applies: identity never changes, only the readout
+    // this session unlocks does.
+    (supabase as any).rpc('my_active_platform_impersonation'),
+  ]);
+  const active = (clubSessions ?? [])[0];
+  const activePlatform = (platformSessions ?? [])[0];
+  if (!active && !activePlatform) return null;
 
   return (
     <div
@@ -29,13 +37,28 @@ export default async function ImpersonationBanner() {
       }}
     >
       <div className="container" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span>
-          Inspecting access as <strong>{active.target_name ?? 'another user'}</strong> — you are still signed in as
-          yourself and acting with your own permissions.
-        </span>
-        <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
-          Expires {new Date(active.expires_at).toLocaleTimeString()}
-        </span>
+        {active && (
+          <>
+            <span>
+              Inspecting access as <strong>{active.target_name ?? 'another user'}</strong> — you are still signed in as
+              yourself and acting with your own permissions.
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+              Expires {new Date(active.expires_at).toLocaleTimeString()}
+            </span>
+          </>
+        )}
+        {activePlatform && (
+          <>
+            <span>
+              Platform troubleshooting: inspecting <strong>{activePlatform.target_name ?? 'another user'}</strong> in{' '}
+              <strong>{activePlatform.org_name}</strong> — you are still signed in as yourself.
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+              Expires {new Date(activePlatform.expires_at).toLocaleTimeString()}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

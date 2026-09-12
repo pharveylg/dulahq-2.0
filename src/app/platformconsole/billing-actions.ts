@@ -11,15 +11,29 @@ function friendlyError(error: { code?: string; message: string }) {
 export async function createPlatformInvoice(formData: FormData) {
   if (!(await isPlatformAdmin())) return { error: 'Platform admin only.' };
   const orgId = String(formData.get('orgId') || '');
-  const accountId = String(formData.get('billingAccountId') || '');
   const amount = Number(formData.get('amount'));
   const description = String(formData.get('description') || '').trim();
-  if (!orgId || !accountId || !description || !Number.isFinite(amount) || amount <= 0) {
-    return { error: 'Organization, billing account, description, and a positive amount are required.' };
+  if (!orgId || !description || !Number.isFinite(amount) || amount <= 0) {
+    return { error: 'Organization, description, and a positive amount are required.' };
   }
 
   const supabase = await createClient();
   const db = supabase as any;
+
+  // The form never collected a billing account id (it only disables orgs
+  // that lack one) -- every org has at most one platform-context account,
+  // enforced by billing_accounts_platform_org_uidx, so look it up here
+  // rather than threading an id the UI has no way to submit correctly.
+  const { data: account, error: accountError } = await db
+    .from('billing_accounts')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('context_type', 'platform')
+    .maybeSingle();
+  if (accountError) return { error: friendlyError(accountError) };
+  if (!account) return { error: 'This organization has no platform billing account yet.' };
+  const accountId = account.id as string;
+
   const { data, error } = await db.rpc('create_billing_invoice', {
     p_org_id: orgId,
     p_billing_account_id: accountId,

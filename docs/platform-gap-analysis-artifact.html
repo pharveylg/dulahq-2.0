@@ -1,0 +1,299 @@
+<title>Platform Gap Audit</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --surface-2:#f6f8f9; --border:#dde3e7; --border-strong:#c7d0d5;
+  --ink:#14202b; --ink-soft:#3c4a56; --muted:#66757f;
+  --accent:#1d6f79; --accent-soft:#e3f1f2; --accent-strong:#0f4a52;
+  --danger:#b3311f; --danger-soft:#fbe9e6; --danger-border:#f0c6bd;
+  --warn:#8a5e10; --warn-soft:#fbf1de; --warn-border:#eeddb2;
+  --info:#4a5a68; --info-soft:#eef1f3; --info-border:#d7dee2;
+  --shadow: 0 1px 2px rgba(20,32,43,0.04), 0 8px 24px -12px rgba(20,32,43,0.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1316; --surface:#161d21; --surface-2:#1a2226; --border:#2a343a; --border-strong:#374349;
+    --ink:#e8edf0; --ink-soft:#c3ccd1; --muted:#8a99a1;
+    --accent:#5cc2cd; --accent-soft:rgba(92,194,205,0.12); --accent-strong:#8fdae2;
+    --danger:#e2685a; --danger-soft:rgba(226,104,90,0.14); --danger-border:rgba(226,104,90,0.35);
+    --warn:#dfae55; --warn-soft:rgba(223,174,85,0.14); --warn-border:rgba(223,174,85,0.35);
+    --info:#9aa7ae; --info-soft:rgba(154,167,174,0.10); --info-border:rgba(154,167,174,0.28);
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1316; --surface:#161d21; --surface-2:#1a2226; --border:#2a343a; --border-strong:#374349;
+  --ink:#e8edf0; --ink-soft:#c3ccd1; --muted:#8a99a1;
+  --accent:#5cc2cd; --accent-soft:rgba(92,194,205,0.12); --accent-strong:#8fdae2;
+  --danger:#e2685a; --danger-soft:rgba(226,104,90,0.14); --danger-border:rgba(226,104,90,0.35);
+  --warn:#dfae55; --warn-soft:rgba(223,174,85,0.14); --warn-border:rgba(223,174,85,0.35);
+  --info:#9aa7ae; --info-soft:rgba(154,167,174,0.10); --info-border:rgba(154,167,174,0.28);
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+*{box-sizing:border-box;}
+body{background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans',system-ui,sans-serif; line-height:1.55;}
+code, .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+
+.wrap{max-width:920px; margin:0 auto; padding:40px 24px 80px;}
+
+/* header */
+.report-head{display:flex; flex-direction:column; gap:14px; padding-bottom:28px; border-bottom:1px solid var(--border); margin-bottom:28px;}
+.eyebrow{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.06em; color:var(--muted); text-transform:uppercase;}
+h1.title{font-size:32px; font-weight:700; margin:0; letter-spacing:-0.01em; text-wrap:balance;}
+.dek{font-size:15.5px; color:var(--ink-soft); max-width:66ch; margin:0;}
+.meta-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;}
+.meta-chip{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:4px 9px;}
+
+/* stat strip */
+.stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:20px;}
+.stat-tile{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; box-shadow:var(--shadow);}
+.stat-num{font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600; font-variant-numeric:tabular-nums;}
+.stat-label{font-size:11.5px; color:var(--muted); margin-top:2px; letter-spacing:0.02em;}
+.stat-tile.sev-p0 .stat-num{color:var(--danger);}
+.stat-tile.sev-p1 .stat-num{color:var(--warn);}
+.stat-tile.sev-p2 .stat-num{color:var(--info);}
+.stat-tile.sev-total .stat-num{color:var(--accent);}
+
+/* nav */
+.toc{display:flex; gap:6px; flex-wrap:wrap; margin:24px 0 8px;}
+.toc a{font-size:12.5px; text-decoration:none; color:var(--ink-soft); background:var(--surface); border:1px solid var(--border); padding:6px 11px; border-radius:20px; transition:border-color .15s;}
+.toc a:hover{border-color:var(--accent);}
+
+/* section */
+section.area{margin-top:44px;}
+.area-head{display:flex; align-items:baseline; gap:10px; margin-bottom:4px;}
+.area-num{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--accent); font-weight:600;}
+h2{font-size:22px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+.area-sub{font-size:13.5px; color:var(--muted); margin:4px 0 20px;}
+
+.finding{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px; box-shadow:var(--shadow);}
+.finding.sev-p0{border-left:4px solid var(--danger);}
+.finding.sev-p1{border-left:4px solid var(--warn);}
+.finding.sev-note{border-left:4px solid var(--border-strong);}
+.finding h3{font-size:15.5px; margin:0 0 8px; font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.finding p{font-size:14px; color:var(--ink-soft); margin:8px 0;}
+.finding p:first-of-type{margin-top:0;}
+.finding p:last-child{margin-bottom:0;}
+.cite{font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:var(--accent-strong); white-space:nowrap;}
+.badge{font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:600; letter-spacing:0.03em; padding:2px 7px; border-radius:5px; text-transform:uppercase;}
+.badge.p0{background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger-border);}
+.badge.p1{background:var(--warn-soft); color:var(--warn); border:1px solid var(--warn-border);}
+.badge.p2{background:var(--info-soft); color:var(--info); border:1px solid var(--info-border);}
+.badge.fixed{background:var(--accent-soft); color:var(--accent-strong); border:1px solid var(--accent);}
+
+blockquote{margin:10px 0; padding:8px 14px; border-left:3px solid var(--accent); background:var(--accent-soft); font-size:13.5px; color:var(--ink-soft); border-radius:0 6px 6px 0;}
+ul.tight{margin:8px 0; padding-left:20px;}
+ul.tight li{font-size:14px; color:var(--ink-soft); margin:4px 0;}
+
+/* priority tables */
+.priority-block{margin-top:40px;}
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); margin-bottom:22px;}
+table{border-collapse:collapse; width:100%; background:var(--surface); font-size:13.5px;}
+thead th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); font-weight:600; padding:10px 14px; background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap;}
+tbody td{padding:11px 14px; border-bottom:1px solid var(--border); color:var(--ink-soft); vertical-align:top;}
+tbody tr:last-child td{border-bottom:none;}
+td.num{font-family:'IBM Plex Mono',monospace; color:var(--muted); font-size:12.5px;}
+td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
+
+.section-title{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+.section-title .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+.dot.p0{background:var(--danger);}
+.dot.p1{background:var(--warn);}
+.dot.p2{background:var(--info);}
+
+.footer-note{margin-top:48px; padding-top:20px; border-top:1px solid var(--border); font-size:12.5px; color:var(--muted); text-align:center;}
+</style>
+
+<div class="wrap">
+
+  <div class="report-head">
+    <span class="eyebrow">Dula HQ &middot; internal audit &middot; 2026-09-11</span>
+    <h1 class="title">Platform, Club &amp; Tournament gap analysis</h1>
+    <p class="dek">Checked against the live Supabase project and the current repo state, not against what any design document claims should be true. Feeds how Platform Admin manages tenants, runs support, and troubleshoots across every organization.</p>
+    <div class="meta-row">
+      <span class="meta-chip">repo: dulahq-2.0</span>
+      <span class="meta-chip">project: zytyakbgwaegvftblkcn</span>
+      <span class="meta-chip">baseline commit: 3ade9b6 / eb05901</span>
+    </div>
+    <div class="stat-strip">
+      <div class="stat-tile sev-p0"><div class="stat-num">5</div><div class="stat-label">P0 findings</div></div>
+      <div class="stat-tile sev-p1"><div class="stat-num">6</div><div class="stat-label">P1 findings</div></div>
+      <div class="stat-tile sev-p2"><div class="stat-num">3</div><div class="stat-label">P2 / defer</div></div>
+      <div class="stat-tile sev-total"><div class="stat-num">3</div><div class="stat-label">areas covered</div></div>
+    </div>
+    <div class="toc">
+      <a href="#sync">0 &middot; Sync notes</a>
+      <a href="#platform">1 &middot; Platform</a>
+      <a href="#clubs">2 &middot; Clubs</a>
+      <a href="#tournaments">3 &middot; Tournaments</a>
+      <a href="#cross">4 &middot; Cross-cutting</a>
+      <a href="#priority">5 &middot; Priority</a>
+    </div>
+  </div>
+
+  <section class="area" id="sync">
+    <div class="area-head"><span class="area-num">§0</span><h2>Sync notes</h2></div>
+    <p class="area-sub">What changed since the last session, and two decisions this analysis is blocked on.</p>
+
+    <div class="finding sev-p1">
+      <h3>Billing schema is code-complete but not applied <span class="badge p1">decision needed</span></h3>
+      <p><code class="cite">list_migrations</code> on the live project stops at <code class="cite">phase8d_tournament_entry_contacts</code> (2026-09-09). None of the 14 <code class="cite">20260910*_billing_*</code> migrations are live — matching <code class="cite">docs/implementation-handoff.md:3</code>'s own admission. Every billing screen (Platform Admin, Guardian, Club) is live application code pointed at tables that don't exist in production yet. This analysis treats billing throughout as <strong>built, not deployed</strong>.</p>
+    </div>
+
+    <div class="finding sev-p0">
+      <h3>CLAUDE.md §0l and 18 RLS tests were deleted with nothing added back <span class="badge p0">recoverable</span></h3>
+      <p><code class="cite">git diff f818ac8 3ade9b6 -- CLAUDE.md</code>: 212 lines removed, 0 added &mdash; the entire Tournament RBAC foundation section. Same diff against <code class="cite">tests/rls/club-manager-isolation.test.ts</code>: 212 lines removed, 0 added &mdash; both <code class="cite">tournament_staff</code> and <code class="cite">tournament_entry_contacts</code> test blocks, gone.</p>
+      <p>The underlying schema is untouched and still live (phase8a&ndash;phase8d all present) &mdash; this is a documentation and test-coverage loss, not a functional regression. But the Tournament RBAC layer this whole analysis leans on in §3 now has <strong>zero automated regression coverage</strong>. Fully recoverable: <code class="cite">git show f818ac8:CLAUDE.md</code>.</p>
+    </div>
+
+    <div class="finding sev-note">
+      <h3>A stray, garbled file sits at the repo root</h3>
+      <p>A tracked file whose visible name ends <code class="cite">manual billing foundation"</code> (a broken private-use Unicode byte sequence) contains a <code class="cite">git diff --stat</code> output, not source &mdash; an artifact of a broken command during the commit. Harmless; recommend <code class="cite">git rm</code> once confirmed unneeded.</p>
+    </div>
+  </section>
+
+  <section class="area" id="platform">
+    <div class="area-head"><span class="area-num">§1</span><h2>Platform</h2></div>
+    <p class="area-sub">Tenant lifecycle, cross-org troubleshooting, support, billing, audit.</p>
+
+    <div class="finding sev-p0">
+      <h3>1.1 &middot; "Suspend" does nothing <span class="badge p0">P0</span></h3>
+      <p>Grepped every RLS policy and helper for <code class="cite">organizations.status</code>: zero matches. <code class="cite">Directory.tsx:71&ndash;73</code>'s Suspend button writes the column and nothing reads it &mdash; a suspended org's staff, guardians, and players retain every permission unchanged. This is the single highest-severity finding in this audit: the one control that looks like it enforces something and doesn't.</p>
+      <p>Entitlement lifecycle is also binary today, not the roadmap's phased <code class="cite">Trial &rarr; Active &rarr; Grace period &rarr; Restricted &rarr; Suspended</code> (<code class="cite">platform-implementation-roadmap.md:172-184</code>) &mdash; the Directory's checkboxes are a light switch, not a lifecycle.</p>
+    </div>
+
+    <div class="finding sev-p0">
+      <h3>1.2 &middot; No cross-org troubleshooting path exists for Platform Admin <span class="badge p0">headline gap</span></h3>
+      <p>Every "view as" mechanism in this codebase is club-scoped, callable only by that club's own <code class="cite">club_it_admin</code>: <code class="cite">start_impersonation()</code> takes a <code class="cite">p_club_id</code>; <code class="cite">effective_access_for()</code> requires a live session for that exact club triple. <code class="cite">tournament_it_admin</code> deliberately got its own separate, tournament-scoped audit function rather than a shared one (resolved by explicit ruling, <code class="cite">club-entitlement-gap-analysis.md</code> §13).</p>
+      <p><strong>Consequence:</strong> Platform Admin &mdash; the one role that should reach any org &mdash; has no diagnostic path into any of them beyond raw SQL with the service-role key. A Tournament-only org (no club, so no <code class="cite">club_it_admin</code> is even possible) is completely opaque to support today.</p>
+      <blockquote>Recommended shape: a third, platform-scoped tier of the same proven pattern &mdash; <code class="cite">start_platform_impersonation(org_id, target_user_id, reason)</code> keyed on <code class="cite">org_id</code> not <code class="cite">club_id</code>, resolving through both <code class="cite">has_staff_permission</code> and <code class="cite">has_tournament_permission</code>, same audit discipline (admin stays the actor, never the target), same visible banner.</blockquote>
+    </div>
+
+    <div class="finding sev-p1">
+      <h3>1.3 &middot; Support queue shows no entitlement context <span class="badge p1">P1</span></h3>
+      <p>The <code class="cite">support_requests</code>/<code class="cite">support_request_messages</code> system itself is solid and genuinely org_id-generic, exactly as promised when it was built &mdash; Tournament used it with zero schema changes. But <code class="cite">SupportQueue.tsx:48-51</code> never shows which product(s) the filing org holds; Platform Admin has to tab over to Directory to find out before triaging.</p>
+    </div>
+
+    <div class="finding sev-p0">
+      <h3>1.4 &middot; Billing: a form that can never submit, and RLS wide open by design <span class="badge p0">P0 &times; 2</span></h3>
+      <p><strong>Bug:</strong> <code class="cite">BillingConsole.tsx:82-99</code>'s "Create invoice" form has no <code class="cite">billingAccountId</code> field, hidden or otherwise &mdash; <code class="cite">createPlatformInvoice</code> requires it and every submission will fail. Can't be tested live yet (§0), but confirmed by reading both sides of the form/action contract.</p>
+      <p><strong>By-design-but-risky:</strong> <code class="cite">billing_invoices_read</code> and siblings grant any <code class="cite">is_org_member(org_id)</code> full read &mdash; the migration's own comment admits this is temporary ("Product-specific staff narrowing is added with the corresponding Club/Tournament billing UI and policies"). As written, any coach, guardian, or player can read every invoice belonging to their org, including other families'. Needs the same staff-permission narrowing every other sensitive table here has already gone through, before these migrations reach production.</p>
+    </div>
+
+    <div class="finding sev-note">
+      <h3>1.5 &middot; No platform-wide audit read surface</h3>
+      <p>Club and Tournament each got their own scoped audit RPC (<code class="cite">club_audit_log()</code>, <code class="cite">tournament_audit_log()</code>). Platform Admin has neither a cross-org view nor a documented direct-read path &mdash; needed once §1.2's backdoor exists, not before.</p>
+    </div>
+  </section>
+
+  <section class="area" id="clubs">
+    <div class="area-head"><span class="area-num">§2</span><h2>Clubs</h2></div>
+    <p class="area-sub">Mostly resolved by prior phases; two new findings surfaced while investigating billing.</p>
+
+    <div class="finding sev-note">
+      <h3>2.1 &middot; Already resolved &mdash; recap only</h3>
+      <p><code class="cite">docs/club-entitlement-gap-analysis.md</code> covers this product in full. P0 (items 1&ndash;6) and 5 of 7 P1 items are built and verified. P1-#13 (IT scoping) is explicitly resolved, not deferred. Nothing here reopens any of that.</p>
+    </div>
+
+    <div class="finding sev-p1">
+      <h3>2.2 &middot; Two unreconciled financial systems <span class="badge p1">P1</span></h3>
+      <p>Clubs now run <code class="cite">fee_charges</code>/<code class="cite">payments</code> (pre-existing) alongside the new <code class="cite">billing_invoices</code>/<code class="cite">billing_payment_submissions</code> domain, with no bridge. <code class="cite">Finances.tsx:74-114</code> renders them as two separate, unrelated lists &mdash; its own empty state admits it: <em>"No billing-domain invoices yet. Existing fee charges remain visible above."</em> No backfill, no shared <code class="cite">source_type</code>/<code class="cite">source_id</code> linkage, no product decision on which is authoritative. Every existing dashboard (<code class="cite">ActionCenter</code>, <code class="cite">Reports</code>) reads <code class="cite">fee_charges</code> only &mdash; revenue will visibly split across two places once billing goes live.</p>
+    </div>
+
+    <div class="finding sev-p1">
+      <h3>2.3 &middot; The club-wide Finances tab never got the permission-catalog treatment <span class="badge p1">P1</span></h3>
+      <p><code class="cite">canManageFinances = access.isClubManager || access.role === 'staff'</code> (<code class="cite">page.tsx:100</code>) is a role-literal check predating Phase 0's permission foundation &mdash; distinct from <code class="cite">PlayerProfile.tsx</code>'s correctly-migrated per-player flag. Concrete consequence: <strong><code class="cite">treasurer</code></strong>, the role created specifically as "Finance specialist," cannot open or manage the club's own Finances tab. The new <code class="cite">billingInvoices</code> query rides on this same broken flag, so fixing it now also fixes who sees billing correctly.</p>
+    </div>
+  </section>
+
+  <section class="area" id="tournaments">
+    <div class="area-head"><span class="area-num">§3</span><h2>Tournaments</h2></div>
+    <p class="area-sub">RBAC foundation is live; almost nothing built on top of it has a workspace yet.</p>
+
+    <div class="finding sev-note">
+      <h3>3.1 &middot; RBAC foundation live, temporarily undocumented and untested</h3>
+      <p>The full <code class="cite">tournament_staff</code> authorization layer is live and unaffected by this pass (phase8a&ndash;phase8d confirmed applied). Its documentation and tests were deleted (§0) &mdash; restore both before building further on top.</p>
+    </div>
+
+    <div class="finding sev-p1">
+      <h3>3.2 &middot; No organizer console anywhere in this repo <span class="badge p1">P1</span></h3>
+      <p>Grepped all 24 tournament-referencing routes: beyond the public list and the club-side team/roster pages, there is no page for an Organizer or Team Coordinator to do anything &mdash; <code class="cite">tournament_staff_directory()</code> and <code class="cite">decide_tournament_entry()</code> both exist in the database and are called by nothing in <code class="cite">src/</code>.</p>
+      <p><strong>Registration itself has no UI either</strong> &mdash; grepped every action file for an INSERT into <code class="cite">tournament_entries</code>: none. Every entry in the live database exists because it was inserted directly. <code class="cite">tournament_categories</code> (divisions, fees, capacity) has the same status: real table, zero owner-side UI.</p>
+    </div>
+
+    <div class="finding sev-note">
+      <h3>3.3 &middot; Competition data &mdash; correctly schema-only where it belongs to the proxied engine</h3>
+      <p><code class="cite">venues</code>/<code class="cite">matches</code>/<code class="cite">match_events</code>/<code class="cite">player_tournament_results</code> belong to the frozen, proxied Tournament Manager app by explicit standing rule &mdash; their absence of UI here is by design. <code class="cite">tournament_categories</code> is different: it's the host org's own configuration, not the proxied engine's runtime data, and belongs with §3.2's organizer console.</p>
+    </div>
+
+    <div class="finding sev-p0">
+      <h3>3.4 &middot; Tournament billing proposes a second, unreconciled permission vocabulary <span class="badge p0">P0</span></h3>
+      <p><code class="cite">tournament-billing-integration.md:178-187</code> proposes six new permission keys (<code class="cite">manage_entry_invoices</code>, <code class="cite">verify_tournament_payment</code>, etc.) &mdash; none exist in the live catalog. The catalog already has <code class="cite">manage_tournament_finances</code>/<code class="cite">view_tournament_finances</code>, already granted to <code class="cite">organizer</code> and <code class="cite">treasurer</code>. The new document neither reuses nor references them.</p>
+      <p>This is precisely the risk the platform roadmap warns against in its own words: <em>"Tournament work can accidentally create a second permission model"</em> (<code class="cite">platform-implementation-roadmap.md:963</code>). Reconcile before building any tournament finance screen.</p>
+    </div>
+
+    <div class="finding sev-note">
+      <h3>3.5 &middot; Officiating &mdash; confirmed unchanged, schema and RLS only</h3>
+      <p>No UI in this repo, consistent with §3.1's own scope statement. No new findings; restoring the deleted test is the only action item.</p>
+    </div>
+  </section>
+
+  <section class="area" id="cross">
+    <div class="area-head"><span class="area-num">§4</span><h2>Cross-cutting risks</h2></div>
+    <ul class="tight">
+      <li>The same "role string reused across two tables" pattern that caused the <code class="cite">has_tournament_permission</code> scope-leak bug now exists in miniature in <code class="cite">billing_invoices.payer_type</code> &mdash; one flat CHECK spanning club and tournament payer types with no context-aware gating yet.</li>
+      <li>Club's and Tournament's RBAC were each proven with a real RLS suite before being trusted. The billing series has one unit-test file for invoice math and <strong>no RLS test at all</strong> &mdash; nothing proves the broad read policy in §1.4 is deliberately temporary rather than quietly permanent.</li>
+      <li><code class="cite">organizations.status</code> (§1.1) and <code class="cite">billing_accounts.status</code> are two independent, currently-inert suspend switches. Wiring them up separately later risks an org that's billing-suspended-but-access-active, or the reverse, silently.</li>
+    </ul>
+  </section>
+
+  <section class="area priority-block" id="priority">
+    <div class="area-head"><span class="area-num">§5</span><h2>Priority</h2></div>
+
+    <div class="section-title"><span class="dot p0"></span>P0 &mdash; before this phase is considered shipped</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Area</th><th>Problem</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td class="area">Platform</td><td>Suspending an org is read by nothing</td><td>Wire <code class="cite">organizations.status</code> into <code class="cite">is_org_member</code>/<code class="cite">org_has_product</code></td></tr>
+          <tr><td class="num">2</td><td class="area">Platform</td><td>No cross-org troubleshooting path for Platform Admin</td><td>Build <code class="cite">start_platform_impersonation</code> / <code class="cite">effective_access_for_platform</code>, org-scoped</td></tr>
+          <tr><td class="num">3</td><td class="area">Sync</td><td>CLAUDE.md §0l + 18 RLS tests deleted</td><td>Restore both from commit <code class="cite">f818ac8</code></td></tr>
+          <tr><td class="num">4</td><td class="area">Platform</td><td>Billing read policy exposes every org member's invoices to each other</td><td>Narrow with <code class="cite">has_staff_permission</code>/<code class="cite">has_tournament_permission</code> before production</td></tr>
+          <tr><td class="num">5</td><td class="area">Platform</td><td>"Create invoice" form can never submit</td><td>Look up account id server-side, or add the missing field</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title"><span class="dot p1"></span>P1 &mdash; real gaps, no urgent forcing function yet</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Area</th><th>Problem</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td class="num">6</td><td class="area">Platform</td><td>Entitlement lifecycle is binary, not phased</td><td>Add at minimum a trial/grace-period distinction the Directory can act on</td></tr>
+          <tr><td class="num">7</td><td class="area">Platform</td><td>Support queue shows no entitlement context</td><td>Join <code class="cite">org_entitlements</code> into the support query</td></tr>
+          <tr><td class="num">8</td><td class="area">Clubs</td><td>Two unreconciled financial ledgers</td><td>Decide which is authoritative; bridge or backfill</td></tr>
+          <tr><td class="num">9</td><td class="area">Clubs</td><td><code class="cite">treasurer</code> can't manage the club's own Finances tab</td><td>Cut <code class="cite">canManageFinances</code> over to <code class="cite">has_staff_permission</code></td></tr>
+          <tr><td class="num">10</td><td class="area">Tournament</td><td>No organizer console; registration has zero UI</td><td>Build the minimum organizer workspace</td></tr>
+          <tr><td class="num">11</td><td class="area">Tournament</td><td>Billing proposes a second permission vocabulary</td><td>Reconcile against the 2 already-live keys first</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title"><span class="dot p2"></span>P2 &middot; Defer</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Area</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td class="num">12</td><td class="area">Sync</td><td>Stray garbled file at repo root &mdash; delete once confirmed unneeded</td></tr>
+          <tr><td class="num">13</td><td class="area">Platform</td><td>Platform-wide audit read surface &mdash; needed once §1.2 exists, not before</td></tr>
+          <tr><td class="num">14</td><td class="area">Tournament</td><td>Venues/matches/results UI &mdash; correctly belongs to the proxied engine</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer-note">Full findings with inline file citations: <code class="cite">docs/platform-club-tournament-gap-analysis.md</code></div>
+
+</div>
