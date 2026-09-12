@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import './globals.css';
-import { getCurrentDulaUser, claimPendingGuardianInvite, claimPendingTournamentEntryInvites } from '@/lib/supabase/server';
+import { getCurrentDulaUser, claimPendingGuardianInvite } from '@/lib/supabase/server';
 import { createClient } from '@/lib/supabase/server';
 import NavActions from './NavActions';
 import RegisterServiceWorker from './RegisterServiceWorker';
@@ -30,12 +30,11 @@ export default async function RootLayout({
   const { data: { user: authUser } } = await supabase.auth.getUser();
   let dulaUser = authUser ? await getCurrentDulaUser() : null;
 
-  // Opportunistic guardian/tournament-contact claim -- only worth checking
+  // Opportunistic guardian claim (RBAC Phase 3) -- only worth checking
   // when there's no public.users row yet, since a successful claim
   // creates one; every later request short-circuits here for free.
   if (authUser && !dulaUser) {
     await claimPendingGuardianInvite();
-    await claimPendingTournamentEntryInvites();
     dulaUser = await getCurrentDulaUser();
   }
 

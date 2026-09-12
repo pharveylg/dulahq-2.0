@@ -1,0 +1,27 @@
+warning: in the working copy of '.claude/launch.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/club-entitlement-gap-analysis.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/sw.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/c/[clubSlug]/Finances.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/c/[clubSlug]/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/guardian/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/layout.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/platformconsole/actions.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/platformconsole/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/player/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/supabase/database.types.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/supabase/server.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/rls/club-manager-isolation.test.ts', LF will be replaced by CRLF the next time Git touches it
+ CLAUDE.md                                | 212 [31m--------------------------[m
+ docs/club-entitlement-gap-analysis.md    |  52 [32m+++[m[31m----[m
+ src/app/c/[clubSlug]/Finances.tsx        |  17 [32m+++[m
+ src/app/c/[clubSlug]/page.tsx            |  31 [32m+++[m[31m-[m
+ src/app/guardian/page.tsx                |  32 [32m++++[m
+ src/app/layout.tsx                       |   5 [32m+[m[31m-[m
+ src/app/platformconsole/actions.ts       |  18 [32m+++[m
+ src/app/platformconsole/page.tsx         |  31 [32m+++[m[31m-[m
+ src/lib/supabase/database.types.ts       | 251 [32m++++++++++[m[31m---------------------[m
+ src/lib/supabase/server.ts               |  65 [32m++[m[31m------[m
+ tests/rls/club-manager-isolation.test.ts | 212 [31m--------------------------[m
+ 11 files changed, 241 insertions(+), 685 deletions(-)

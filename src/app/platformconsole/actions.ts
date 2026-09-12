@@ -75,6 +75,20 @@ export async function provisionTenant(formData: FormData) {
     return { error: `Tenant created, but granting product access failed: ${friendlyError(entitlementError)}. Set it from the directory.` };
   }
 
+  // Every provisioned org gets a platform billing context immediately. The
+  // account stores QR/instruction configuration later; it does not charge or
+  // contact a payment provider in the validation phase.
+  const { error: billingAccountError } = await (supabase as any).rpc('ensure_platform_billing_account', { p_org_id: org.id });
+  if (billingAccountError) {
+    return { error: `Tenant created, but its billing context failed: ${friendlyError(billingAccountError)}. Apply the billing migrations before provisioning new tenants.` };
+  }
+  for (const product of products) {
+    const { error: subscriptionError } = await (supabase as any).rpc('ensure_default_billing_subscription', { p_org_id: org.id, p_product: product });
+    if (subscriptionError) {
+      return { error: `Tenant created, but its ${product} subscription failed: ${friendlyError(subscriptionError)}. Apply the billing migrations before provisioning new tenants.` };
+    }
+  }
+
   const { error: memberError } = await supabase.from('org_members').insert({ org_id: org.id, email: adminEmail, role: 'admin' });
   if (memberError) return { error: `Tenant created, but adding the admin failed: ${friendlyError(memberError)}. Add them from the directory.` };
 
@@ -112,6 +126,10 @@ export async function updateOrgEntitlements(orgId: string, formData: FormData) {
         { onConflict: 'org_id,product' }
       );
     if (error) return { error: friendlyError(error) };
+    for (const product of products) {
+      const { error: subscriptionError } = await (supabase as any).rpc('ensure_default_billing_subscription', { p_org_id: orgId, p_product: product });
+      if (subscriptionError) return { error: friendlyError(subscriptionError) };
+    }
   }
 
   let deleteQuery = supabase.from('org_entitlements').delete().eq('org_id', orgId);

@@ -8,6 +8,7 @@ import { formatMoney, currencySymbol } from '@/lib/currency';
 
 type FeeCharge = { id: string; playerName: string; feeType: string; amount: number; currency: string; status: string; dueDate: string | null };
 type Expense = { id: string; description: string; category: string; amount: number; currency: string; expenseDate: string };
+type BillingInvoice = { id: string; invoiceNumber: string; payerLabel: string; total: number; amountPaid: number; status: string; dueAt: string | null };
 
 type ActionState = { error?: string };
 const initialState: ActionState = {};
@@ -27,11 +28,13 @@ export default function Finances({
   clubId,
   feeCharges,
   expenses,
+  billingInvoices,
   canManage,
 }: {
   clubId: string;
   feeCharges: FeeCharge[];
   expenses: Expense[];
+  billingInvoices: BillingInvoice[];
   canManage: boolean;
 }) {
   const [expenseState, expenseAction, expensePending] = useActionState<ActionState, FormData>(
@@ -92,6 +95,20 @@ export default function Finances({
             >
               {f.status}
             </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="section-label">Billing invoices ({billingInvoices.length})</div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        {billingInvoices.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No billing-domain invoices yet. Existing fee charges remain visible above.</p>}
+        {billingInvoices.map((invoice) => (
+          <div key={invoice.id} className="list-row">
+            <div className="list-row-main">
+              <div className="list-row-title">{invoice.invoiceNumber} · {invoice.payerLabel}</div>
+              <div className="list-row-meta">{formatMoney(invoice.amountPaid, 'PHP')} paid of {formatMoney(invoice.total, 'PHP')}{invoice.dueAt ? ` · due ${new Date(invoice.dueAt).toLocaleDateString()}` : ''}</div>
+            </div>
+            <span className="chip">{invoice.status.replaceAll('_', ' ')}</span>
           </div>
         ))}
       </div>

@@ -292,23 +292,6 @@ export async function getMyOrgProductAccess(): Promise<OrgProductAccess> {
  * this project's Auth redirect URL was set up for the original DulaHQ
  * app, not this one, and changing it would affect both.
  */
-async function ensureDulaUserRow(supabase: Awaited<ReturnType<typeof createClient>>, authUser: { id: string; email: string }) {
-  const { data: existing } = await supabase.from('users').select('id').eq('id', authUser.id).maybeSingle();
-  if (existing) return existing;
-
-  // Shouldn't normally happen -- the phase1 trigger creates this row on
-  // signup -- but if it somehow hasn't run yet, public.users.id defaults
-  // to gen_random_uuid(), NOT auth.uid(). Passing id explicitly here
-  // avoids silently creating a profile row that current_dula_user_id()
-  // (and every id-based RLS check) would never match.
-  const { data: created } = await supabase
-    .from('users')
-    .insert({ id: authUser.id, email: authUser.email, name: authUser.email.split('@')[0], role: 'audience' })
-    .select('id')
-    .single();
-  return created;
-}
-
 export async function claimPendingGuardianInvite() {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -328,41 +311,21 @@ export async function claimPendingGuardianInvite() {
     .maybeSingle();
   if (!invite) return;
 
-  const dulaUser = await ensureDulaUserRow(supabase, authUser as { id: string; email: string });
+  let { data: dulaUser } = await supabase.from('users').select('id').eq('id', authUser.id).maybeSingle();
+  if (!dulaUser) {
+    // Shouldn't normally happen -- the phase1 trigger creates this row on
+    // signup -- but if it somehow hasn't run yet, public.users.id defaults
+    // to gen_random_uuid(), NOT auth.uid(). Passing id explicitly here
+    // avoids silently creating a profile row that current_dula_user_id()
+    // (and every id-based RLS check) would never match.
+    const { data: created } = await supabase
+      .from('users')
+      .insert({ id: authUser.id, email: authUser.email, name: authUser.email.split('@')[0], role: 'audience' })
+      .select('id')
+      .single();
+    dulaUser = created;
+  }
   if (!dulaUser) return;
 
   await supabase.from('guardians').update({ user_id: dulaUser.id, account_status: 'active' }).eq('id', invite.id);
-}
-
-/**
- * Tournament RBAC (2026-09-09, "tournament.md" proposal review, decision 3):
- * an external team's registration form lists who should get access once the
- * entry is approved (decide_tournament_entry flips their contact row to
- * 'invited'). Same self-claim-by-email shape as claimPendingGuardianInvite,
- * with two differences: tournament_entry_contacts' own RLS matches on email
- * with NO org-relationship prerequisite (a cold external contact has none --
- * see the migration's own note on why guardians_read's actual policy
- * wouldn't have worked for this), and a person can have MORE than one
- * pending invite (an external org submitting two teams to the same
- * tournament, say) -- so this claims every matching row in one pass, not
- * just the first.
- */
-export async function claimPendingTournamentEntryInvites() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser?.email) return;
-
-  const { data: invites } = await supabase
-    .from('tournament_entry_contacts')
-    .select('id')
-    .eq('account_status', 'invited');
-  if (!invites || invites.length === 0) return;
-
-  const dulaUser = await ensureDulaUserRow(supabase, authUser as { id: string; email: string });
-  if (!dulaUser) return;
-
-  await supabase
-    .from('tournament_entry_contacts')
-    .update({ user_id: dulaUser.id, account_status: 'active' })
-    .in('id', invites.map((i) => i.id));
 }

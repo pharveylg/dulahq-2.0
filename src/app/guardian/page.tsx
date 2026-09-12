@@ -4,6 +4,7 @@ import SlotTabs from '@/components/motion/SlotTabs';
 import PlayerProfile from '@/components/player-profile/PlayerProfile';
 import NotificationSubscribe from '@/components/NotificationSubscribe';
 import GuardianTournaments from './GuardianTournaments';
+import ManualPaymentForm from '@/components/billing/ManualPaymentForm';
 
 export default async function GuardianHomePage() {
   const supabase = await createClient();
@@ -39,6 +40,23 @@ export default async function GuardianHomePage() {
     .eq('guardian_id', guardian.id);
 
   const children = (links ?? []).map((l: any) => l.players).filter(Boolean);
+  const billingDb = supabase as any;
+  const { data: familyInvoices } = await billingDb
+    .from('billing_invoices')
+    .select('id, invoice_number, total, amount_paid, currency, status, due_at, billing_accounts(payment_instructions)')
+    .eq('payer_user_id', dulaUser.id)
+    .in('status', ['issued', 'awaiting_payment', 'submitted_for_verification', 'partially_paid', 'overdue'])
+    .order('created_at', { ascending: false });
+  const guardianInvoices = (familyInvoices ?? []).map((i: any) => ({
+    id: i.id,
+    invoiceNumber: i.invoice_number,
+    total: Number(i.total),
+    amountPaid: Number(i.amount_paid),
+    currency: i.currency,
+    status: i.status,
+    dueAt: i.due_at,
+    instructions: i.billing_accounts?.payment_instructions ?? null,
+  }));
   const teamIds = [...new Set(children.map((c: any) => c.team_id).filter(Boolean))];
   const clubIds = [...new Set(children.map((c: any) => c.teams?.club_id).filter(Boolean))];
 
@@ -127,6 +145,7 @@ export default async function GuardianHomePage() {
             tabs={[
               ...children.map((c: any) => ({ id: c.id, label: c.name })),
               { id: 'tournaments', label: 'Tournaments', badge: acknowledgements.filter((a) => a.status === 'awaiting').length },
+              { id: 'billing', label: 'Billing', badge: guardianInvoices.filter((i: any) => i.status !== 'paid').length },
               { id: 'announcements', label: 'Announcements', badge: announcements.length },
             ]}
             slots={{
@@ -137,6 +156,19 @@ export default async function GuardianHomePage() {
                 ])
               ),
               tournaments: <GuardianTournaments acknowledgements={acknowledgements} />,
+              billing: (
+                <div style={{ display: 'grid', gap: 16 }}>
+                  {guardianInvoices.length === 0 && <div className="card empty-state"><p>No billing-domain invoices are awaiting payment.</p></div>}
+                  {guardianInvoices.map((invoice: any) => (
+                    <div key={invoice.id}>
+                      <div className="card" style={{ marginBottom: 10 }}>
+                        <div className="list-row" style={{ padding: 0 }}><div className="list-row-main"><div className="list-row-title">{invoice.invoiceNumber}</div><div className="list-row-meta">{invoice.status.replaceAll('_', ' ')} · {invoice.amountPaid.toFixed(2)} paid of {invoice.total.toFixed(2)} {invoice.currency}</div></div></div>
+                      </div>
+                      <ManualPaymentForm invoiceId={invoice.id} amountDue={Math.max(invoice.total - invoice.amountPaid, 0)} currency={invoice.currency} instructions={invoice.instructions} />
+                    </div>
+                  ))}
+                </div>
+              ),
               announcements: (
                 <div className="card">
                   {announcements.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nothing posted yet.</p>}

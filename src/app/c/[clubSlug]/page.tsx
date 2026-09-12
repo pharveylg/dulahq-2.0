@@ -444,7 +444,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   // Finances + Reports (club_admin/staff only -- club-wide financial
   // detail isn't meaningful scoped to a single assigned team).
-  let financesData: { feeCharges: any[]; expenses: any[] } | null = null;
+  let financesData: { feeCharges: any[]; expenses: any[]; billingInvoices: any[] } | null = null;
   let reportsData: { teams: any[]; financials: { collected: number; outstanding: number; expenses: number; currency: string } } | null = null;
 
   if (canManageFinances) {
@@ -479,7 +479,32 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
       expenseDate: e.expense_date,
     }));
 
-    financesData = { feeCharges, expenses };
+    const billingDb = supabase as any;
+    const { data: billingAccount } = await billingDb
+      .from('billing_accounts')
+      .select('id, payment_instructions, qr_storage_key')
+      .eq('context_type', 'club')
+      .eq('club_id', clubId)
+      .maybeSingle();
+    const { data: invoiceRows } = billingAccount
+      ? await billingDb
+          .from('billing_invoices')
+          .select('id, invoice_number, payer_type, payer_label, total, amount_paid, status, due_at, created_at')
+          .eq('billing_account_id', billingAccount.id)
+          .order('created_at', { ascending: false })
+          .limit(100)
+      : { data: [] };
+    const billingInvoices = (invoiceRows ?? []).map((i: any) => ({
+      id: i.id,
+      invoiceNumber: i.invoice_number,
+      payerLabel: i.payer_label ?? i.payer_type,
+      total: Number(i.total),
+      amountPaid: Number(i.amount_paid),
+      status: i.status,
+      dueAt: i.due_at,
+    }));
+
+    financesData = { feeCharges, expenses, billingInvoices };
 
     const collected = feeCharges.filter((f) => f.status === 'paid').reduce((sum, f) => sum + f.amount, 0);
     const outstanding = feeCharges.filter((f) => f.status !== 'paid').reduce((sum, f) => sum + f.amount, 0);
@@ -723,7 +748,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             </>
           }
           financesSlot={financesData && (
-            <Finances clubId={club.id} feeCharges={financesData.feeCharges} expenses={financesData.expenses} canManage={canManageFinances} />
+            <Finances clubId={club.id} feeCharges={financesData.feeCharges} expenses={financesData.expenses} billingInvoices={financesData.billingInvoices} canManage={canManageFinances} />
           )}
           reportsSlot={reportsData && (
             <Reports

@@ -4,6 +4,7 @@ import { createClient, isPlatformAdmin } from '@/lib/supabase/server';
 import Directory from './Directory';
 import ProvisionForm from './ProvisionForm';
 import SupportQueue from './SupportQueue';
+import BillingConsole from './BillingConsole';
 
 export default async function PlatformConsolePage({
   searchParams,
@@ -28,7 +29,7 @@ export default async function PlatformConsolePage({
   }
 
   const { tab } = await searchParams;
-  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : 'directory';
+  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : 'directory';
 
   const { count: openSupportCount } = await supabase
     .from('support_requests')
@@ -99,6 +100,30 @@ export default async function PlatformConsolePage({
     }));
   }
 
+  let billingInvoices: any[] = [];
+  let billingPayments: any[] = [];
+  let billingOrgs: any[] = [];
+  let billingAccounts: any[] = [];
+  let billingUsageEvents: any[] = [];
+  let billingSubscriptions: any[] = [];
+  if (activeTab === 'billing') {
+    const db = supabase as any;
+    const [{ data: invoiceRows }, { data: paymentRows }, { data: billingAccountRows }, { data: usageRows }, { data: subscriptionRows }] = await Promise.all([
+      db.from('billing_invoices').select('id, invoice_number, org_id, total, amount_paid, status, due_at, created_at, organizations(name)').eq('context_type', 'platform').order('created_at', { ascending: false }).limit(100),
+      db.from('billing_payment_submissions').select('id, invoice_id, amount, method, reference_number, status, submitted_at, billing_invoices(invoice_number, organizations(name))').order('submitted_at', { ascending: false }).limit(100),
+      db.from('billing_accounts').select('id, org_id, context_type, payment_instructions, qr_storage_key').eq('context_type', 'platform'),
+      db.from('billing_usage_events').select('id, org_id, meter_key, quantity, context_type, source_type, occurred_at, organizations(name)').order('occurred_at', { ascending: false }).limit(100),
+      db.from('billing_subscriptions').select('id, org_id, product, status, starts_at, renews_at, billing_plans(name), organizations(name)').order('created_at', { ascending: false }).limit(200),
+    ]);
+    const accountByOrg = new Map((billingAccountRows ?? []).map((row: any) => [row.org_id, row.id]));
+    billingOrgs = (orgRows ?? []).map((org: any) => ({ id: org.id, name: org.name, billingAccountId: accountByOrg.get(org.id) ?? null }));
+    billingAccounts = (billingAccountRows ?? []).map((row: any) => ({ id: row.id, orgName: (orgRows ?? []).find((org: any) => org.id === row.org_id)?.name ?? 'Unknown organization', instructions: row.payment_instructions, qrStorageKey: row.qr_storage_key }));
+    billingInvoices = (invoiceRows ?? []).map((row: any) => ({ id: row.id, invoiceNumber: row.invoice_number, orgName: row.organizations?.name ?? 'Unknown organization', total: row.total, amountPaid: row.amount_paid, status: row.status, dueAt: row.due_at, createdAt: row.created_at }));
+    billingPayments = (paymentRows ?? []).map((row: any) => ({ id: row.id, invoiceNumber: row.billing_invoices?.invoice_number ?? 'Unknown invoice', orgName: row.billing_invoices?.organizations?.name ?? 'Unknown organization', amount: row.amount, method: row.method, reference: row.reference_number, status: row.status, submittedAt: row.submitted_at }));
+    billingUsageEvents = (usageRows ?? []).map((row: any) => ({ id: String(row.id), orgName: row.organizations?.name ?? 'Unknown organization', meterKey: row.meter_key, quantity: Number(row.quantity), contextType: row.context_type, occurredAt: row.occurred_at, sourceType: row.source_type }));
+    billingSubscriptions = (subscriptionRows ?? []).map((row: any) => ({ id: row.id, orgName: row.organizations?.name ?? 'Unknown organization', product: row.product, planName: row.billing_plans?.name ?? 'Unknown plan', status: row.status, startsAt: row.starts_at, renewsAt: row.renews_at }));
+  }
+
   return (
     <main className="page">
       <div className="container">
@@ -121,11 +146,15 @@ export default async function PlatformConsolePage({
           <Link href="/platformconsole?tab=support" className={activeTab === 'support' ? 'btn btn-primary' : 'btn'}>
             Support{openSupportCount ? ` (${openSupportCount})` : ''}
           </Link>
+          <Link href="/platformconsole?tab=billing" className={activeTab === 'billing' ? 'btn btn-primary' : 'btn'}>
+            Billing
+          </Link>
         </div>
 
         {activeTab === 'directory' && <Directory orgs={orgs} />}
         {activeTab === 'provision' && <ProvisionForm />}
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
+        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} />}
       </div>
     </main>
   );
