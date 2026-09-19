@@ -1903,8 +1903,9 @@ for all app code, `npm run build` clean, unit tests 20/20.
   billing section is hidden until a club invoice exists (renamed "QR payment
   invoices" when it does), so a club never sees two ledgers side by side. No
   backfill and no bridge; revisit only if a club actually wants QR payments.
-- **Tournament organizer console + registration UI (P1-10)** — proposal written,
-  awaiting review: `docs/tournament-organizer-console-proposal.md`. Notably it
+- **Tournament organizer console + registration UI (P1-10)** — proposed, then
+  **built; see §0o**. The proposal (`docs/tournament-organizer-console-proposal.md`)
+  is what surfaced this, and the point stands: it
   found that an Organizer who isn't an org admin **cannot read**
   `tournament_entries` or `tournament_categories` (their reads use
   `is_org_member`, which has no tournament-staff branch), so the console needs
@@ -1921,6 +1922,100 @@ for all app code, `npm run build` clean, unit tests 20/20.
   turns it back on).
 - The 14 out-of-band billing migrations are still absent from
   `schema_migrations` (the environment declined the direct write).
+
+---
+
+## 0o. Tournament organizer console (2026-09-19)
+
+`/tm/[orgSlug]/[tournamentSlug]` — the first native Tournament workspace, built
+from `docs/tournament-organizer-console-proposal.md` after the user confirmed
+its four open decisions: **host-entered registration first** (no self-service),
+**`entry_fee`/`capacity` added to categories**, **no Team Coordinator "flag" in
+v1**, and the route as named. Closes gap analysis P1-10. Reached from a
+"Tournaments you manage" section on `/tournaments` (`my_manageable_tournaments()`).
+The bracket/scores engine is untouched and still proxied at `/t/...`, linked
+from the header.
+
+Three tabs, each permission-gated by the catalog and never by role name (an org
+admin is treated as holding everything, mirroring every RLS policy's
+`is_org_admin` path):
+
+- **Entries** — filter by status, accept/decline through `decide_tournament_entry`
+  (never a direct UPDATE, so it stays audited and still auto-invites the team
+  manager contact), and a host-entered "Add entry" form (team, category,
+  optional contact, optional registration-fee invoice). Entries are always
+  created `pending`; a full category can't be picked.
+- **Categories** — create/edit/delete with entry fee and capacity; deleting one
+  that entries use is refused.
+- **Staff** — directory, add by email, suspend/reactivate, remove (archives;
+  shown under "Former staff", re-adding restores the same row), and the audit
+  trail. `add_tournament_staff()` does the email lookup inside a definer
+  function that authorizes first: an Organizer isn't an org member and can't
+  read other users, and a general "find user by email" surface is the wrong fix.
+
+### The finding that made this more than pages (phase10a)
+
+An Organizer who wasn't also an org admin **could not read** the entries and
+categories they were meant to decide — those tables read through
+`is_org_member`, which has no tournament-staff branch. Fixed with targeted
+policies keyed on `is_tournament_staff` (reads) and the permission catalog
+(writes), **not** by widening `is_org_member`, which underpins ~60 policies and
+would have handed tournament staff club and player data. Note
+`can_read_tournament` is organizer-or-org-admin only, so it couldn't be reused
+for reads: a `team_coordinator` or `treasurer` would still see nothing.
+Writes: entries insert only as `pending` (acceptance must go through the
+audited RPC) and pinned to the tournament's own host org; categories need
+`manage_competition`; and **`tec_write` was tightened** — it let anyone passing
+`can_read_tournament` write entry contacts with no check on which org the row
+claimed, and contacts are how an outside person later gains entry-scoped
+access. The RLS tests use users with **no org membership at all**, so passing
+them proves the new policies rather than the old org-member ones; they were run
+first and failed on today's database before the migration was applied.
+
+### Three bugs found only by driving it as an org admin (phase10b/10c + UI)
+
+- **Org admins couldn't read tournament billing.** The invoice step said "no
+  billing account you can use". `create_billing_invoice` and
+  `can_review_billing_invoice` accept `is_org_admin` for tournament billing, but
+  §0m's read narrowing only accepted the tournament finance permissions — my
+  mistake — so an org admin could issue an invoice and then not read the account
+  or invoice they'd just created. Read and write now agree (phase10b).
+- **The audit trail was empty and Suspend would have errored.**
+  `tournament_audit_log` and `set_tournament_staff_account_status` accepted only
+  the tournament permission, though an org admin can already read the raw audit
+  rows and edit `tournament_staff` through RLS. Both now accept `is_org_admin`
+  (phase10c) — no new capability, just the RPCs agreeing with the tables.
+- **Removed staff still looked active** because the directory returns archived
+  rows too. They now list under "Former staff".
+
+### Verified
+
+RLS suite 147 → **159**. Driven live in a browser as the Usna Gali org admin
+against Copa Gali: entry queue, adding an entry with a contact and invoice
+(₱500 tournament-context invoice tied to the entry), capacity limit and the
+disabled "full" option, editing capacity, accepting (contact flipped to
+`invited`), adding/suspending/reactivating/removing/re-adding staff, the
+unknown-email error, and category delete. Showcase data restored afterwards.
+`tsc` clean for app code, unit tests 20/20, `npm run build` clean.
+
+### Not verified, not built, and known edges
+
+- **Not driven in a browser as an Organizer who is not an org admin** — the
+  demo has no such persona (every demo account belongs to Usna Gali). That path
+  is covered only by the RLS tests. Worth adding a tournament-only persona.
+- **Not built:** the finance queue (slice 5), self-service public registration,
+  the Team Coordinator flag, officiating UI. Entry-fee invoices are created but
+  there's still no screen to verify the payment.
+- **`write_audit()` has no authorization check** — any signed-in user can write
+  an audit row for any org. Pre-existing; the console relies on it working for
+  non-org-members, so tightening it needs a tournament-aware check. Worth its
+  own look: audit integrity is the point of an audit log.
+- `tournament_entries` has no `org_id` column, so the phase9a suspension fence
+  doesn't cover it directly; it's protected through the guarded helpers its
+  policies use, and the suspension test doesn't assert it.
+- The archived-staff directory, the "issue invoice" default-on checkbox and the
+  capacity check (a count-then-insert, so two simultaneous adds could exceed it
+  by one) are deliberate simplifications at this scale.
 
 ---
 

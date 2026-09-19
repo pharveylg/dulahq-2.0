@@ -3520,7 +3520,9 @@ export type Database = {
       tournament_categories: {
         Row: {
           age_group: string | null
+          capacity: number | null
           created_at: string
+          entry_fee: number | null
           format: string | null
           id: string
           max_birth_year: number | null
@@ -3532,7 +3534,9 @@ export type Database = {
         }
         Insert: {
           age_group?: string | null
+          capacity?: number | null
           created_at?: string
+          entry_fee?: number | null
           format?: string | null
           id?: string
           max_birth_year?: number | null
@@ -3544,7 +3548,9 @@ export type Database = {
         }
         Update: {
           age_group?: string | null
+          capacity?: number | null
           created_at?: string
+          entry_fee?: number | null
           format?: string | null
           id?: string
           max_birth_year?: number | null
@@ -4708,6 +4714,20 @@ export type Database = {
         Returns: Json
       }
       is_user_in_org: { Args: { p_user_id: string; p_org_id: string }; Returns: boolean }
+      add_tournament_staff: {
+        Args: { p_tournament_id: string; p_email: string; p_role: string }
+        Returns: string
+      }
+      my_manageable_tournaments: {
+        Args: never
+        Returns: {
+          tournament_id: string
+          tournament_name: string
+          tournament_slug: string
+          org_slug: string
+          org_name: string
+        }[]
+      }
       org_is_active: { Args: { org: string }; Returns: boolean }
       org_access_allowed: { Args: { org: string }; Returns: boolean }
       club_org_is_active: { Args: { club: string }; Returns: boolean }

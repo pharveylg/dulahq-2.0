@@ -1,8 +1,13 @@
-# Tournament organizer console — proposal (not built)
+# Tournament organizer console — proposal
 
-Status: **proposal for review.** Nothing here is implemented. It closes gap
-analysis P1-10 (`docs/platform-club-tournament-gap-analysis.md` §3.2) and
-would be the first native Tournament workspace in this repo. The frozen Vite
+Status: **slices 1–4 built (2026-09-19); slice 5 (finance queue) not built.**
+The four open decisions below were answered before building: host-entered
+registration first; `entry_fee`/`capacity` added to categories; Team
+Coordinator "flag for review" skipped in v1; route accepted as
+`/tm/[orgSlug]/[tournamentSlug]`. What was built, and three bugs found only by
+driving it, are in CLAUDE.md §0o. The proposal below is left as written.
+It closes gap analysis P1-10 (`docs/platform-club-tournament-gap-analysis.md`
+§3.2) and is the first native Tournament workspace in this repo. The frozen Vite
 engine (brackets, live scores, matches) stays proxied and is out of scope.
 
 ## The problem, checked against the live database

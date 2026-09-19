@@ -1978,11 +1978,155 @@ describe('billing access (narrowed reads, payer access, tournament finance permi
     expect(refused.error).not.toBeNull();
   });
 
+  it('an org admin who is NOT tournament staff can read the tournament billing account and invoice they are allowed to create', async () => {
+    // create_billing_invoice / can_review_billing_invoice accept is_org_admin
+    // for tournament billing, so the read side has to as well -- it didn't,
+    // and the organizer console's "issue entry-fee invoice" step found out.
+    const { data: acct } = await orgAdminAClient.from('billing_accounts').select('id').eq('id', tournamentAccountId);
+    expect(acct).toHaveLength(1);
+    const { data: inv } = await orgAdminAClient.from('billing_invoices').select('id').eq('id', tournamentInvoiceIds[0]);
+    expect(inv).toHaveLength(1);
+  });
+
   it('cleans up', async () => {
     await adminClient.from('billing_invoices').delete().in('id', [clubInvoiceId, ...tournamentInvoiceIds].filter(Boolean));
     if (tournamentId) {
       await adminClient.from('tournament_staff').delete().eq('tournament_id', tournamentId);
       await adminClient.from('tournaments').delete().eq('id', tournamentId);
     }
+  });
+});
+
+/**
+ * Tournament organizer console (docs/tournament-organizer-console-proposal.md).
+ * The tournament authorization layer existed with no UI, and checking what a
+ * console would actually need turned up that an Organizer who is not also an
+ * org admin could not READ the entries and categories they are meant to
+ * decide: those tables read through is_org_member, which has no
+ * tournament-staff branch. These tests use users with NO org membership at
+ * all, so passing them proves the new tournament-staff policies rather than
+ * the old org-member ones.
+ */
+describe('tournament organizer console (phase10a)', () => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const organizerEmail = `rls-organizer-${suffix}@rls-test.local`;
+  const treasurerEmail = `rls-tr-${suffix}@rls-test.local`;
+  const newStaffEmail = `rls-newstaff-${suffix}@rls-test.local`;
+  let organizerId: string;
+  let treasurerId: string;
+  let newStaffId: string;
+  let organizerClient: ReturnType<typeof createClient>;
+  let treasurerClient: ReturnType<typeof createClient>;
+  let tournamentId: string;
+  let categoryId: string;
+  let entryId: string;
+
+  it('sets up a tournament with an organizer and a treasurer who belong to no org', async () => {
+    organizerId = (await createTestUser(organizerEmail, 'audience')).publicUser.id;
+    treasurerId = (await createTestUser(treasurerEmail, 'audience')).publicUser.id;
+    newStaffId = (await createTestUser(newStaffEmail, 'audience')).publicUser.id;
+    const tournament = must(await adminClient.from('tournaments')
+      .insert({ name: 'RLS Organizer Cup', org_id: orgA.id, slug: `rls-org-${suffix}` }).select().single(), 'tournament');
+    tournamentId = tournament.id;
+    must(await adminClient.from('tournament_staff').insert([
+      { tournament_id: tournamentId, user_id: organizerId, role: 'organizer', org_id: orgA.id },
+      { tournament_id: tournamentId, user_id: treasurerId, role: 'treasurer', org_id: orgA.id },
+    ]).select(), 'tournament_staff');
+    organizerClient = await signInAs(organizerEmail);
+    treasurerClient = await signInAs(treasurerEmail);
+  });
+
+  it('tournament staff can read the tournament row; someone from another org cannot', async () => {
+    expect((await organizerClient.from('tournaments').select('id').eq('id', tournamentId)).data).toHaveLength(1);
+    expect((await treasurerClient.from('tournaments').select('id').eq('id', tournamentId)).data).toHaveLength(1);
+    expect((await clubStaffBClient.from('tournaments').select('id').eq('id', tournamentId)).data ?? []).toHaveLength(0);
+  });
+
+  it('the organizer can create a category with a fee and capacity; the treasurer cannot', async () => {
+    const { data, error } = await organizerClient.from('tournament_categories')
+      .insert({ org_id: orgA.id, tournament_id: tournamentId, name: 'U15 Boys', entry_fee: 1500, capacity: 8 }).select('id').single();
+    expect(error).toBeNull();
+    categoryId = data!.id;
+
+    const refused = await treasurerClient.from('tournament_categories')
+      .insert({ org_id: orgA.id, tournament_id: tournamentId, name: 'Nope' });
+    expect(refused.error).not.toBeNull();
+
+    expect((await treasurerClient.from('tournament_categories').select('id').eq('id', categoryId)).data).toHaveLength(1);
+    expect((await clubStaffBClient.from('tournament_categories').select('id').eq('id', categoryId)).data ?? []).toHaveLength(0);
+  });
+
+  it('the organizer can add a PENDING entry, but not one that is already accepted, forged onto another host org, or in a foreign category', async () => {
+    const base = { tournament_id: tournamentId, host_org_id: orgA.id, category_id: categoryId, team_name: 'Visitors FC' };
+
+    const accepted = await organizerClient.from('tournament_entries').insert({ ...base, status: 'accepted' });
+    expect(accepted.error).not.toBeNull(); // acceptance goes through decide_tournament_entry, which audits
+
+    const forged = await organizerClient.from('tournament_entries').insert({ ...base, host_org_id: orgB.id, status: 'pending' });
+    expect(forged.error).not.toBeNull();
+
+    const { data, error } = await organizerClient.from('tournament_entries').insert({ ...base, status: 'pending' }).select('id').single();
+    expect(error).toBeNull();
+    entryId = data!.id;
+
+    const byTreasurer = await treasurerClient.from('tournament_entries').insert({ ...base, team_name: 'No', status: 'pending' });
+    expect(byTreasurer.error).not.toBeNull();
+  });
+
+  it('staff can read entries; another org cannot', async () => {
+    expect((await organizerClient.from('tournament_entries').select('id').eq('id', entryId)).data).toHaveLength(1);
+    expect((await treasurerClient.from('tournament_entries').select('id').eq('id', entryId)).data).toHaveLength(1);
+    expect((await clubStaffBClient.from('tournament_entries').select('id').eq('id', entryId)).data ?? []).toHaveLength(0);
+  });
+
+  it('entry contacts: the organizer can add one, the treasurer cannot, and org_id cannot be forged', async () => {
+    const contact = { entry_id: entryId, name: 'Coach Reyes', email: `rls-contact-${suffix}@rls-test.local`, role: 'team_manager' };
+    const ok = await organizerClient.from('tournament_entry_contacts').insert({ ...contact, org_id: orgA.id }).select('id').single();
+    expect(ok.error).toBeNull();
+    expect((await treasurerClient.from('tournament_entry_contacts').insert({ ...contact, org_id: orgA.id })).error).not.toBeNull();
+    expect((await organizerClient.from('tournament_entry_contacts').insert({ ...contact, org_id: orgB.id })).error).not.toBeNull();
+  });
+
+  it('the organizer decides the entry via the audited RPC; the treasurer cannot', async () => {
+    expect((await treasurerClient.rpc('decide_tournament_entry', { p_entry_id: entryId, p_status: 'accepted' })).error).not.toBeNull();
+    expect((await organizerClient.rpc('decide_tournament_entry', { p_entry_id: entryId, p_status: 'accepted' })).error).toBeNull();
+    const row = must(await adminClient.from('tournament_entries').select('status').eq('id', entryId).single(), 'entry status');
+    expect(row.status).toBe('accepted');
+  });
+
+  it('add_tournament_staff: the organizer can add an existing account by email; unknown emails and non-managers are refused', async () => {
+    const ok = await organizerClient.rpc('add_tournament_staff', { p_tournament_id: tournamentId, p_email: newStaffEmail, p_role: 'team_coordinator' });
+    expect(ok.error).toBeNull();
+    const row = must(await adminClient.from('tournament_staff').select('role, status').eq('tournament_id', tournamentId).eq('user_id', newStaffId).single(), 'new staff row');
+    expect(row).toMatchObject({ role: 'team_coordinator', status: 'active' });
+
+    expect((await organizerClient.rpc('add_tournament_staff', { p_tournament_id: tournamentId, p_email: 'nobody-here@rls-test.local', p_role: 'logistics' })).error).not.toBeNull();
+    expect((await treasurerClient.rpc('add_tournament_staff', { p_tournament_id: tournamentId, p_email: newStaffEmail, p_role: 'logistics' })).error).not.toBeNull();
+  });
+
+  it('an org admin who is not tournament staff sees the audit trail and can suspend staff; a treasurer sees no audit rows', async () => {
+    const audit = await orgAdminAClient.rpc('tournament_audit_log', { p_tournament_id: tournamentId });
+    expect((audit.data ?? []).length).toBeGreaterThan(0); // the accepted decision above wrote one
+    const blind = await treasurerClient.rpc('tournament_audit_log', { p_tournament_id: tournamentId });
+    expect(blind.data ?? []).toHaveLength(0);
+
+    expect((await orgAdminAClient.rpc('set_tournament_staff_account_status', { p_tournament_id: tournamentId, p_target_user_id: treasurerId, p_status: 'suspended' })).error).toBeNull();
+    expect((await orgAdminAClient.rpc('set_tournament_staff_account_status', { p_tournament_id: tournamentId, p_target_user_id: treasurerId, p_status: 'active' })).error).toBeNull();
+  });
+
+  it('my_manageable_tournaments lists a tournament for its staff and not for another org', async () => {
+    const mine = await organizerClient.rpc('my_manageable_tournaments');
+    expect((mine.data ?? []).map((t: any) => t.tournament_id)).toContain(tournamentId);
+    const theirs = await clubStaffBClient.rpc('my_manageable_tournaments');
+    expect((theirs.data ?? []).map((t: any) => t.tournament_id)).not.toContain(tournamentId);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_entry_contacts').delete().eq('entry_id', entryId);
+    await adminClient.from('tournament_entries').delete().eq('tournament_id', tournamentId);
+    await adminClient.from('tournament_categories').delete().eq('tournament_id', tournamentId);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tournamentId);
+    await adminClient.from('tournaments').delete().eq('id', tournamentId);
+    for (const id of [organizerId, treasurerId, newStaffId]) await adminClient.auth.admin.deleteUser(id);
   });
 });

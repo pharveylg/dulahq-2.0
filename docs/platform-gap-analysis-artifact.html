@@ -119,9 +119,9 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
     </div>
     <div class="stat-strip">
       <div class="stat-tile sev-total"><div class="stat-num">5/5</div><div class="stat-label">P0s fixed</div></div>
-      <div class="stat-tile sev-p1"><div class="stat-num">3/6</div><div class="stat-label">P1s fixed</div></div>
+      <div class="stat-tile sev-p1"><div class="stat-num">5/6</div><div class="stat-label">P1s fixed</div></div>
       <div class="stat-tile sev-p2"><div class="stat-num">2/3</div><div class="stat-label">P2 fixed</div></div>
-      <div class="stat-tile sev-p0"><div class="stat-num">3</div><div class="stat-label">open: need a decision</div></div>
+      <div class="stat-tile sev-p0"><div class="stat-num">1</div><div class="stat-label">open: entitlement lifecycle</div></div>
     </div>
     <div class="toc">
       <a href="#sync">0 &middot; Sync notes</a>
@@ -219,7 +219,8 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
     </div>
 
     <div class="finding sev-p1">
-      <h3>3.2 &middot; No organizer console anywhere in this repo <span class="badge p1">P1</span></h3>
+      <h3>3.2 &middot; No organizer console existed anywhere in this repo <span class="badge fixed">built 09-19</span></h3>
+      <p><strong>Now built</strong> at <code class="cite">/tm/[orgSlug]/[tournamentSlug]</code>: an entry queue, host-entered registration with an optional entry-fee invoice, categories with fee and capacity, and staff and audit. Building it turned up that an Organizer who wasn't also an org admin couldn't read the entries they were meant to decide, plus three bugs found only by driving it as an org admin. Not built: the finance queue and self-service registration. The original finding follows.</p>
       <p>Grepped all 24 tournament-referencing routes: beyond the public list and the club-side team/roster pages, there is no page for an Organizer or Team Coordinator to do anything &mdash; <code class="cite">tournament_staff_directory()</code> and <code class="cite">decide_tournament_entry()</code> both exist in the database and are called by nothing in <code class="cite">src/</code>.</p>
       <p><strong>Registration itself has no UI either</strong> &mdash; grepped every action file for an INSERT into <code class="cite">tournament_entries</code>: none. Every entry in the live database exists because it was inserted directly. <code class="cite">tournament_categories</code> (divisions, fees, capacity) has the same status: real table, zero owner-side UI.</p>
     </div>
@@ -274,9 +275,9 @@ td.area{font-weight:600; color:var(--ink); white-space:nowrap; font-size:13px;}
         <tbody>
           <tr><td class="num">6</td><td class="area">Platform</td><td><strong>Open &mdash; needs a decision.</strong> Entitlement lifecycle is binary, not phased (the Directory deliberately deletes a row to turn a product off, and re-saving resets every product to active)</td><td>Add at minimum a trial/grace-period distinction the Directory can act on</td></tr>
           <tr><td class="num">7</td><td class="area">Platform</td><td><s>Support queue shows no entitlement context</s></td><td><span class="badge fixed">fixed 09-19</span> each ticket shows the org's products and an "org suspended" chip</td></tr>
-          <tr><td class="num">8</td><td class="area">Clubs</td><td><strong>Open &mdash; needs a decision.</strong> Two unreconciled financial ledgers</td><td>Decide which is authoritative; bridge or backfill</td></tr>
+          <tr><td class="num">8</td><td class="area">Clubs</td><td><s>Two unreconciled financial ledgers</s></td><td><span class="badge fixed">resolved 09-19</span> by scoping, not migrating: <code class="cite">fee_charges</code> stays the club ledger; the billing domain covers Platform and Tournament, and clubs only once they opt into QR payments. The club Finances tab hides the billing section until a club invoice exists</td></tr>
           <tr><td class="num">9</td><td class="area">Clubs</td><td><s><code class="cite">treasurer</code> can't manage the club's own Finances tab</s></td><td><span class="badge fixed">fixed 09-19</span> gate is now <code class="cite">view_finances</code>/<code class="cite">manage_finances</code>; <code class="cite">expenses</code> RLS, which had been missed, now honours them too</td></tr>
-          <tr><td class="num">10</td><td class="area">Tournament</td><td><strong>Open &mdash; needs a proposal.</strong> No organizer console; registration has zero UI</td><td>Build the minimum organizer workspace</td></tr>
+          <tr><td class="num">10</td><td class="area">Tournament</td><td><s>No organizer console; registration has zero UI</s></td><td><span class="badge fixed">built 09-19</span> <code class="cite">/tm/[org]/[tournament]</code>: entry queue, host-entered registration with optional entry-fee invoice, categories with fee and capacity, staff and audit. Not built: the finance queue and self-service registration. Also found and fixed: an Organizer who wasn't an org admin couldn't read the entries they decide</td></tr>
           <tr><td class="num">11</td><td class="area">Tournament</td><td><s>Billing proposes a second permission vocabulary</s></td><td><span class="badge fixed">fixed 09-19</span> invoicing and payment review use the live <code class="cite">manage_tournament_finances</code>; the doc no longer proposes six new keys</td></tr>
         </tbody>
       </table>

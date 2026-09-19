@@ -10,12 +10,15 @@ act as the cross-org "backdoor" for troubleshooting.
 
 ---
 
-> **Status, 2026-09-19.** All five P0s are fixed and three of six P1s (7, 9,
-> 11); see CLAUDE.md §0m and §0n. Still open, each needing a decision rather
-> than a fix: **P1-6** entitlement lifecycle (the Directory deliberately
-> deletes a row to turn a product off, and re-saving resets every product to
-> `active`), **P1-8** the two unreconciled financial ledgers, and **P1-10**
-> the Tournament organizer console and registration UI. The body below is the
+> **Status, 2026-09-19.** All five P0s are fixed and four of six P1s (7, 9,
+> 10, 11); see CLAUDE.md §0m, §0n and §0o. **P1-8** (two ledgers) is resolved
+> by scoping: `fee_charges` stays the club ledger and the billing domain covers
+> Platform and Tournament. **P1-10** is built as the organizer console at
+> `/tm/...` (entries, categories, staff, host-entered registration); its
+> finance queue and self-service registration are not. Only **P1-6**
+> (entitlement lifecycle) remains open, deliberately: the Directory deletes a
+> row to turn a product off, and trial/grace needs pricing to design against.
+> The body below is the
 > original analysis and is left as written; §0 and the P0/P1 tables reflect
 > what was found, not what remains.
 
