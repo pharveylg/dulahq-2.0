@@ -22,6 +22,7 @@ function OrgRow({ org }: { org: Org }) {
 
   function handleToggle() {
     setError(null);
+    if (!suspended && !window.confirm(`Suspend ${org.name}? Every member — staff, guardians, players — loses access immediately until you reactivate it.`)) return;
     startTransition(async () => {
       const result = await toggleOrgStatus(org.id, !suspended);
       if (result?.error) setError(result.error);

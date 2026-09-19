@@ -145,8 +145,24 @@ export async function toggleOrgStatus(orgId: string, suspend: boolean) {
   if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can do that.' };
 
   const supabase = await createClient();
-  const { error } = await supabase.from('organizations').update({ status: suspend ? 'suspended' : 'active' }).eq('id', orgId);
+  const { data: before } = await supabase.from('organizations').select('status').eq('id', orgId).maybeSingle();
+  const nextStatus = suspend ? 'suspended' : 'active';
+  const { error } = await supabase.from('organizations').update({ status: nextStatus }).eq('id', orgId);
   if (error) return { error: friendlyError(error) };
+
+  // Suspension used to change a label and nothing else, so it never needed an
+  // audit trail. It now cuts off every member of the org (phase9a), which is
+  // exactly the kind of action that has to be attributable.
+  await supabase.rpc('write_audit', {
+    p_org_id: orgId,
+    p_action: suspend ? 'platform.org.suspended' : 'platform.org.reactivated',
+    p_scope_type: 'org',
+    p_scope_id: orgId,
+    p_entity_type: 'organization',
+    p_entity_id: orgId,
+    p_before: { status: before?.status ?? null },
+    p_after: { status: nextStatus },
+  });
 
   revalidatePath('/platformconsole');
   return { success: true };

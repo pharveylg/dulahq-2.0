@@ -4708,6 +4708,16 @@ export type Database = {
         Returns: Json
       }
       is_user_in_org: { Args: { p_user_id: string; p_org_id: string }; Returns: boolean }
+      org_is_active: { Args: { org: string }; Returns: boolean }
+      org_access_allowed: { Args: { org: string }; Returns: boolean }
+      club_org_is_active: { Args: { club: string }; Returns: boolean }
+      tournament_org_is_active: { Args: { tournament: string }; Returns: boolean }
+      org_fence_exempt: { Args: { tbl: string }; Returns: boolean }
+      org_tables_missing_suspension_fence: { Args: never; Returns: string[] }
+      my_suspended_orgs: {
+        Args: never
+        Returns: { org_id: string; org_name: string }[]
+      }
       start_platform_impersonation: {
         Args: {
           p_org_id: string

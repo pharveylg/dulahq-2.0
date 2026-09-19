@@ -97,18 +97,34 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   const access = await getClubAccess(clubId);
   const canManage = access.isClubManager;
   const canManageWide = access.isStaff;
-  const canManageFinances = access.isClubManager || access.role === 'staff';
   const myAssignedTeamIds = access.isClubManager ? [] : await getAssignedTeamIds();
 
   // The IT surface is permission-gated, not role-gated: a club_it_admin gets
   // there via impersonate_user, a club_manager via view_audit_log oversight.
   const supabaseForPerms = await createClient();
-  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canSubmitSupport }] = await Promise.all([
+  const [
+    { data: canImpersonate },
+    { data: canViewAudit },
+    { data: canSubmitSupport },
+    { data: canViewFinancesRpc },
+    { data: canManageFinancesRpc },
+  ] = await Promise.all([
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'submit_support_request', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_finances', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubId }),
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
+
+  // The club-wide Finances tab used to be `isClubManager || role === 'staff'`,
+  // a role-literal check from before the permission catalog existed -- so the
+  // `treasurer` role, created precisely as the finance specialist, could not
+  // open it. Now the same permissions fees_read/fees_write/expenses_* already
+  // enforce (expenses joined them in phase9b): view_finances opens the tab,
+  // manage_finances unlocks its write controls.
+  const canManageFinances = access.isClubManager || !!canManageFinancesRpc;
+  const canViewFinances = canManageFinances || !!canViewFinancesRpc;
 
   // club_staff has two FKs into users (user_id, created_by) -- an embedded
   // `users!user_id(name, email)` join used to sit here, but public.users'
@@ -447,7 +463,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   let financesData: { feeCharges: any[]; expenses: any[]; billingInvoices: any[] } | null = null;
   let reportsData: { teams: any[]; financials: { collected: number; outstanding: number; expenses: number; currency: string } } | null = null;
 
-  if (canManageFinances) {
+  if (canViewFinances) {
     const { data: allFeeCharges } = await supabase
       .from('fee_charges')
       .select('id, fee_type, amount, currency, status, due_date, players(name)')

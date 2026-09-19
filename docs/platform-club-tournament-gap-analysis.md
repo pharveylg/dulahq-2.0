@@ -10,6 +10,15 @@ act as the cross-org "backdoor" for troubleshooting.
 
 ---
 
+> **Status, 2026-09-19.** All five P0s are fixed and three of six P1s (7, 9,
+> 11); see CLAUDE.md §0m and §0n. Still open, each needing a decision rather
+> than a fix: **P1-6** entitlement lifecycle (the Directory deliberately
+> deletes a row to turn a product off, and re-saving resets every product to
+> `active`), **P1-8** the two unreconciled financial ledgers, and **P1-10**
+> the Tournament organizer console and registration UI. The body below is the
+> original analysis and is left as written; §0 and the P0/P1 tables reflect
+> what was found, not what remains.
+
 ## 0. Sync notes — what changed since the last session, and two things that need a decision
 
 Two commits landed directly against this repo/origin since Tournament RBAC

@@ -29,6 +29,7 @@ export default function Troubleshoot({ orgs, activeSession: initialActiveSession
   const [people, setPeople] = useState<Person[] | null>(null);
   const [readout, setReadout] = useState<any>(null);
   const [readoutFor, setReadoutFor] = useState<{ userId: string; name: string } | null>(null);
+  const [orgStatus, setOrgStatus] = useState<string | null>(null);
   // Server-rendered on page load only -- revalidatePath() invalidates the
   // route for the NEXT navigation, but this client tree keeps its own copy,
   // so start/end have to update it directly or the banner goes stale (an
@@ -60,7 +61,7 @@ export default function Troubleshoot({ orgs, activeSession: initialActiveSession
       if (result.session) setActiveSession(result.session);
       const access = await getEffectiveAccessForPlatform(person.user_id, orgId);
       if (access.error) setError(access.error);
-      else { setReadout(access.readout); setReadoutFor({ userId: person.user_id, name: person.name ?? person.email }); }
+      else { setReadout(access.readout); setOrgStatus(access.orgStatus ?? null); setReadoutFor({ userId: person.user_id, name: person.name ?? person.email }); }
     });
   }
 
@@ -127,6 +128,12 @@ export default function Troubleshoot({ orgs, activeSession: initialActiveSession
           <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
             Entitlements: {(readout.entitlements ?? []).join(', ') || 'none'}
           </p>
+          {orgStatus === 'suspended' && (
+            <p style={{ fontSize: 13, color: 'var(--danger)', fontWeight: 600 }}>
+              This organization is suspended. The permissions below are what {readoutFor.name} holds on paper — every gate
+              currently refuses them until the org is reactivated.
+            </p>
+          )}
           {readout.has_no_known_relationship && (
             <p style={{ fontSize: 13, color: 'var(--warn)' }}>No active club or tournament role found for this person in this org.</p>
           )}

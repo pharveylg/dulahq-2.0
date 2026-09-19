@@ -7,6 +7,8 @@ type Message = { id: string; authorName: string; body: string; createdAt: string
 type Item = {
   id: string;
   orgName: string;
+  entitlements: string[];
+  orgSuspended: boolean;
   category: string;
   subject: string;
   body: string;
@@ -45,7 +47,13 @@ function Row({ item }: { item: Item }) {
     <div className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }} onClick={() => setExpanded((v) => !v)}>
         <div className="list-row-main">
-          <div className="list-row-title">{item.subject}</div>
+          <div className="list-row-title">
+            {item.subject}{' '}
+            {item.entitlements.length > 0
+              ? item.entitlements.map((p) => <span key={p} className="chip" style={{ marginRight: 4 }}>{p}</span>)
+              : <span className="chip" style={{ color: 'var(--warn)' }}>no products</span>}
+            {item.orgSuspended && <span className="chip" style={{ color: 'var(--danger)' }}>org suspended</span>}
+          </div>
           <div className="list-row-meta">
             {item.orgName} · {item.createdByName} · {item.category.replace('_', ' ')} · {new Date(item.createdAt).toLocaleDateString()}
           </div>

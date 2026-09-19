@@ -1771,3 +1771,218 @@ describe('platform_impersonation (cross-org troubleshooting)', () => {
     await adminClient.auth.admin.deleteUser(platformAdminUserId);
   });
 });
+
+/**
+ * Org suspension (gap analysis 2026-09-11, Platform 1.1). organizations.status
+ * used to be written by the console's Suspend button and read by nothing, so a
+ * "suspended" org kept every permission. Two enforcement layers, both pinned:
+ * RLS (a restrictive policy on every org_id table) and the permission helpers
+ * (which SECURITY DEFINER RPCs authorize through, and which RLS never sees).
+ */
+describe('org suspension (phase9a)', () => {
+  const paEmail = `rls-susp-pa-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  let paUserId: string;
+  let paClient: ReturnType<typeof createClient>;
+
+  it('every org_id table is fenced, or explicitly exempt -- a new table cannot slip in unfenced', async () => {
+    const { data, error } = await adminClient.rpc('org_tables_missing_suspension_fence');
+    expect(error).toBeNull();
+    expect(data ?? []).toEqual([]);
+  });
+
+  it('sets up a platform admin', async () => {
+    const pa = await createTestUser(paEmail, 'platform_admin');
+    paUserId = pa.publicUser.id;
+    must(await adminClient.from('platform_admins').insert({ email: paEmail }).select().single(), 'platform_admins insert');
+    paClient = await signInAs(paEmail);
+  });
+
+  it('baseline: an active org works for its coach and club manager', async () => {
+    // view_player is team-scoped, so it needs the team the coach is assigned to.
+    const perm = await coachA1Client.rpc('has_staff_permission', { p_permission_key: 'view_player', p_club_id: clubA.id, p_team_id: teamA1.id });
+    expect(perm.data).toBe(true);
+    const { data: teams } = await coachA1Client.from('teams').select('id').eq('id', teamA1.id);
+    expect(teams).toHaveLength(1);
+    const { data: staff } = await clubAdminAClient.rpc('club_staff_directory', { p_club_id: clubA.id });
+    expect((staff ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('a suspended org refuses its members on RLS paths, helper paths and RPC paths -- but not Platform Admin', async () => {
+    must(await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id).select().single(), 'suspend orgA');
+    try {
+      // helper paths
+      const perm = await coachA1Client.rpc('has_staff_permission', { p_permission_key: 'view_player', p_club_id: clubA.id, p_team_id: teamA1.id });
+      expect(perm.data).toBe(false);
+      expect((await coachA1Client.rpc('is_org_member', { org: orgA.id })).data).toBe(false);
+      expect((await clubAdminAClient.rpc('is_club_manager', { check_club_id: clubA.id })).data).toBe(false);
+      expect((await orgAdminAClient.rpc('is_org_admin', { org: orgA.id })).data).toBe(false);
+
+      // RLS path (direct table read)
+      const { data: teams } = await coachA1Client.from('teams').select('id').eq('id', teamA1.id);
+      expect(teams ?? []).toHaveLength(0);
+
+      // RPC path: SECURITY DEFINER bypasses RLS, so only the helper guard stops
+      // it. A privileged write, refused for the club manager while suspended.
+      const promote = await clubAdminAClient.rpc('set_team_primary_coach', { p_team_id: teamA1.id, p_user_id: coachA1UserId });
+      expect(promote.error).not.toBeNull();
+
+      // members are told why everything went empty; Platform Admin is not
+      const { data: notice } = await coachA1Client.rpc('my_suspended_orgs');
+      expect((notice ?? []).map((o: any) => o.org_id)).toContain(orgA.id);
+
+      // Platform Admin still sees and can operate on the suspended org
+      const { data: paTeams } = await paClient.from('teams').select('id').eq('id', teamA1.id);
+      expect(paTeams).toHaveLength(1);
+      const { data: paNotice } = await paClient.rpc('my_suspended_orgs');
+      expect(paNotice ?? []).toHaveLength(0);
+    } finally {
+      await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    }
+  });
+
+  it('reactivating restores access immediately', async () => {
+    const perm = await coachA1Client.rpc('has_staff_permission', { p_permission_key: 'view_player', p_club_id: clubA.id, p_team_id: teamA1.id });
+    expect(perm.data).toBe(true);
+    const { data: teams } = await coachA1Client.from('teams').select('id').eq('id', teamA1.id);
+    expect(teams).toHaveLength(1);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    await adminClient.from('platform_admins').delete().eq('email', paEmail);
+    await adminClient.auth.admin.deleteUser(paUserId);
+  });
+});
+
+/**
+ * Clubs 2.3: `treasurer` -- created in phase6l as the finance specialist --
+ * could not open the club Finances tab (a role-literal check) and, once that
+ * was cut over to the permission catalog, still could not record an expense
+ * because expenses RLS was can_admin_club only. phase9b aligns expenses with
+ * how fee_charges/payments already honour manage_finances/view_finances.
+ */
+describe('expenses honour finance permissions (phase9b)', () => {
+  const treasurerEmail = `rls-treasurer-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  let treasurerUserId: string;
+  let treasurerClient: ReturnType<typeof createClient>;
+  const marker = `rls-expense-${crypto.randomUUID().slice(0, 8)}`;
+
+  it('sets up a treasurer at club A', async () => {
+    const t = await createTestUser(treasurerEmail, 'audience');
+    treasurerUserId = t.publicUser.id;
+    must(await adminClient.from('club_staff').insert({ club_id: clubA.id, user_id: treasurerUserId, role: 'treasurer' }).select().single(), 'club_staff treasurer');
+    treasurerClient = await signInAs(treasurerEmail);
+  });
+
+  it('the treasurer holds view_finances and manage_finances', async () => {
+    expect((await treasurerClient.rpc('has_staff_permission', { p_permission_key: 'view_finances', p_club_id: clubA.id })).data).toBe(true);
+    expect((await treasurerClient.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubA.id })).data).toBe(true);
+  });
+
+  it('the treasurer CAN record and read an expense', async () => {
+    const { error } = await treasurerClient.from('expenses').insert({
+      club_id: clubA.id, org_id: orgA.id, description: marker, category: 'other', amount: 10,
+    });
+    expect(error).toBeNull();
+    const { data } = await treasurerClient.from('expenses').select('id').eq('description', marker);
+    expect(data).toHaveLength(1);
+  });
+
+  it('a coach CANNOT record or read expenses (no finance permission)', async () => {
+    const { error } = await coachA1Client.from('expenses').insert({
+      club_id: clubA.id, org_id: orgA.id, description: `${marker}-coach`, category: 'other', amount: 1,
+    });
+    expect(error).not.toBeNull();
+    const { data } = await coachA1Client.from('expenses').select('id').eq('description', marker);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('expenses').delete().eq('club_id', clubA.id).like('description', `${marker}%`);
+    await adminClient.from('club_staff').delete().eq('user_id', treasurerUserId);
+    await adminClient.auth.admin.deleteUser(treasurerUserId);
+  });
+});
+
+/**
+ * Billing had a unit test for invoice arithmetic and no RLS test at all
+ * (gap analysis cross-cutting risk): nothing proved the read narrowing was
+ * deliberate rather than quietly reverting. Also pins phase9c -- tournament
+ * billing authorizing on the existing manage_tournament_finances key instead
+ * of is_org_admin alone -- and phase9d, the payer regression.
+ */
+describe('billing access (narrowed reads, payer access, tournament finance permission)', () => {
+  let clubAccountId: string;
+  let clubInvoiceId: string;
+  let tournamentId: string;
+  let tournamentAccountId: string;
+  const tournamentInvoiceIds: string[] = [];
+
+  it('sets up a club invoice payable by coach A1', async () => {
+    const account = must(await adminClient.from('billing_accounts').select('id').eq('club_id', clubA.id).eq('context_type', 'club').single(), 'club billing account');
+    clubAccountId = account.id;
+    const { data, error } = await clubAdminAClient.rpc('create_billing_invoice', {
+      p_org_id: orgA.id, p_billing_account_id: clubAccountId, p_context_type: 'club', p_payer_type: 'guardian',
+      p_payer_user_id: coachA1UserId, p_lines: [{ description: 'RLS test fee', unit_amount: 25 }],
+    });
+    expect(error).toBeNull();
+    clubInvoiceId = data as unknown as string;
+  });
+
+  it('a coach without finance permission CANNOT create a club invoice', async () => {
+    const { error } = await coachA1Client.rpc('create_billing_invoice', {
+      p_org_id: orgA.id, p_billing_account_id: clubAccountId, p_context_type: 'club', p_payer_type: 'guardian',
+      p_lines: [{ description: 'nope', unit_amount: 1 }],
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('the payer reads their own invoice AND its account (for the payment instructions)', async () => {
+    const { data: inv } = await coachA1Client.from('billing_invoices').select('id').eq('id', clubInvoiceId);
+    expect(inv).toHaveLength(1);
+    const { data: acct } = await coachA1Client.from('billing_accounts').select('id').eq('id', clubAccountId);
+    expect(acct).toHaveLength(1);
+  });
+
+  it('another org member (not the payer, no finance permission) reads neither', async () => {
+    const { data: inv } = await teamManagerA1Client.from('billing_invoices').select('id').eq('id', clubInvoiceId);
+    expect(inv ?? []).toHaveLength(0);
+    const { data: acct } = await teamManagerA1Client.from('billing_accounts').select('id').eq('id', clubAccountId);
+    expect(acct ?? []).toHaveLength(0);
+  });
+
+  it('the club manager (holds manage_finances) reads both', async () => {
+    const { data: inv } = await clubAdminAClient.from('billing_invoices').select('id').eq('id', clubInvoiceId);
+    expect(inv).toHaveLength(1);
+    const { data: acct } = await clubAdminAClient.from('billing_accounts').select('id').eq('id', clubAccountId);
+    expect(acct).toHaveLength(1);
+  });
+
+  it('a tournament treasurer CAN create a tournament invoice via manage_tournament_finances; a non-staff coach cannot', async () => {
+    const tournament = must(await adminClient.from('tournaments')
+      .insert({ name: 'RLS Billing Cup', org_id: orgA.id, slug: `rls-bill-${crypto.randomUUID().slice(0, 8)}` }).select().single(), 'tournament');
+    tournamentId = tournament.id;
+    const account = must(await adminClient.from('billing_accounts').select('id').eq('tournament_id', tournamentId).eq('context_type', 'tournament').single(), 'tournament billing account (trigger)');
+    tournamentAccountId = account.id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tournamentId, user_id: teamManagerA1UserId, role: 'treasurer', org_id: orgA.id }).select().single(), 'tournament treasurer');
+
+    const args = {
+      p_org_id: orgA.id, p_billing_account_id: tournamentAccountId, p_context_type: 'tournament', p_payer_type: 'team',
+      p_payer_label: 'RLS Team', p_lines: [{ description: 'entry fee', unit_amount: 100 }],
+    };
+    const allowed = await teamManagerA1Client.rpc('create_billing_invoice', args);
+    expect(allowed.error).toBeNull();
+    tournamentInvoiceIds.push(allowed.data as unknown as string);
+
+    const refused = await coachA1Client.rpc('create_billing_invoice', args);
+    expect(refused.error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('billing_invoices').delete().in('id', [clubInvoiceId, ...tournamentInvoiceIds].filter(Boolean));
+    if (tournamentId) {
+      await adminClient.from('tournament_staff').delete().eq('tournament_id', tournamentId);
+      await adminClient.from('tournaments').delete().eq('id', tournamentId);
+    }
+  });
+});

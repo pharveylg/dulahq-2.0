@@ -64,7 +64,7 @@ export default async function PlatformConsolePage({
   if (activeTab === 'support') {
     const { data: requests, error: requestsError } = await supabase
       .from('support_requests')
-      .select('id, org_id, category, subject, body, status, created_at, organizations(name), users!created_by(name, email)')
+      .select('id, org_id, category, subject, body, status, created_at, organizations(name, status, org_entitlements(product, status)), users!created_by(name, email)')
       .order('created_at', { ascending: false });
     // Silently swallowing this once already hid a real bug: created_by
     // pointed at auth.users, which PostgREST can't embed, so `requests`
@@ -91,6 +91,12 @@ export default async function PlatformConsolePage({
     supportItems = (requests ?? []).map((r: any) => ({
       id: r.id,
       orgName: r.organizations?.name ?? 'Unknown org',
+      // Same active/trial filter as the Directory (mirrors org_has_product) so
+      // a ticket and the tenant list never disagree about what an org holds.
+      entitlements: (r.organizations?.org_entitlements ?? [])
+        .filter((e: any) => e.status === 'active' || e.status === 'trial')
+        .map((e: any) => e.product as string),
+      orgSuspended: r.organizations?.status === 'suspended',
       category: r.category,
       subject: r.subject,
       body: r.body,

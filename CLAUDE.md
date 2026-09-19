@@ -1783,6 +1783,133 @@ billing-domain tests from the synced commit).
 
 ---
 
+## 0n. Closing the gap-analysis findings that didn't need a product decision (2026-09-19)
+
+`docs/platform-club-tournament-gap-analysis.md` left four findings open after
+§0m. This fixes the ones that were purely engineering; the rest are listed at
+the end because each one needs a decision, not a fix.
+
+### Org suspension now actually suspends (phase9a) — the last open P0
+
+`organizations.status` was written by the console's Suspend button and read by
+**nothing** (grepped every policy and helper: zero matches). Two layers,
+because neither alone is enough:
+
+- **The helpers** (`is_org_member`, `is_org_admin`, `is_club_staff`,
+  `is_club_manager`, `is_tournament_staff`, `is_tournament_organizer`,
+  `is_assigned_to_team`, `has_staff_permission`, `has_tournament_permission`)
+  each gained an active-org guard, with Platform Admin left outside it so a
+  suspended org can still be seen and reactivated. This is the layer that
+  matters for **SECURITY DEFINER RPCs**: they run as the table owner, RLS never
+  sees them, and they authorize only through these helpers.
+- **A generated RESTRICTIVE policy** (`org_not_suspended`) on every table with
+  an `org_id` column (59 tables). A restrictive policy is ANDed with every
+  existing permissive one, so it fences direct-table access without rewriting
+  60+ policies — and, unlike a check inside `is_org_member`, it also covers the
+  many policies that never call `is_org_member` (the `is_org_member` spine
+  turned out to be much patchier than §0b implied: a query for policies lacking
+  it found most tables).
+
+Deliberately **not** fenced: `billing_*` (a org suspended for non-payment must
+still be able to see and settle its invoice) and `support_requests` (it must
+still be able to contact Platform Admin) — via `org_fence_exempt()`. The
+**test is the guard**, same lesson as the anon-execute regression (§0g):
+`org_tables_missing_suspension_fence()` must return nothing, so a new `org_id`
+table fails the suite until it is fenced or consciously exempted.
+
+Also: `my_suspended_orgs()` + `SuspendedOrgBanner` in the root layout, so a
+suspended org's members are told *why* everything went empty rather than
+guessing it's broken; `toggleOrgStatus` now writes `platform.org.suspended` /
+`reactivated` to `audit_log` and asks for confirmation (it used to change a
+label, so it never needed either); and the Troubleshoot readout says when the
+inspected org is suspended, because it reports permissions "on paper" that
+every gate is currently refusing — without that an inspector would see a
+healthy bundle and look for the problem elsewhere.
+
+**Known edges:** the public directory listing of a suspended org is unchanged
+(the fence is `to authenticated`; hiding it is a separate decision).
+`club_staff_directory()` still returns the caller's *own* row while suspended
+(phase7c's deliberate self-branch) — their own name and email, nothing more. A
+suspended platform-invoice payer (`payer_org_id` → `is_org_member`) can't submit
+payment through `submit_billing_payment`; only invoices payable by a named user
+stay payable. If suspension is meant for non-payment, that path needs
+deciding.
+
+Verified live before trusting it: suspending Usna Gali inside a rolled-back
+transaction dropped a coach from 3 teams / 34 players to 0, made
+`has_staff_permission` false, and produced the suspension notice, while Platform
+Admin still saw all 3 / 34. **Not** driven through the Directory's Suspend
+button in a browser: the environment declined a click that would suspend a real
+tenant, and that was the right call — the RLS suite now suspends and
+reactivates a fixture org instead.
+
+### Club Finances gate → permission catalog, and the expenses gap behind it (phase9b)
+
+`canManageFinances = isClubManager || role === 'staff'` predated the permission
+catalog, so `treasurer` — created as the finance specialist — couldn't open the
+tab. It's now `has_staff_permission('view_finances')` to see it and
+`manage_finances` for write controls. **Cutting the UI over alone would have
+recreated §0d's mismatch**: `fee_charges`/`payments` honour `manage_finances`
+but `expenses` RLS was `can_admin_club` only (phase6m missed it), so the
+treasurer would have had a tab whose expense controls the database refuses.
+`expenses` now matches the fees policies.
+
+### Tournament billing uses the tournament catalog (phase9c)
+
+`create_billing_invoice` and `can_review_billing_invoice` accept
+`manage_tournament_finances` (held by `organizer`/`treasurer`) alongside
+`is_org_admin`, replacing the "organizer-admin-only until the catalog is
+adopted" stopgap. The six keys `tournament-billing-integration.md` proposed
+were **never added** and the doc now says so, pointing at the two live ones —
+adding them would have built the second tournament permission vocabulary the
+roadmap itself warns about. One coarse key covering create + verify is
+deliberate; split it only when a screen needs segregation of duties.
+
+### A regression in my own earlier fix, caught by writing its test (phase9d)
+
+§0m narrowed billing reads so a payer sees only their own invoice — but the
+guardian page reads an invoice together with `billing_accounts(payment_
+instructions)`, and after narrowing a payer could no longer read the account
+row, so they'd have lost the instructions for paying. Payers may now read the
+account of any invoice they owe (`is_billing_account_payer`), and only those.
+
+### Support queue shows what the org holds
+
+Each ticket now carries the filing org's products (same active/trial filter as
+the Directory) and an "org suspended" chip, so triage doesn't need a trip to
+another tab.
+
+### Verified
+
+RLS suite 129 → **147**: the suspension fence guard; suspend → coach/manager/
+org admin refused on helper, RLS and RPC paths while Platform Admin isn't →
+reactivate restores immediately; a treasurer can record and read an expense and
+a coach can't; billing reads (payer sees own invoice and its account, a
+same-org non-payer sees neither, club manager sees both); tournament
+treasurer can create a tournament invoice and a non-staff coach can't. Billing
+previously had no RLS test at all. Two failures on first run were test
+mistakes, not bugs (`view_player` is team-scoped and needs a `p_team_id`;
+`club_staff_directory` deliberately returns the caller's own row). `tsc` clean
+for all app code, `npm run build` clean, unit tests 20/20.
+
+### Still open, and why
+
+- **Two financial ledgers (P1-8).** `fee_charges`/`payments` and the billing
+  domain run side by side with no bridge. Which is authoritative, and whether
+  to backfill, is a product decision.
+- **Tournament organizer console + registration UI (P1-10).** A feature, not a
+  fix — needs a proposal first. `decide_tournament_entry`,
+  `tournament_staff_directory` and `tournament_categories` still have no UI, and
+  nothing in `src/` creates a `tournament_entries` row.
+- **Entitlement lifecycle (P1-6).** The Directory's "delete the row to turn a
+  product off" is a recorded, deliberate choice (one way to represent off), and
+  re-saving upserts every product back to `active`, so a `trial` would be
+  clobbered. Adding trial/grace means revisiting that decision.
+- The 14 out-of-band billing migrations are still absent from
+  `schema_migrations` (the environment declined the direct write).
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

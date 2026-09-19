@@ -54,5 +54,11 @@ export async function getEffectiveAccessForPlatform(targetUserId: string, orgId:
     p_org_id: orgId,
   });
   if (error) return { error: friendlyError(error) };
-  return { readout: data };
+
+  // A suspended org's members hold their permissions on paper but every gate
+  // refuses them (phase9a). The readout above reports the paper permissions,
+  // so without this an inspector would see a healthy bundle and conclude the
+  // access problem lies elsewhere.
+  const { data: org } = await supabase.from('organizations').select('status').eq('id', orgId).maybeSingle();
+  return { readout: data, orgStatus: org?.status ?? null };
 }

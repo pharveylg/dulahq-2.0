@@ -175,16 +175,14 @@ The Tournament Manager should eventually add:
 
 ## Authorization boundary
 
-Tournament billing must not reuse Club billing permissions by name. Use tournament-scoped permissions such as:
+Tournament billing must not reuse Club billing permissions by name. It uses the **tournament permission catalog that already exists** (phase8b) — this document originally proposed six new keys (`view_tournament_finance`, `manage_entry_invoices`, `verify_tournament_payment`, `issue_tournament_credit`, `approve_tournament_refund`, `export_tournament_financial_reports`), but none were ever added, and adding them would have created a second tournament permission vocabulary alongside the two already live and already granted to real roles:
 
 ```text
-view_tournament_finance
-manage_entry_invoices
-verify_tournament_payment
-issue_tournament_credit
-approve_tournament_refund
-export_tournament_financial_reports
+manage_tournament_finances   -- organizer, treasurer
+view_tournament_finances     -- organizer, treasurer
 ```
+
+As of `phase9c`, creating an entry invoice (`create_billing_invoice`) and verifying a payment (`can_review_billing_invoice`) both accept `manage_tournament_finances` on that tournament, with `is_org_admin` kept as a second path. Reads (`can_read_billing_account`) accept either key. A single key covering create + verify is deliberately coarse: split it into finer keys (e.g. separating "verify payment" from "create invoice" for segregation of duties, or gating refunds/credits) only when a screen actually needs the distinction — and then extend the existing catalog rather than starting a parallel one.
 
 Platform Admin has cross-context diagnostic and financial visibility, but every mutation remains audited.
 
