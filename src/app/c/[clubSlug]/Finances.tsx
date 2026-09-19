@@ -99,19 +99,26 @@ export default function Finances({
         ))}
       </div>
 
-      <div className="section-label">Billing invoices ({billingInvoices.length})</div>
-      <div className="card" style={{ marginBottom: 20 }}>
-        {billingInvoices.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No billing-domain invoices yet. Existing fee charges remain visible above.</p>}
-        {billingInvoices.map((invoice) => (
-          <div key={invoice.id} className="list-row">
-            <div className="list-row-main">
-              <div className="list-row-title">{invoice.invoiceNumber} · {invoice.payerLabel}</div>
-              <div className="list-row-meta">{formatMoney(invoice.amountPaid, 'PHP')} paid of {formatMoney(invoice.total, 'PHP')}{invoice.dueAt ? ` · due ${new Date(invoice.dueAt).toLocaleDateString()}` : ''}</div>
-            </div>
-            <span className="chip">{invoice.status.replaceAll('_', ' ')}</span>
+      {/* fee_charges is the club ledger of record; the billing domain is used
+          for club-context invoices only once a club opts into manual QR
+          payments. Until one exists this section stays hidden, so a club never
+          sees two ledgers side by side with no explanation of which is real. */}
+      {billingInvoices.length > 0 && (
+        <>
+          <div className="section-label">QR payment invoices ({billingInvoices.length})</div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            {billingInvoices.map((invoice) => (
+              <div key={invoice.id} className="list-row">
+                <div className="list-row-main">
+                  <div className="list-row-title">{invoice.invoiceNumber} · {invoice.payerLabel}</div>
+                  <div className="list-row-meta">{formatMoney(invoice.amountPaid, 'PHP')} paid of {formatMoney(invoice.total, 'PHP')}{invoice.dueAt ? ` · due ${new Date(invoice.dueAt).toLocaleDateString()}` : ''}</div>
+                </div>
+                <span className="chip">{invoice.status.replaceAll('_', ' ')}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
       <div className="section-label">Expenses ({expenses.length})</div>
       <div className="card">

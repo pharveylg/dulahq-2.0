@@ -1894,17 +1894,31 @@ for all app code, `npm run build` clean, unit tests 20/20.
 
 ### Still open, and why
 
-- **Two financial ledgers (P1-8).** `fee_charges`/`payments` and the billing
-  domain run side by side with no bridge. Which is authoritative, and whether
-  to backfill, is a product decision.
-- **Tournament organizer console + registration UI (P1-10).** A feature, not a
-  fix — needs a proposal first. `decide_tournament_entry`,
-  `tournament_staff_directory` and `tournament_categories` still have no UI, and
-  nothing in `src/` creates a `tournament_entries` row.
-- **Entitlement lifecycle (P1-6).** The Directory's "delete the row to turn a
-  product off" is a recorded, deliberate choice (one way to represent off), and
-  re-saving upserts every product back to `active`, so a `trial` would be
-  clobbered. Adding trial/grace means revisiting that decision.
+- **Two financial ledgers (P1-8) — resolved by scoping, not migrating.**
+  `fee_charges`/`payments` stays the **club ledger of record** (it's wired into
+  reports, notifications, the player profile and the payment-status trigger);
+  the billing domain is for Platform and Tournament billing, where there is no
+  legacy ledger, and for club-context invoices only once a club opts into
+  manual QR payments. To keep that honest in the UI, the club Finances tab's
+  billing section is hidden until a club invoice exists (renamed "QR payment
+  invoices" when it does), so a club never sees two ledgers side by side. No
+  backfill and no bridge; revisit only if a club actually wants QR payments.
+- **Tournament organizer console + registration UI (P1-10)** — proposal written,
+  awaiting review: `docs/tournament-organizer-console-proposal.md`. Notably it
+  found that an Organizer who isn't an org admin **cannot read**
+  `tournament_entries` or `tournament_categories` (their reads use
+  `is_org_member`, which has no tournament-staff branch), so the console needs
+  targeted policy changes rather than just pages. `tournament_categories` also
+  has no fee or capacity column, contrary to what the gap analysis assumed.
+- **Entitlement lifecycle (P1-6) — trial/grace deferred; the latent bug fixed.**
+  The Directory's "delete the row to turn a product off" is a recorded,
+  deliberate choice, and there's no pricing or real usage to design trial/grace
+  against yet. But re-saving the products form used to upsert **every** product
+  back to `active`, which would have silently undone a `trial` the moment one
+  existed. `updateOrgEntitlements` now writes only rows that need it: an
+  existing `active`/`trial` row is left alone, and a ticked product whose row is
+  `suspended`/`cancelled` is still re-activated (ticking it is how an admin
+  turns it back on).
 - The 14 out-of-band billing migrations are still absent from
   `schema_migrations` (the environment declined the direct write).
 

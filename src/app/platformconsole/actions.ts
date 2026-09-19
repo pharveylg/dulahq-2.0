@@ -119,13 +119,29 @@ export async function updateOrgEntitlements(orgId: string, formData: FormData) {
   const supabase = await createClient();
 
   if (products.length > 0) {
-    const { error } = await supabase
+    // Only write rows that actually need it. A blanket upsert to 'active' would
+    // overwrite a product's existing status every time anyone re-saves this
+    // form -- harmless while every row is 'active', but it would silently undo
+    // a 'trial' the moment one exists. A checked product whose row is
+    // 'suspended'/'cancelled' is still re-activated, since ticking it is how
+    // an admin turns it back on.
+    const { data: existing, error: existingError } = await supabase
       .from('org_entitlements')
-      .upsert(
-        products.map((product) => ({ org_id: orgId, product, status: 'active' })),
-        { onConflict: 'org_id,product' }
-      );
-    if (error) return { error: friendlyError(error) };
+      .select('product, status')
+      .eq('org_id', orgId);
+    if (existingError) return { error: friendlyError(existingError) };
+    const live = new Set((existing ?? []).filter((e) => e.status === 'active' || e.status === 'trial').map((e) => e.product));
+    const toWrite = products.filter((product) => !live.has(product));
+
+    if (toWrite.length > 0) {
+      const { error } = await supabase
+        .from('org_entitlements')
+        .upsert(
+          toWrite.map((product) => ({ org_id: orgId, product, status: 'active' })),
+          { onConflict: 'org_id,product' }
+        );
+      if (error) return { error: friendlyError(error) };
+    }
     for (const product of products) {
       const { error: subscriptionError } = await (supabase as any).rpc('ensure_default_billing_subscription', { p_org_id: orgId, p_product: product });
       if (subscriptionError) return { error: friendlyError(subscriptionError) };
