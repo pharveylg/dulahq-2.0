@@ -59,6 +59,13 @@ const PERSONAS: Persona[] = [
     destination: (clubSlug) => `/c/${clubSlug}/it`,
   },
   {
+    email: 'organizer.tiger-cup.davao-unity-sports@dulahq-showcase.local',
+    role: 'Tournament organizer',
+    name: 'Dennis Manalo',
+    description: 'Organizer of Tiger Cup at Davao Unity Sports, a tournament-only org. Belongs to no org and is not an org admin — everything comes from tournament_staff. Can accept or decline entries, add entries and categories and manage staff, but sees no club or player data and nothing at other tournaments.',
+    destination: () => '/tm/davao-unity-sports/tiger-cup',
+  },
+  {
     email: 'demo-guardian.u15-girls.usna-gali-fc@dulahq-showcase.local',
     role: 'Guardian',
     name: 'Mylene Bautista',

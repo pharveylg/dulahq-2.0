@@ -27,6 +27,7 @@ One standing account per RBAC role, all pointed at Usna Gali FC's U15 Girls team
 | Staff (Usna Gali FC) | Luisa Villar | `staff.u15-girls.usna-gali-fc@dulahq-showcase.local` |
 | Guardian | Mylene Bautista | `demo-guardian.u15-girls.usna-gali-fc@dulahq-showcase.local` |
 | Player | Angelica Alvarado | `demo-player.u15-girls.usna-gali-fc@dulahq-showcase.local` |
+| Tournament organizer (Tiger Cup, Davao Unity Sports — no org membership) | Dennis Manalo | `organizer.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
 
 ---
 

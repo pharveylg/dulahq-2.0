@@ -466,6 +466,18 @@ async function main() {
   davaoReport.tournaments.push(await seedNationalTournament(davao, davaoOfficials, 'national-team-qualifiers', 'National Team Qualifiers', 'University of Mindanao Stadium', '2027-02-20', DAVAO_ENTRIES));
   report.orgs.push(davaoReport);
 
+  // Tournament-only Organizer demo persona. Belongs to NO org -- no org_members,
+  // no role_assignments -- so everything it can do comes from tournament_staff.
+  // That's the case the organizer console's RLS policies exist for, and the one
+  // no other persona can reach (they're all Usna Gali members). Also created,
+  // idempotently and without this wipe, by scripts/seed-demo-organizer.mjs.
+  const organizerEmail = `organizer.tiger-cup.davao-unity-sports@${EMAIL_DOMAIN}`;
+  const organizerName = 'Dennis Manalo';
+  const tigerCup = await must(admin.from('tournaments').select('id').eq('org_id', davao.id).eq('slug', 'tiger-cup').single(), 'find tiger-cup');
+  const organizerId = await createPerson(organizerEmail, organizerName);
+  await must(admin.from('tournament_staff').insert({ tournament_id: tigerCup.id, user_id: organizerId, role: 'organizer', org_id: davao.id }), 'tournament_staff organizer');
+  report.demoPersonas.organizer = { name: organizerName, email: organizerEmail };
+
   // ---------- write the doc ----------
   writeReport(report);
   console.log('\nDone. See docs/demo-data-showcase.md for the full breakdown.');
@@ -506,6 +518,9 @@ function writeReport(report) {
     lines.push(`| Staff (Usna Gali FC) | ${d.staff.name} | \`${d.staff.email}\` |`);
     lines.push(`| Guardian | ${d.guardian.name} | \`${d.guardian.email}\` |`);
     lines.push(`| Player | ${d.player.name} | \`${d.player.email}\` |`);
+    if (d.organizer) {
+      lines.push(`| Tournament organizer (Tiger Cup, Davao Unity Sports — no org membership) | ${d.organizer.name} | \`${d.organizer.email}\` → \`/tm/davao-unity-sports/tiger-cup\` |`);
+    }
     lines.push('');
     lines.push('---');
     lines.push('');

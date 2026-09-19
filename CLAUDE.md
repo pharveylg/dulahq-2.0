@@ -1998,11 +1998,29 @@ disabled "full" option, editing capacity, accepting (contact flipped to
 unknown-email error, and category delete. Showcase data restored afterwards.
 `tsc` clean for app code, unit tests 20/20, `npm run build` clean.
 
-### Not verified, not built, and known edges
+### The non-org-admin path, driven for real (Organizer demo persona)
 
-- **Not driven in a browser as an Organizer who is not an org admin** — the
-  demo has no such persona (every demo account belongs to Usna Gali). That path
-  is covered only by the RLS tests. Worth adding a tournament-only persona.
+The demo had no way to test this — every persona belongs to Usna Gali — so a
+**Tournament organizer** persona was added: Dennis Manalo, organizer of Tiger
+Cup at Davao Unity Sports (tournament-only), with **no org membership at all**.
+Created without the destructive full re-seed by `scripts/seed-demo-organizer.mjs`
+(idempotent; also re-asserts the shared password) and added to
+`seed-showcase-demo.mjs` so a re-seed keeps it, plus `/demo` and
+`docs/demo-data-showcase.md`. Password `DemoPass2026!` like the others.
+
+Driven in a browser as that account: the console loads with the tournament's 6
+entries and 2 categories; `/tm/usna-gali/copa-gali` and
+`/tm/pilipinas-futbol/tiger-cup` (same slug, different org) are both 404; the
+landing page offers only Tiger Cup; they can create a category, add an entry
+with a contact, **issue the entry-fee invoice** (created under their own
+account — this is the finance path that broke for org admins, now shown working
+for a permission holder), accept the entry (contact flips to `invited`), and add
+and remove staff. They get **no Suspend button** — `manage_account_status`
+belongs to the IT admin role, and the UI shows only what would succeed. Test
+rows were removed afterwards; only the persona's own organizer row remains.
+
+### Not built, and known edges
+
 - **Not built:** the finance queue (slice 5), self-service public registration,
   the Team Coordinator flag, officiating UI. Entry-fee invoices are created but
   there's still no screen to verify the payment.
