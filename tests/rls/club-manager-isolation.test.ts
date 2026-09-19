@@ -2130,3 +2130,74 @@ describe('tournament organizer console (phase10a)', () => {
     for (const id of [organizerId, treasurerId, newStaffId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * write_audit() used to have no authorization: any signed-in user could write
+ * an audit row into any org. phase11a moved the unchecked body to
+ * write_audit_system (only reachable from inside SECURITY DEFINER functions)
+ * and made the client-callable write_audit() require a real relationship.
+ * The 17 definer functions that audit as a side effect (port, decide entry,
+ * billing, impersonation…) are covered by the suites above still passing —
+ * they now call write_audit_system, and a cross-org write there is legitimate.
+ */
+describe('write_audit requires a relationship to the org (phase11a)', () => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const platformAdminEmail = `rls-audit-pa-${suffix}@rls-test.local`;
+  let platformAdminClient: ReturnType<typeof createClient>;
+  let platformAdminId: string;
+  const action = `rls-test.audit-${suffix}`;
+
+  it('sets up a platform admin', async () => {
+    platformAdminId = (await createTestUser(platformAdminEmail, 'platform_admin')).publicUser.id;
+    must(await adminClient.from('platform_admins').insert({ email: platformAdminEmail }).select().single(), 'platform_admins insert');
+    platformAdminClient = await signInAs(platformAdminEmail);
+  });
+
+  it('a member of an org CAN write an audit row for it, attributed to themselves', async () => {
+    const { data, error } = await coachA1Client.rpc('write_audit', { p_org_id: orgA.id, p_action: action, p_scope_type: 'club', p_scope_id: clubA.id });
+    expect(error).toBeNull();
+    expect(typeof data).toBe('number');
+    const { data: row } = await adminClient.from('audit_log').select('actor_user_id, org_id').eq('id', data as number).single();
+    expect(row).toMatchObject({ actor_user_id: coachA1UserId, org_id: orgA.id });
+  });
+
+  it('a user CANNOT write an audit row into an org they have no relationship to', async () => {
+    const { error } = await coachA1Client.rpc('write_audit', { p_org_id: orgB.id, p_action: action });
+    expect(error).not.toBeNull();
+    const { data } = await adminClient.from('audit_log').select('id').eq('org_id', orgB.id).eq('action', action);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('a null org (system-wide row) is refused to an ordinary user', async () => {
+    const { error } = await clubAdminAClient.rpc('write_audit', { p_org_id: null as any, p_action: action });
+    expect(error).not.toBeNull();
+  });
+
+  it('anon is refused', async () => {
+    const anonClient = createClient(SUPABASE_URL, ANON_KEY);
+    const { error } = await anonClient.rpc('write_audit', { p_org_id: orgA.id, p_action: action });
+    expect(error).not.toBeNull();
+  });
+
+  it('a platform admin CAN write into any org, and a null org', async () => {
+    expect((await platformAdminClient.rpc('write_audit', { p_org_id: orgB.id, p_action: action })).error).toBeNull();
+    expect((await platformAdminClient.rpc('write_audit', { p_org_id: null as any, p_action: action })).error).toBeNull();
+  });
+
+  it('write_audit_system is not callable by a signed-in user, even for their own org', async () => {
+    const { error } = await coachA1Client.rpc('write_audit_system', { p_org_id: orgA.id, p_action: action });
+    expect(error).not.toBeNull();
+  });
+
+  it('the service role can still write (seed scripts and fixtures rely on it)', async () => {
+    expect((await adminClient.rpc('write_audit', { p_org_id: orgA.id, p_action: action })).error).toBeNull();
+    expect((await adminClient.rpc('write_audit_system', { p_org_id: orgA.id, p_action: action })).error).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    // audit_log is append-only for everyone except the service role, which is fine for fixtures
+    await adminClient.from('audit_log').delete().eq('action', action);
+    await adminClient.from('platform_admins').delete().eq('email', platformAdminEmail);
+    await adminClient.auth.admin.deleteUser(platformAdminId);
+  });
+});

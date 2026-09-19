@@ -4922,6 +4922,19 @@ export type Database = {
         }
         Returns: number
       }
+      write_audit_system: {
+        Args: {
+          p_action: string
+          p_after?: Json
+          p_before?: Json
+          p_entity_id?: string
+          p_entity_type?: string
+          p_org_id: string
+          p_scope_id?: string
+          p_scope_type?: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

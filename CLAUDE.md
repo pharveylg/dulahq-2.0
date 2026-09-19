@@ -2024,16 +2024,66 @@ rows were removed afterwards; only the persona's own organizer row remains.
 - **Not built:** the finance queue (slice 5), self-service public registration,
   the Team Coordinator flag, officiating UI. Entry-fee invoices are created but
   there's still no screen to verify the payment.
-- **`write_audit()` has no authorization check** — any signed-in user can write
-  an audit row for any org. Pre-existing; the console relies on it working for
-  non-org-members, so tightening it needs a tournament-aware check. Worth its
-  own look: audit integrity is the point of an audit log.
+- ~~`write_audit()` has no authorization check~~ — fixed in §0p.
 - `tournament_entries` has no `org_id` column, so the phase9a suspension fence
   doesn't cover it directly; it's protected through the guarded helpers its
   policies use, and the suspension test doesn't assert it.
 - The archived-staff directory, the "issue invoice" default-on checkbox and the
   capacity check (a count-then-insert, so two simultaneous adds could exceed it
   by one) are deliberate simplifications at this scale.
+
+---
+
+## 0p. Audit-log integrity: `write_audit` gets an authorization check (2026-09-19)
+
+`phase11a`/`a1`/`a2`. §0o flagged that `write_audit()` trusted every caller: any
+signed-in user could write an audit row claiming any action in **any** org. The
+actor is taken from the JWT, so nobody could frame someone else — but anyone
+could pollute another tenant's trail, and integrity is the whole point of an
+audit log.
+
+### Why it couldn't just start checking membership
+
+17 SECURITY DEFINER functions call `write_audit` internally, and some write into
+an org the caller doesn't belong to on purpose (`port_squad_to_tournament`
+records the hand-off in the **host** org as well as the entrant's). A blanket
+membership check would have broken all of them.
+
+So it is split in two:
+
+- **`write_audit_system(...)`** — the old unchecked body. `EXECUTE` revoked from
+  `public`/`anon`/`authenticated`, granted to `service_role` only. A definer
+  function runs as the owner, so the 17 internal callers need no grant; a client
+  cannot reach it. Every internal caller was **repointed mechanically** (the
+  migration regenerates each definition from `pg_get_functiondef` and swaps only
+  the call), so nothing else about those functions can drift. Verified 0 still
+  call the old name, 17 call the new one, all still SECURITY DEFINER.
+- **`write_audit(...)`** — same signature, so the 14 direct server-action call
+  sites (6 files) needed **no code change**. It now requires the service role,
+  Platform Admin, or `is_user_in_org(auth.uid(), p_org_id)` — org member, club
+  staff, tournament staff, guardian, player or entry contact. A null org is
+  Platform-Admin-only. Actor attribution is unchanged.
+
+`phase11a2` exists because the first version (`a1`) refused the service role,
+and the RLS suite's fixtures write audit rows through it. The service-role key
+bypasses RLS everywhere else, so refusing it here only broke tooling.
+
+**Rule going forward:** a new SECURITY DEFINER function that audits calls
+`write_audit_system`; server actions call `write_audit`. Calling the checked one
+from inside a definer function will refuse whenever the caller legitimately
+isn't in the org being written to.
+
+### Verified
+
+RLS suite 159 → **168**, all passing (the 17 repointed functions are exercised by
+the existing port / decide-entry / billing / impersonation / roster tests, which
+is the real proof they still work). New coverage: a member writes for their own
+org and is recorded as the actor; the same user is refused for an unrelated org
+and no row lands; null org refused to ordinary users; anon refused; Platform
+Admin allowed anywhere; `write_audit_system` not callable by a signed-in user;
+service role still works. Caveat: the migrations were applied before the tests
+were written, so they were not watched failing first. The "refused" cases would
+fail against the old function (it accepted everything), so they do discriminate.
 
 ---
 
