@@ -2201,3 +2201,160 @@ describe('write_audit requires a relationship to the org (phase11a)', () => {
     await adminClient.auth.admin.deleteUser(platformAdminId);
   });
 });
+
+/**
+ * Tournament finance queue (docs/tournament-organizer-console-proposal.md,
+ * slice 5). review_billing_payment already let a finance holder verify a
+ * SUBMITTED payment, but an entry billed by the host is usually paid in cash or
+ * by a transfer the host sees on their own bank statement -- nothing was ever
+ * submitted -- so the host needs to record it themselves. And the payment
+ * instructions payers read were editable by Platform Admin only.
+ */
+describe('tournament finance queue (phase11b)', () => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const treasurerEmail = `rls-fq-tr-${suffix}@rls-test.local`;
+  let treasurerId: string;
+  let treasurerClient: ReturnType<typeof createClient>;
+  let tournamentId: string;
+  let accountId: string;
+  let invoiceId: string;
+  let secondInvoiceId: string;
+  let thirdInvoiceId: string;
+
+  const invoiceArgs = (amount: number) => ({
+    p_org_id: orgA.id, p_billing_account_id: accountId, p_context_type: 'tournament', p_payer_type: 'team',
+    p_payer_label: 'RLS Finance Team', p_lines: [{ description: 'entry fee', unit_amount: amount }],
+  });
+
+  it('sets up a tournament with a treasurer who belongs to no org, and a 100.00 invoice', async () => {
+    treasurerId = (await createTestUser(treasurerEmail, 'audience')).publicUser.id;
+    const tournament = must(await adminClient.from('tournaments')
+      .insert({ name: 'RLS Finance Cup', org_id: orgA.id, slug: `rls-fq-${suffix}` }).select().single(), 'tournament');
+    tournamentId = tournament.id;
+    accountId = must(await adminClient.from('billing_accounts').select('id').eq('tournament_id', tournamentId).eq('context_type', 'tournament').single(), 'account').id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tournamentId, user_id: treasurerId, role: 'treasurer', org_id: orgA.id }).select().single(), 'staff');
+    treasurerClient = await signInAs(treasurerEmail);
+    const { data, error } = await treasurerClient.rpc('create_billing_invoice', invoiceArgs(100));
+    expect(error).toBeNull();
+    invoiceId = data as unknown as string;
+  });
+
+  it('a treasurer CAN record a partial cash payment; the invoice becomes partially_paid', async () => {
+    const { data, error } = await treasurerClient.rpc('record_billing_payment', {
+      p_invoice_id: invoiceId, p_amount: 40, p_method: 'cash', p_reference_number: 'OR-0001', p_note: 'paid at the desk',
+    });
+    expect(error).toBeNull();
+    const submission = must(await adminClient.from('billing_payment_submissions').select('status, amount, reviewed_by, method').eq('id', data as string).single(), 'submission');
+    expect(submission).toMatchObject({ status: 'verified', amount: 40, reviewed_by: treasurerId, method: 'cash' });
+    const inv = must(await adminClient.from('billing_invoices').select('amount_paid, status').eq('id', invoiceId).single(), 'invoice');
+    expect(inv).toMatchObject({ amount_paid: 40, status: 'partially_paid' });
+  });
+
+  it('cannot record more than the remaining balance, a non-positive amount, or an unknown method', async () => {
+    expect((await treasurerClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 70, p_method: 'cash' })).error).not.toBeNull();
+    expect((await treasurerClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 0, p_method: 'cash' })).error).not.toBeNull();
+    expect((await treasurerClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 10, p_method: 'bitcoin' })).error).not.toBeNull();
+    const inv = must(await adminClient.from('billing_invoices').select('amount_paid').eq('id', invoiceId).single(), 'invoice');
+    expect(inv.amount_paid).toBe(40);
+  });
+
+  it('people without finance authority over this tournament are refused', async () => {
+    // same-org coach with no tournament role, a user from a different org, and anon
+    expect((await coachA1Client.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 10, p_method: 'cash' })).error).not.toBeNull();
+    expect((await clubStaffBClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 10, p_method: 'cash' })).error).not.toBeNull();
+    const anonClient = createClient(SUPABASE_URL, ANON_KEY);
+    expect((await anonClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 10, p_method: 'cash' })).error).not.toBeNull();
+  });
+
+  it('an org admin who is not tournament staff CAN record a payment', async () => {
+    const { error } = await orgAdminAClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 10, p_method: 'bank_transfer' });
+    expect(error).toBeNull();
+  });
+
+  it('recording the rest marks it paid, and a paid invoice takes no further payment', async () => {
+    expect((await treasurerClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 50, p_method: 'cash' })).error).toBeNull();
+    const inv = must(await adminClient.from('billing_invoices').select('amount_paid, status').eq('id', invoiceId).single(), 'invoice');
+    expect(inv).toMatchObject({ amount_paid: 100, status: 'paid' });
+    expect((await treasurerClient.rpc('record_billing_payment', { p_invoice_id: invoiceId, p_amount: 1, p_method: 'cash' })).error).not.toBeNull();
+  });
+
+  it('every recorded payment left an audit row attributed to whoever recorded it', async () => {
+    const { data } = await adminClient.from('audit_log').select('actor_user_id').eq('org_id', orgA.id).eq('action', 'billing.payment.recorded').eq('entity_type', 'billing_invoice').eq('entity_id', invoiceId);
+    expect((data ?? []).length).toBe(3);
+    expect((data ?? []).filter((r) => r.actor_user_id === treasurerId)).toHaveLength(2);
+  });
+
+  it('a treasurer CAN verify a payer-submitted payment (regression: review path untouched)', async () => {
+    const created = await treasurerClient.rpc('create_billing_invoice', invoiceArgs(30));
+    expect(created.error).toBeNull();
+    secondInvoiceId = created.data as unknown as string;
+    // any org member may submit on the org's behalf (submit_billing_payment)
+    const submitted = await coachA1Client.rpc('submit_billing_payment', { p_invoice_id: secondInvoiceId, p_amount: 30, p_method: 'qr_transfer', p_reference_number: 'QR-77' });
+    expect(submitted.error).toBeNull();
+    expect((await coachA1Client.rpc('review_billing_payment', { p_payment_id: submitted.data as string, p_status: 'verified' })).error).not.toBeNull();
+    expect((await treasurerClient.rpc('review_billing_payment', { p_payment_id: submitted.data as string, p_status: 'verified' })).error).toBeNull();
+    const inv = must(await adminClient.from('billing_invoices').select('status').eq('id', secondInvoiceId).single(), 'invoice');
+    expect(inv.status).toBe('paid');
+  });
+
+  it('rejecting the only pending payment puts the invoice back to payable, not stuck "submitted"', async () => {
+    // review_billing_payment used to leave the invoice at submitted_for_verification
+    // after a rejection: the Finance screen showed "payment submitted" with
+    // nothing to verify. It must land on a status the payer's own page still
+    // lists (awaiting_payment / partially_paid) -- NOT 'rejected', which that
+    // page filters out, so the payer would lose sight of what they owe.
+    const created = await treasurerClient.rpc('create_billing_invoice', invoiceArgs(50));
+    expect(created.error).toBeNull();
+    thirdInvoiceId = created.data as unknown as string;
+    const status = async () => must(await adminClient.from('billing_invoices').select('status').eq('id', thirdInvoiceId).single(), 'invoice').status;
+
+    const first = await coachA1Client.rpc('submit_billing_payment', { p_invoice_id: thirdInvoiceId, p_amount: 50, p_method: 'qr_transfer' });
+    expect(first.error).toBeNull();
+    expect(await status()).toBe('submitted_for_verification');
+    expect((await treasurerClient.rpc('review_billing_payment', { p_payment_id: first.data as string, p_status: 'rejected', p_reviewer_note: 'wrong reference' })).error).toBeNull();
+    expect(await status()).toBe('awaiting_payment');
+
+    // with money already in, a rejection lands on partially_paid instead
+    expect((await treasurerClient.rpc('record_billing_payment', { p_invoice_id: thirdInvoiceId, p_amount: 20, p_method: 'cash' })).error).toBeNull();
+    const second = await coachA1Client.rpc('submit_billing_payment', { p_invoice_id: thirdInvoiceId, p_amount: 30, p_method: 'qr_transfer' });
+    expect(second.error).toBeNull();
+    expect((await treasurerClient.rpc('review_billing_payment', { p_payment_id: second.data as string, p_status: 'rejected', p_reviewer_note: 'not received' })).error).toBeNull();
+    expect(await status()).toBe('partially_paid');
+
+    // two live submissions: rejecting one must NOT clear the other's status
+    const a = await coachA1Client.rpc('submit_billing_payment', { p_invoice_id: thirdInvoiceId, p_amount: 10, p_method: 'qr_transfer' });
+    const b = await coachA1Client.rpc('submit_billing_payment', { p_invoice_id: thirdInvoiceId, p_amount: 20, p_method: 'qr_transfer' });
+    expect(a.error).toBeNull();
+    expect(b.error).toBeNull();
+    expect((await treasurerClient.rpc('review_billing_payment', { p_payment_id: a.data as string, p_status: 'rejected', p_reviewer_note: 'duplicate' })).error).toBeNull();
+    expect(await status()).toBe('submitted_for_verification');
+  });
+
+  it('payment instructions for a TOURNAMENT account are editable by its finance holders and org admin, not by others', async () => {
+    const text = 'GCash 0917 000 0000 -- RLS test';
+    expect((await coachA1Client.rpc('update_billing_account_instructions', { p_account_id: accountId, p_payment_instructions: text })).error).not.toBeNull();
+    expect((await clubStaffBClient.rpc('update_billing_account_instructions', { p_account_id: accountId, p_payment_instructions: text })).error).not.toBeNull();
+    expect((await treasurerClient.rpc('update_billing_account_instructions', { p_account_id: accountId, p_payment_instructions: text })).error).toBeNull();
+    expect(must(await adminClient.from('billing_accounts').select('payment_instructions').eq('id', accountId).single(), 'account').payment_instructions).toBe(text);
+    expect((await orgAdminAClient.rpc('update_billing_account_instructions', { p_account_id: accountId, p_payment_instructions: 'set by org admin' })).error).toBeNull();
+  });
+
+  it('payment instructions for a CLUB account stay Platform-Admin-only', async () => {
+    const clubAccount = must(await adminClient.from('billing_accounts').select('id').eq('club_id', clubA.id).eq('context_type', 'club').single(), 'club account');
+    expect((await clubAdminAClient.rpc('update_billing_account_instructions', { p_account_id: clubAccount.id, p_payment_instructions: 'nope' })).error).not.toBeNull();
+    expect((await orgAdminAClient.rpc('update_billing_account_instructions', { p_account_id: clubAccount.id, p_payment_instructions: 'nope' })).error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    // billing_payment_allocations.invoice_id has no cascade: deleting an invoice
+    // that took a payment fails silently and strands the whole fixture org,
+    // which then breaks the NEXT run's beforeAll ("user already registered").
+    const ids = [invoiceId, secondInvoiceId, thirdInvoiceId].filter(Boolean);
+    await adminClient.from('billing_payment_allocations').delete().in('invoice_id', ids);
+    await adminClient.from('billing_payment_submissions').delete().in('invoice_id', ids);
+    await adminClient.from('billing_invoices').delete().in('id', ids);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tournamentId);
+    await adminClient.from('tournaments').delete().eq('id', tournamentId);
+    await adminClient.auth.admin.deleteUser(treasurerId);
+  });
+});

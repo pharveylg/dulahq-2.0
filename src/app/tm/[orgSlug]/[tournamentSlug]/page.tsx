@@ -5,6 +5,7 @@ import TournamentTabs from './TournamentTabs';
 import EntryQueue, { type Entry, type CategoryOption } from './EntryQueue';
 import Categories, { type Category } from './Categories';
 import StaffPanel, { type StaffMember, type AuditRow } from './StaffPanel';
+import Finance, { type FinanceInvoice, type PendingPayment } from './Finance';
 
 /**
  * The native organizer workspace for one tournament
@@ -48,6 +49,8 @@ export default async function TournamentConsolePage({
     { data: pStaff },
     { data: pAccountStatus },
     { data: pAudit },
+    { data: pViewFinance },
+    { data: pManageFinance },
   ] = await Promise.all([
     supabase.rpc('is_org_admin', { org: orgId }),
     supabase.rpc('is_tournament_staff', { check_tournament_id: tournamentId }),
@@ -57,6 +60,8 @@ export default async function TournamentConsolePage({
     perm('manage_tournament_staff'),
     perm('manage_account_status'),
     perm('view_audit_log'),
+    perm('view_tournament_finances'),
+    perm('manage_tournament_finances'),
   ]);
 
   // RLS already hides the tournament from anyone else; this is the explicit
@@ -70,6 +75,8 @@ export default async function TournamentConsolePage({
   const canManageStaff = can(pStaff);
   const canAccountStatus = can(pAccountStatus);
   const canViewAudit = can(pAudit);
+  const canManageFinance = can(pManageFinance);
+  const showFinanceTab = canManageFinance || can(pViewFinance);
 
   const [{ data: entryRows }, { data: categoryRows }] = await Promise.all([
     supabase
@@ -142,6 +149,48 @@ export default async function TournamentConsolePage({
     }
   }
 
+
+  // Finance. Billing isn't in database.types.ts, so this reads through an untyped client like the rest of the billing code.
+  let financeAccountId: string | null = null;
+  let financeInstructions = '';
+  let financeInvoices: FinanceInvoice[] = [];
+  let pendingPayments: PendingPayment[] = [];
+  if (showFinanceTab) {
+    const db = supabase as any;
+    const { data: account } = await db
+      .from('billing_accounts')
+      .select('id, payment_instructions')
+      .eq('context_type', 'tournament')
+      .eq('tournament_id', tournamentId)
+      .maybeSingle();
+    if (account) {
+      financeAccountId = account.id;
+      financeInstructions = account.payment_instructions ?? '';
+      const { data: invoiceRows } = await db
+        .from('billing_invoices')
+        .select('id, invoice_number, payer_label, total, amount_paid, status, currency, due_at')
+        .eq('billing_account_id', account.id)
+        .order('created_at', { ascending: false });
+      financeInvoices = (invoiceRows ?? []).map((i: any) => ({
+        id: i.id, number: i.invoice_number, payer: i.payer_label, total: Number(i.total), paid: Number(i.amount_paid),
+        status: i.status, currency: i.currency, dueAt: i.due_at,
+      }));
+      const invoiceIds = financeInvoices.map((i) => i.id);
+      if (invoiceIds.length) {
+        const { data: paymentRows } = await db
+          .from('billing_payment_submissions')
+          .select('id, invoice_id, amount, currency, method, reference_number, payer_note, submitted_at')
+          .in('invoice_id', invoiceIds)
+          .in('status', ['submitted', 'under_review'])
+          .order('submitted_at');
+        pendingPayments = (paymentRows ?? []).map((p: any) => ({
+          id: p.id, invoiceId: p.invoice_id, amount: Number(p.amount), currency: p.currency, method: p.method,
+          reference: p.reference_number, payerNote: p.payer_note, submittedAt: p.submitted_at,
+        }));
+      }
+    }
+  }
+
   const pendingCount = entries.filter((e) => e.status === 'pending').length;
 
   return (
@@ -164,6 +213,7 @@ export default async function TournamentConsolePage({
         <TournamentTabs
           pendingCount={pendingCount}
           categoryCount={categories.length}
+          financeBadge={pendingPayments.length}
           entriesSlot={
             <EntryQueue
               tournamentId={tournamentId}
@@ -174,6 +224,17 @@ export default async function TournamentConsolePage({
             />
           }
           categoriesSlot={<Categories tournamentId={tournamentId} categories={categories} canManage={canManageCategories} />}
+          financeSlot={
+            showFinanceTab ? (
+              <Finance
+                accountId={financeAccountId}
+                instructions={financeInstructions}
+                invoices={financeInvoices}
+                pendingPayments={pendingPayments}
+                canManage={canManageFinance}
+              />
+            ) : null
+          }
           staffSlot={
             showStaffTab ? (
               <StaffPanel

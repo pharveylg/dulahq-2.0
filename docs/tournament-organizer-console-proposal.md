@@ -1,6 +1,7 @@
 # Tournament organizer console — proposal
 
-Status: **slices 1–4 built (2026-09-19); slice 5 (finance queue) not built.**
+Status: **all five slices built (2026-09-19).** Slice 5 (finance queue) needed two
+RPCs beyond what is described below — see CLAUDE.md §0q.
 The four open decisions below were answered before building: host-entered
 registration first; `entry_fee`/`capacity` added to categories; Team
 Coordinator "flag for review" skipped in v1; route accepted as

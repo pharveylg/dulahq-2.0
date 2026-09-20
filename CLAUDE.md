@@ -2021,9 +2021,8 @@ rows were removed afterwards; only the persona's own organizer row remains.
 
 ### Not built, and known edges
 
-- **Not built:** the finance queue (slice 5), self-service public registration,
-  the Team Coordinator flag, officiating UI. Entry-fee invoices are created but
-  there's still no screen to verify the payment.
+- **Not built:** self-service public registration, the Team Coordinator flag,
+  officiating UI. (The finance queue, slice 5, was built afterwards — §0q.)
 - ~~`write_audit()` has no authorization check~~ — fixed in §0p.
 - `tournament_entries` has no `org_id` column, so the phase9a suspension fence
   doesn't cover it directly; it's protected through the guarded helpers its
@@ -2084,6 +2083,98 @@ Admin allowed anywhere; `write_audit_system` not callable by a signed-in user;
 service role still works. Caveat: the migrations were applied before the tests
 were written, so they were not watched failing first. The "refused" cases would
 fail against the old function (it accepted everything), so they do discriminate.
+
+---
+
+## 0q. Tournament finance queue (2026-09-19)
+
+Slice 5 of `docs/tournament-organizer-console-proposal.md`: a **Finance** tab in
+the organizer console, shown to anyone holding `view_tournament_finances` or
+`manage_tournament_finances` (or an org admin). Summary tiles (billed /
+collected / outstanding / to verify), the payment instructions teams read,
+payments waiting for verification, and the invoice list.
+
+### Two RPCs the queue turned out to need (phase11b / 11b1)
+
+- **`record_billing_payment(invoice, amount, method, reference, note)`.**
+  `review_billing_payment` only acts on a payment a *payer submitted*, but a
+  host billing an entry usually receives cash, or sees a transfer on their own
+  bank statement — nothing is ever submitted, so without this the only way to
+  mark an invoice paid was Platform Admin editing rows, and the verify queue
+  would sit permanently empty. Authorization is exactly
+  `can_review_billing_invoice`'s, so **it widens nobody**: whoever can verify a
+  payment can record one. It writes an already-`verified` submission plus its
+  allocation (so the ledger has one shape however money arrived), refuses an
+  amount above the balance instead of clamping it (someone typing a figure has
+  made a mistake worth surfacing), and audits as `billing.payment.recorded`.
+- **`update_billing_account_instructions` widened for TOURNAMENT accounts.** It
+  was "platform admin only during the validation phase". The instructions are
+  the host's own GCash/bank details, so making Platform Admin type them in for
+  every tournament doesn't scale. Now org admin or `manage_tournament_finances`
+  for a tournament account; **club accounts stay Platform-Admin-only** until the
+  club side gets the same decision made on purpose. **This is a product call
+  that was made here, not asked for** — say if the validation-phase restriction
+  should stay. The UI passes the existing `qr_storage_key` back unchanged,
+  because the RPC overwrites both fields and would otherwise erase a QR that
+  Platform Admin had set.
+
+### A bug in `review_billing_payment`, found by driving the screen (phase11b2)
+
+Rejecting a payment left its invoice at `submitted_for_verification`, so the
+invoice read "payment submitted" with nothing left to verify and no signal that
+the payer needed to pay again. It now returns to `awaiting_payment` (or
+`partially_paid` if money is already in) when the rejected submission was the
+last live one — and **not** when another submission is still pending. Not the
+invoice status `rejected`, which looks like the obvious choice: the payer-facing
+page (`guardian/page.tsx`) lists only `issued` / `awaiting_payment` /
+`submitted_for_verification` / `partially_paid` / `overdue`, so a `rejected`
+invoice would vanish from the payer's own list and they'd lose sight of what
+they owe. The fix is shared with Platform billing and club-context invoices, which
+all go through this function.
+
+### Verified
+
+RLS suite 168 → **180**. The finance describe was written first and shown
+failing (the RPCs didn't exist; the rejection test failed on the actual bug).
+Covers: a treasurer records a partial then the remaining payment and the invoice
+walks `partially_paid` → `paid`; over-balance, zero and unknown-method amounts
+refused; a same-org coach, a different org's user and anon all refused; an org
+admin who isn't tournament staff can record; a paid invoice takes nothing more;
+each recorded payment is audited to whoever recorded it; the existing verify
+path still works; instructions are editable by finance holders and org admin
+but not by a coach or another org, and **club** instructions still refuse a club
+manager and an org admin.
+
+Driven in a browser as Dennis Manalo (organizer, no org membership) against
+Tiger Cup with three test invoices: saved instructions (persisted, audited under
+his email), verified one payment (moved to "Settled and closed", tiles and tab
+badge updated), rejected another — first with no reason (blocked with a message),
+then with one (invoice back to "Awaiting payment") — and recorded ₱40 cash with a
+receipt reference (invoice "Part paid", one allocation). Test rows and their
+audit entries were removed afterwards. `tsc` clean for app code, `npm run build`
+clean, unit tests 20/20.
+
+### Fallout worth knowing
+
+- **The RLS suite left fixtures behind** the first time the finance tests ran,
+  and the *next* run then failed in `beforeAll` with "user already registered"
+  and skipped all 180 tests. `billing_payment_allocations.invoice_id` has **no
+  cascade**, so a test's cleanup `delete from billing_invoices` fails silently
+  for any invoice that took a payment. The cleanup now deletes allocations and
+  submissions first. If the whole file ever shows every test skipped, look for
+  leftover `@rls-test.local` users and `rls-test-org-*` orgs (delete allocations
+  → submissions → invoices → tournaments → org → users, in that order).
+  28 orphaned `rls-*` tournaments from earlier crashed runs (their orgs are
+  gone, so they can't be cleaned by org) still sit in `tournaments`; harmless,
+  not removed here.
+- Not verified in a browser: the read-only Finance view (no role holds view
+  without manage by default, so it is only reachable via a per-user grant), and
+  the tab's absence for staff without a finance permission (covered by the
+  page's permission gate and the read RLS, not clicked through).
+- Still not built: **a team contact has no screen to submit a payment** (external
+  entrants have an account only after acceptance, and nothing renders their
+  invoice), so today the queue is fed by hosts recording payments themselves.
+  The verify path is real and tested, but nothing in the UI creates a submission.
 
 ---
 

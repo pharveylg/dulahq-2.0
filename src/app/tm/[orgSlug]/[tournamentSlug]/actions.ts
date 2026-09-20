@@ -272,3 +272,65 @@ export async function archiveStaff(tournamentId: string, userId: string, role: s
   refresh();
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Finance. Authorization lives in the RPCs (can_review_billing_invoice: org
+// admin or manage_tournament_finances); these just carry the request and turn
+// the error into something a person can act on.
+// ---------------------------------------------------------------------------
+
+const PAYMENT_METHODS = ['cash', 'bank_transfer', 'qr_transfer', 'other'] as const;
+
+/** Record a payment the host received directly (cash, or a transfer seen on their own statement). */
+export async function recordPayment(invoiceId: string, formData: FormData) {
+  const amount = numberOrNull(formData.get('amount'));
+  const method = clean(formData.get('method'));
+  if (amount == null || Number.isNaN(amount) || amount <= 0) return { error: 'Enter an amount greater than zero.' };
+  if (!(PAYMENT_METHODS as readonly string[]).includes(method)) return { error: 'Choose how it was paid.' };
+
+  const supabase = (await createClient()) as any; // billing isn't in database.types.ts yet
+  const { error } = await supabase.rpc('record_billing_payment', {
+    p_invoice_id: invoiceId,
+    p_amount: amount,
+    p_method: method,
+    p_reference_number: clean(formData.get('reference')) || undefined,
+    p_note: clean(formData.get('note')) || undefined,
+  });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+/** Verify or reject a payment a payer submitted. Rejecting needs a reason the payer can act on. */
+export async function reviewPayment(paymentId: string, status: 'verified' | 'rejected', note: string) {
+  const reason = note.trim();
+  if (status === 'rejected' && !reason) return { error: 'Say why it was rejected so the payer knows what to fix.' };
+  const supabase = (await createClient()) as any;
+  const { error } = await supabase.rpc('review_billing_payment', {
+    p_payment_id: paymentId,
+    p_status: status,
+    p_reviewer_note: reason || undefined,
+  });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+/**
+ * The instructions payers read before paying. The QR image key is passed back
+ * unchanged: the RPC overwrites both fields, so omitting it would erase a QR
+ * that Platform Admin had uploaded.
+ */
+export async function saveInstructions(accountId: string, formData: FormData) {
+  const supabase = (await createClient()) as any;
+  const { data: account } = await supabase.from('billing_accounts').select('qr_storage_key').eq('id', accountId).maybeSingle();
+  if (!account) return { error: 'Billing account not found.' };
+  const { error } = await supabase.rpc('update_billing_account_instructions', {
+    p_account_id: accountId,
+    p_payment_instructions: clean(formData.get('instructions')),
+    p_qr_storage_key: account.qr_storage_key ?? undefined,
+  });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
