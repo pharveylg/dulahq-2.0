@@ -96,10 +96,28 @@ async function PublicDirectory() {
             />
           )}
         </Reveal>
+
+        <Reveal index={4}>
+          <h2 style={{ fontSize: 20, marginBottom: 4 }}>Courts</h2>
+          <p className="subtitle" style={{ marginBottom: 14 }}>
+            Book a court, or join the walk-in queue.
+          </p>
+          <a href={COURTS_URL} className="card" style={{ display: 'block', textDecoration: 'none' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Court Booking</div>
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 10 }}>{COURTS_DESCRIPTION}</p>
+            <span style={{ fontSize: 13 }}>Open courts.dulahq.app →</span>
+          </a>
+        </Reveal>
       </div>
     </>
   );
 }
+
+// Court booking is its own app on its own subdomain (not a route here), so it
+// is a plain link out. It has no entitlement in org_entitlements, so unlike
+// Clubs and Tournaments it is offered to everyone.
+const COURTS_URL = 'https://courts.dulahq.app';
+const COURTS_DESCRIPTION = 'Reserve pickleball court time, join the walk-in queue, and follow live scores.';
 
 function ProductTile({
   title,
@@ -107,13 +125,23 @@ function ProductTile({
   href,
   enabled,
   guestHref,
+  external,
 }: {
   title: string;
   description: string;
   href: string;
   enabled: boolean;
   guestHref: string;
+  external?: boolean;
 }) {
+  if (enabled && external) {
+    return (
+      <a href={href} className="card" style={{ display: 'block', textDecoration: 'none', height: '100%' }}>
+        <h2 style={{ fontSize: 19, marginBottom: 8 }}>{title}</h2>
+        <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>{description}</p>
+      </a>
+    );
+  }
   if (enabled) {
     return (
       <Link href={href} className="card" style={{ display: 'block', textDecoration: 'none', height: '100%' }}>
@@ -147,7 +175,7 @@ function OrgHome({ access }: { access: { club: boolean; tournament: boolean; tou
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: 20,
-        maxWidth: 720,
+        maxWidth: 1000,
         margin: '0 auto',
       }}
     >
@@ -167,6 +195,16 @@ function OrgHome({ access }: { access: { club: boolean; tournament: boolean; tou
           href={access.tournamentOrgSlug ? `/t/${access.tournamentOrgSlug}` : '/tournaments'}
           enabled={access.tournament}
           guestHref="/tournaments"
+        />
+      </Reveal>
+      <Reveal index={3}>
+        <ProductTile
+          title="Courts"
+          description={COURTS_DESCRIPTION}
+          href={COURTS_URL}
+          enabled
+          external
+          guestHref={COURTS_URL}
         />
       </Reveal>
     </div>
@@ -194,7 +232,7 @@ export default async function Home() {
           <div className="page-header" style={{ display: 'block', textAlign: 'center', marginBottom: 12 }}>
             <h1 style={{ fontSize: 32 }}>Dulà HQ</h1>
             <p className="subtitle" style={{ marginTop: 8, fontSize: 15 }}>
-              Run a club, or run a tournament.
+              Run a club, run a tournament, or book a court.
             </p>
           </div>
         </Reveal>
