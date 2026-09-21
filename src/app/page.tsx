@@ -2,26 +2,25 @@ import Link from 'next/link';
 import Reveal from '@/components/motion/Reveal';
 import Spotlight from '@/components/motion/Spotlight';
 import { createClient, getMyOrgProductAccess } from '@/lib/supabase/server';
+import { loadPublicClubs, loadPublicTournaments } from '@/lib/public-directory';
+import { CourtIcon } from '@/components/directory/DirectoryArt';
 import PublicClubList from './clubs/PublicClubList';
 import PublicTournamentList from './tournaments/PublicTournamentList';
 
 /**
- * Guest-and-no-org home page: the public directory, fused so the first
- * thing anyone sees is what's actually on the platform, not two empty-
- * feeling nav cards -- the same public_clubs / public_tournaments views
- * /clubs and /tournaments query on their own, side by side. Also what a
- * signed-in user with no org membership sees -- there's nothing of their
+ * Guest-and-no-org home page: the public directory, so the first thing anyone
+ * sees is what's actually on the platform. Clubs are logo tiles, tournaments
+ * are poster cards, and Courts -- its own app -- is a strip that links out.
+ * The same loaders and list components drive /clubs and /tournaments. Also
+ * what a signed-in user with no org membership sees -- there's nothing of their
  * own to show them yet, so they get exactly what a guest gets.
  */
 async function PublicDirectory() {
   const supabase = await createClient();
 
-  const [{ data: clubs, error: clubsError }, { data: tournaments, error: tournamentsError }] = await Promise.all([
-    supabase.from('public_clubs').select('slug, name, location, org_name').order('name'),
-    supabase
-      .from('public_tournaments')
-      .select('slug, name, poster_url, event_date, venue, org_slug, org_name')
-      .order('event_date', { ascending: false }),
+  const [{ clubs, error: clubsError }, { tournaments, error: tournamentsError }] = await Promise.all([
+    loadPublicClubs(supabase),
+    loadPublicTournaments(supabase),
   ]);
 
   return (
@@ -32,83 +31,54 @@ async function PublicDirectory() {
         </p>
       </Reveal>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: 32,
-        }}
-      >
+      <section style={{ marginBottom: 40 }}>
         <Reveal index={2}>
           <h2 style={{ fontSize: 20, marginBottom: 4 }}>Clubs</h2>
           <p className="subtitle" style={{ marginBottom: 14 }}>
             Browse public clubs, or sign in to manage your own.
           </p>
-          {clubsError && <p className="error-text">Couldn&apos;t load clubs: {clubsError.message}</p>}
-          {!clubsError && (!clubs || clubs.length === 0) && (
-            <div className="card empty-state">
-              <p>No clubs are publicly listed yet.</p>
-            </div>
-          )}
-          {clubs && clubs.length > 0 && (
-            <PublicClubList
-              clubs={clubs
-                .filter((club): club is typeof club & { slug: string; name: string; org_name: string } =>
-                  !!club.slug && !!club.name && !!club.org_name
-                )
-                .map((club) => ({
-                  slug: club.slug,
-                  name: club.name,
-                  orgName: club.org_name,
-                  location: club.location,
-                }))}
-            />
-          )}
         </Reveal>
+        {clubsError && <p className="error-text">Couldn&apos;t load clubs: {clubsError}</p>}
+        {!clubsError && clubs.length === 0 && (
+          <div className="card empty-state">
+            <p>No clubs are publicly listed yet.</p>
+          </div>
+        )}
+        {clubs.length > 0 && <PublicClubList clubs={clubs} />}
+      </section>
 
+      <section style={{ marginBottom: 40 }}>
         <Reveal index={3}>
           <h2 style={{ fontSize: 20, marginBottom: 4 }}>Tournaments</h2>
           <p className="subtitle" style={{ marginBottom: 14 }}>
             Browse public tournaments, or sign in to manage your own.
           </p>
-          {tournamentsError && <p className="error-text">Couldn&apos;t load tournaments: {tournamentsError.message}</p>}
-          {!tournamentsError && (!tournaments || tournaments.length === 0) && (
-            <div className="card empty-state">
-              <p>No tournaments are publicly listed yet.</p>
-            </div>
-          )}
-          {tournaments && tournaments.length > 0 && (
-            <PublicTournamentList
-              tournaments={tournaments
-                .filter(
-                  (t): t is typeof t & { slug: string; name: string; org_slug: string; org_name: string } =>
-                    !!t.slug && !!t.name && !!t.org_slug && !!t.org_name
-                )
-                .map((t) => ({
-                  slug: t.slug,
-                  name: t.name,
-                  posterUrl: t.poster_url,
-                  eventDate: t.event_date,
-                  venue: t.venue,
-                  orgSlug: t.org_slug,
-                  orgName: t.org_name,
-                }))}
-            />
-          )}
         </Reveal>
+        {tournamentsError && <p className="error-text">Couldn&apos;t load tournaments: {tournamentsError}</p>}
+        {!tournamentsError && tournaments.length === 0 && (
+          <div className="card empty-state">
+            <p>No tournaments are publicly listed yet.</p>
+          </div>
+        )}
+        {tournaments.length > 0 && <PublicTournamentList tournaments={tournaments} />}
+      </section>
 
+      <section>
         <Reveal index={4}>
           <h2 style={{ fontSize: 20, marginBottom: 4 }}>Courts</h2>
           <p className="subtitle" style={{ marginBottom: 14 }}>
             Book a court, or join the walk-in queue.
           </p>
-          <a href={COURTS_URL} className="card" style={{ display: 'block', textDecoration: 'none' }}>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Court Booking</div>
-            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 10 }}>{COURTS_DESCRIPTION}</p>
-            <span style={{ fontSize: 13 }}>Open courts.dulahq.app →</span>
+          <a href={COURTS_URL} className="dir-strip">
+            <CourtIcon size={44} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="dir-name" style={{ marginTop: 0 }}>Court booking</span>
+              <span className="dir-meta">{COURTS_DESCRIPTION}</span>
+            </span>
+            <span className="chip">Open courts.dulahq.app →</span>
           </a>
         </Reveal>
-      </div>
+      </section>
     </>
   );
 }

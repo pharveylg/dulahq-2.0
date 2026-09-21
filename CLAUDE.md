@@ -2178,6 +2178,95 @@ clean, unit tests 20/20.
 
 ---
 
+## 0r. Public directory: logo tiles and posters (2026-09-21)
+
+The homepage, `/clubs` and `/tournaments` stopped being text lists. **Clubs are
+logo tiles; tournaments are 2:3 poster cards** (chosen from four mock-ups; the
+Courts link is a one-row strip). One set of components serves all three pages
+(`PublicClubList`, `PublicTournamentList`) and one loader module,
+`src/lib/public-directory.ts`, owns the query, the defensive filtering and the
+logo resolution, so the pages can't drift.
+
+### Where each image comes from
+
+- **Club logo:** the club's own logo, else the org's `logo_url`, else a
+  generated crest — the club-over-org rule already in `club-branding.ts`. The
+  club logo is a private R2 key, so the server signs a 6-hour URL per request;
+  **if signing fails the tile silently falls back**, because a directory page
+  that errors over a logo is worse than one with a crest. `public_clubs` gained
+  `logo_key` and `org_logo_url` (`phase12a`; `security_invoker` and its
+  SELECT-only grants were checked afterwards, not assumed). Exposing the key
+  grants nothing on its own — it is only a path.
+- **Tournament poster:** `tournaments.poster_url`, a public URL in the existing
+  `tournament-posters` storage bucket. Empty means "generate one".
+- **Both** degrade to the generated art if the image fails to load (`onError`),
+  not just when the URL is missing — signed URLs expire and files vanish.
+
+### One drawing, two consumers
+
+`src/lib/crest.ts` is pure, dependency-free and limited to syntax Node can
+strip, so the React fallback and `scripts/seed-directory-art.mjs` (which imports
+it straight from `.ts`) draw **the same crest**. Verified: the on-the-fly
+fallback for a club whose logo I blanked looked identical to its seeded image.
+
+- **It is injected as markup, and club names are user input.** Only fixed
+  constants, validated `#RRGGBB` colors, and initials filtered to letters and
+  digits can reach the string; a unit test feeds it a `<img onerror>` name and a
+  `"><script>` accent and asserts nothing but its own tags come out.
+- **Shape and fill alone weren't enough to tell clubs apart.** The first render
+  had the two Gali clubs (same initials, same org accent) as near-twins — same
+  shield, same green, different ring. A third variable (none / star /
+  underline) fixed it, and a test now requires the seeded look-alikes to differ
+  in **at least two** visible ways. Clubs are shields or roundels, tournaments
+  always hexagons, so the kinds read apart at thumbnail size.
+
+### Seed art (`scripts/seed-directory-art.mjs`)
+
+Renders one crest per club (R2, `clubs.branding.logoKey`) and one poster per
+tournament (`tournament-posters`, `poster_url`) with `sharp`. It only touches
+the four showcase orgs, **skips anything that already has an image** so it can't
+overwrite a real upload, and `--force` replaces the seeded ones (deleting the
+old R2 object once the row points at the new one). `--preview <dir>` renders
+locally and uploads nothing — that is how the images were reviewed before the
+real run. `seed-showcase-demo.mjs` runs it last, but only warns if it fails, so
+missing R2 credentials don't turn a good data seed into a failed one.
+
+### Also fixed on the way
+
+- The homepage logged React's duplicate-key error: two orgs both run a "Tiger
+  Cup" and a "National Team Qualifiers", and rows were keyed by slug alone.
+  Now keyed by `orgSlug/slug`.
+- At phone width one column of 2:3 posters was ~500px each (over 3,000px of
+  scrolling for five tournaments). Below 520px both grids go two-across.
+
+### Known edges
+
+- **Re-seeding leaves the previous run's R2 crests orphaned.** The seed wipes
+  the showcase orgs (their clubs go with them) but nothing deletes the objects;
+  they are small, and posters are overwritten in place so those don't pile up.
+- Seeded posters have the tournament name printed in the art, and the caption
+  below repeats it. Real organizer posters usually carry a title too, and the
+  caption is what makes two "Tiger Cup" cards distinguishable (organizer, venue).
+- Signed logo URLs are new on every render, so the browser can't cache club
+  logos across page loads. Fine at four clubs; revisit if the directory grows.
+- Poster text renders in the fallback sans (no Oswald on the machine running the
+  seed); the app's on-the-fly crests do use Oswald where the page loads it.
+
+### Verified
+
+Unit tests 20 → **33** (initials rules, determinism, override validation, the
+markup-injection case, the at-least-two-differences rule). RLS 180 → **187**:
+anon sees a listed club's logo key and its org logo, sees **nothing** of an
+unlisted club (the key included), sees nothing once the org is suspended, gets
+null for a club with no logo, and still can't write through the view. Driven in
+a browser as a guest: real logos and posters load (club logos as signed R2
+URLs), links are right (`/c/<club>`, `/t/<org>/<tournament>`), the console is
+clean, `/clubs` and `/tournaments` render the same components, and a club and a
+tournament with their images blanked showed the generated versions — both were
+restored to their exact original values afterwards. `tsc` clean, build clean.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

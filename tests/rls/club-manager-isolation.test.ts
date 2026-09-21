@@ -2358,3 +2358,69 @@ describe('tournament finance queue (phase11b)', () => {
     await adminClient.auth.admin.deleteUser(treasurerId);
   });
 });
+
+/**
+ * The homepage shows club logos, so public_clubs now exposes logo_key (the R2
+ * object key, which is only a path -- objects are private and the app signs a
+ * URL) and org_logo_url (the fallback). Both must follow the view's existing
+ * fence: only listed clubs of active orgs, and nothing else about a club that
+ * opted out of the directory.
+ */
+describe('public directory logos (phase12a)', () => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  let listedId: string;
+  let privateId: string;
+  let anonClient: ReturnType<typeof createClient>;
+
+  it('sets up a listed club with a logo and a private club with one', async () => {
+    anonClient = createClient(SUPABASE_URL, ANON_KEY);
+    await adminClient.from('organizations').update({ logo_url: 'https://example.test/org-logo.png' }).eq('id', orgA.id);
+    listedId = must(await adminClient.from('clubs').insert({
+      name: 'RLS Listed Club', slug: `rls-listed-${suffix}`, org_id: orgA.id, publicly_listed: true,
+      branding: { logoKey: `tenants/rls/branding/listed-${suffix}.png` },
+    }).select('id').single(), 'listed club').id;
+    privateId = must(await adminClient.from('clubs').insert({
+      name: 'RLS Private Club', slug: `rls-private-${suffix}`, org_id: orgA.id, publicly_listed: false,
+      branding: { logoKey: `tenants/rls/branding/private-${suffix}.png` },
+    }).select('id').single(), 'private club').id;
+  });
+
+  it('anon sees the listed club logo key and its org logo', async () => {
+    const { data, error } = await anonClient.from('public_clubs').select('slug, logo_key, org_logo_url').eq('slug', `rls-listed-${suffix}`);
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+    expect(data![0].logo_key).toBe(`tenants/rls/branding/listed-${suffix}.png`);
+    expect(data![0].org_logo_url).toBe('https://example.test/org-logo.png');
+  });
+
+  it('anon sees nothing of a club that is not publicly listed, logo key included', async () => {
+    const { data } = await anonClient.from('public_clubs').select('slug, logo_key').eq('slug', `rls-private-${suffix}`);
+    expect(data ?? []).toHaveLength(0);
+    const all = await anonClient.from('public_clubs').select('logo_key');
+    expect((all.data ?? []).map((r) => r.logo_key)).not.toContain(`tenants/rls/branding/private-${suffix}.png`);
+  });
+
+  it('a club with no logo reads as null (the app then draws a crest)', async () => {
+    await adminClient.from('clubs').update({ branding: {} }).eq('id', listedId);
+    const { data } = await anonClient.from('public_clubs').select('logo_key').eq('slug', `rls-listed-${suffix}`);
+    expect(data).toHaveLength(1);
+    expect(data![0].logo_key).toBeNull();
+  });
+
+  it('a suspended org drops out of the directory entirely', async () => {
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+    const { data } = await anonClient.from('public_clubs').select('slug').eq('slug', `rls-listed-${suffix}`);
+    expect(data ?? []).toHaveLength(0);
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+  });
+
+  it('anon still cannot write through the view', async () => {
+    const { error } = await anonClient.from('public_clubs').update({ name: 'hijacked' }).eq('slug', `rls-listed-${suffix}`);
+    expect(error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('organizations').update({ status: 'active', logo_url: null }).eq('id', orgA.id);
+    await adminClient.from('clubs').delete().in('id', [listedId, privateId].filter(Boolean));
+  });
+});

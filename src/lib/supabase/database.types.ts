@@ -4572,8 +4572,10 @@ export type Database = {
           about: string | null
           id: string | null
           location: string | null
+          logo_key: string | null
           name: string | null
           org_accent: string | null
+          org_logo_url: string | null
           org_name: string | null
           org_slug: string | null
           slug: string | null

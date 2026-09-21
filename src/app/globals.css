@@ -377,6 +377,178 @@ h1, h2, h3, .brand {
   font-family: var(--font-mono);
 }
 
+/* Public directory (homepage, /clubs, /tournaments): logo tiles for clubs,
+   poster cards for tournaments. Each grid item is a Reveal wrapper div, so the
+   tile inside stretches to fill it and a row of tiles stays the same height. */
+.dir-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.dir-grid-posters {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.dir-grid > div {
+  display: flex;
+  min-width: 0;
+}
+
+.dir-tile,
+.poster {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow-xs);
+  transition: border-color .25s ease, box-shadow .3s var(--ease-spring), transform .3s var(--ease-spring);
+}
+.dir-tile:hover,
+.poster:hover,
+.dir-tile:focus-visible,
+.poster:focus-visible {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+.dir-tile:focus-visible,
+.poster:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dir-tile {
+  align-items: center;
+  text-align: center;
+  padding: 18px 10px 14px;
+}
+.dir-logo {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The generated crest is drawn at a fixed pixel size; let it follow the box so
+   the smaller phone-width logo doesn't overflow its tile. */
+.dir-logo > span,
+.dir-logo svg {
+  width: 100%;
+  height: 100%;
+}
+@media (max-width: 520px) {
+  /* One column of 2:3 posters is ~500px each -- five tournaments would be a
+     3,000px scroll. Two across keeps the directory scannable on a phone. */
+  .dir-grid,
+  .dir-grid-posters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .dir-tile {
+    padding: 14px 8px 12px;
+  }
+  .dir-logo {
+    width: 72px;
+    height: 72px;
+  }
+}
+.dir-name {
+  display: block;
+  margin-top: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.dir-meta {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.poster {
+  overflow: hidden;
+}
+.poster-art {
+  position: relative;
+  display: block;
+  aspect-ratio: 2 / 3;
+  background: var(--surface-raised);
+}
+.poster-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.poster-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.poster-date {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(11, 18, 32, .78);
+  color: #F1F5F9;
+  font-family: var(--font-heading);
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.poster-cap {
+  display: block;
+  padding: 10px 12px 12px;
+}
+
+/* One-row strip for a product that lives in its own app (Courts). */
+.dir-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow-xs);
+  transition: border-color .25s ease, box-shadow .3s var(--ease-spring), transform .3s var(--ease-spring);
+}
+.dir-strip:hover,
+.dir-strip:focus-visible {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dir-tile,
+  .poster,
+  .dir-strip {
+    transition: none;
+  }
+  .dir-tile:hover,
+  .poster:hover,
+  .dir-strip:hover,
+  .dir-tile:focus-visible,
+  .poster:focus-visible,
+  .dir-strip:focus-visible {
+    transform: none;
+  }
+}
+
 .chip {
   font-family: var(--font-heading);
   font-size: 10.5px;

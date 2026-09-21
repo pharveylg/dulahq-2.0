@@ -3,6 +3,7 @@ import { createClient, getCurrentDulaUser, getClubCreatableOrgs, isPlatformAdmin
 import DemoDataControls from './DemoDataControls';
 import ClubList from './ClubList';
 import PublicClubList from './PublicClubList';
+import { loadPublicClubs } from '@/lib/public-directory';
 
 /**
  * Guests get the public directory (§6.C) -- clubs that opted into
@@ -12,10 +13,7 @@ import PublicClubList from './PublicClubList';
  */
 async function GuestClubsPage() {
   const supabase = await createClient();
-  const { data: clubs, error } = await supabase
-    .from('public_clubs')
-    .select('slug, name, location, org_name')
-    .order('name');
+  const { clubs, error } = await loadPublicClubs(supabase);
 
   return (
     <main className="page">
@@ -27,33 +25,15 @@ async function GuestClubsPage() {
           </div>
         </div>
 
-        {error && <p className="error-text">Couldn&apos;t load clubs: {error.message}</p>}
+        {error && <p className="error-text">Couldn&apos;t load clubs: {error}</p>}
 
-        {!error && (!clubs || clubs.length === 0) && (
+        {!error && clubs.length === 0 && (
           <div className="card empty-state">
             <p>No clubs are publicly listed yet.</p>
           </div>
         )}
 
-        {clubs && clubs.length > 0 && (
-          <PublicClubList
-            // public_clubs is a view, so PostgREST can't see that
-            // clubs.slug/name and organizations.name (joined) are all
-            // NOT NULL at the base-table level -- filter defensively
-            // rather than assert, since a broken link is worse than a
-            // skipped row if that guarantee is ever wrong.
-            clubs={clubs
-              .filter((club): club is typeof club & { slug: string; name: string; org_name: string } =>
-                !!club.slug && !!club.name && !!club.org_name
-              )
-              .map((club) => ({
-                slug: club.slug,
-                name: club.name,
-                orgName: club.org_name,
-                location: club.location,
-              }))}
-          />
-        )}
+        {clubs.length > 0 && <PublicClubList clubs={clubs} />}
       </div>
     </main>
   );

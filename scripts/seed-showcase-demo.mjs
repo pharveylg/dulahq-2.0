@@ -26,6 +26,7 @@
 // from the database.
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const env = {};
 for (const line of readFileSync('.env.local', 'utf-8').split(/\r?\n/)) {
@@ -573,6 +574,15 @@ function writeReport(report) {
   }
 
   writeFileSync('docs/demo-data-showcase.md', lines.join('\n'));
+
+  // Club logos and tournament posters for the public directory. A separate
+  // script so it can also be run alone; a failure here (R2 credentials, say)
+  // should not turn a successful data seed into a failed one, so it only warns.
+  try {
+    execFileSync(process.execPath, ['--no-warnings', 'scripts/seed-directory-art.mjs'], { stdio: 'inherit' });
+  } catch {
+    console.warn('Directory art was not seeded -- run "node scripts/seed-directory-art.mjs" once the error above is fixed.');
+  }
 }
 
 main().catch((err) => {
