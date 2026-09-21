@@ -155,10 +155,12 @@ claimed by a club, and asks you for a **URL slug** (for example `u12`). If there
 no such team you'll see *"No unclaimed teams available to link."*
 
 **Add a player.** Open a team. On the **Roster** tab, add a player: **Player
-name**, **Jersey #**, **Position** and **Age** (the name is required). Open a
-player to see their full profile.
+name**, **Jersey #**, **Position** and **Age** (the name is required).
 
-The player profile has six tabs:
+Choose a player and a summary panel opens with **Overview, Development, Fees,
+Membership** and **Family**. Fees are added and paid there. Its **Development** tab
+has **Open development profile →**, which opens the **full profile page**, the only
+place **Documents** appears. The full profile has six tabs:
 
 | Tab | What it holds |
 |---|---|

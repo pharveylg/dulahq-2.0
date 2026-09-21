@@ -78,6 +78,18 @@ describe('renderBlock', () => {
     expect(renderBlock(withManager, 'club', 'coach')).toContain('Assigned teams only');
   });
 
+  it('a shared key reaches "This tournament" in a tournament table, not "Whole club"', () => {
+    // view_audit_log is catalogued as club scope but a tournament role holds it for
+    // its own tournament. Saying "Whole club" there would be wrong.
+    const tournamentTable = renderBlock(catalog, 'tournament', 'organizer');
+    const auditRow = tournamentTable.split('\n').find((l: string) => l.includes('View audit log'));
+    expect(auditRow).toContain('This tournament');
+    expect(auditRow).not.toContain('Whole club');
+    // ...while the same key in a club table still means the whole club
+    const clubTable = renderBlock(catalog, 'club', 'treasurer');
+    expect(clubTable.split('\n').find((l: string) => l.includes('View audit log'))).toContain('Whole club');
+  });
+
   it('escapes pipes so a description cannot break the table', () => {
     const md = renderBlock(catalog, 'tournament', 'treasurer');
     expect(md).toContain('Fees \\| payments');

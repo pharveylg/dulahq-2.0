@@ -15,12 +15,15 @@ describing it as if it did._
 | Running the Dulà HQ platform itself | [Platform admin](platform-admin.md) | The platform console at `/platformconsole` |
 | The administrator of an organization (the tenant) | [Org admin](org-admin.md) | Clubs, tournaments and staff across your organization |
 | Running one club | [Club manager](club-manager.md) | Your club's page at `/c/your-club` |
+| The club's technical administrator | [Club IT admin](club-it-admin.md) | The club's IT administration page |
+| A coach, assistant coach or team manager | [Coach and team manager](coach-and-team-manager.md) | Your team's page: training, development, rosters |
+| A club treasurer, secretary or general staff member | [Club office roles](club-office-roles.md) | Finances, meetings and trips on the club's page |
+| Running a tournament | [Tournament organizer](tournament-organizer.md) | The tournament console at `/tm/your-org/your-tournament` |
+| Helping run a tournament (treasurer, IT admin, coordinators) | [Tournament staff](tournament-staff.md) | The same console, with the access your role holds |
 | A parent, or a player, whose club uses Dulà HQ | [Guardian and player](guardian-and-player.md) | `/guardian` or `/player` |
 
-Guides for the club IT admin, coaches and team managers, club office roles
-(treasurer, secretary, staff), the tournament organizer, and other tournament
-staff are planned. Until they exist, the role names and what each can do are in
-the tables in the guides above and in [the demo accounts](../demo-data-showcase.md).
+The demo accounts for most of these roles are listed in
+[demo-data-showcase.md](../demo-data-showcase.md).
 
 ## The ideas you need first
 

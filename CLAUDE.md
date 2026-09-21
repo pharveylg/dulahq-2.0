@@ -2270,12 +2270,12 @@ restored to their exact original values afterwards. `tsc` clean, build clean.
 ## 0s. How-to guides, and the product gaps writing them found (2026-09-21)
 
 `docs/guides/` — role guides written from the code, the live database and the demo
-accounts. **First batch only:** `README.md` (start here), `platform-admin.md`,
-`org-admin.md`, `club-manager.md`, `guardian-and-player.md`. **Still to write:**
-club IT admin, coach and team manager, club office roles (treasurer/secretary/
-staff), tournament organizer, other tournament staff. Each guide has a "last
-checked" date and a "not available yet" list, on purpose: a guide that describes
-a feature that doesn't exist is worse than none.
+accounts. **Complete:** `README.md` (start here), `platform-admin.md`,
+`org-admin.md`, `club-manager.md`, `club-it-admin.md`, `coach-and-team-manager.md`,
+`club-office-roles.md`, `tournament-organizer.md`, `tournament-staff.md`,
+`guardian-and-player.md`. Each has a "last checked" date and a "not available yet"
+list, on purpose: a guide that describes a feature that doesn't exist is worse than
+none.
 
 ### The permission tables are generated, and that is the point
 
@@ -2288,6 +2288,9 @@ fails if any is stale. **The RLS suite runs the same check against the live
 database**, so changing a role's bundle without regenerating fails a test — I
 corrupted a table to confirm it fails with the file name and the fix in the message.
 
+- **A second reach fix, found writing the tournament guides:** the three shared keys
+  are catalogued as club-scope, so a tournament role's table said "Whole club" for
+  them. In a tournament context they now read "This tournament".
 - The marker is `<context>:<role>` because `secretary` and `treasurer` are one
   string across the club and tournament worlds (§0l). A club context keeps
   club/team-scope keys; a tournament context keeps tournament-scope keys plus the
@@ -2325,6 +2328,24 @@ points at the workaround.
    `false` on both and no code writes it, so the public directory only ever shows
    what was set directly in the database.
 
+5. **Club office roles can't be given a team, so their document, membership and fee
+   permissions have no screen.** `TEAM_SCOPED_ROLES` in `StaffRow.tsx` is coach,
+   assistant coach and team manager only; a player's profile opens only for someone
+   assigned to the team (`view_player` is team-scoped). Confirmed live as the demo
+   `staff` user: every team says "Not assigned", the team page shows 0 players, and
+   the Finances tab offers only "+ Add expense". A treasurer therefore can't record a
+   fee charge or payment, and there is no club-level way to add a charge.
+6. **Six tournament roles hold a permission that no screen uses** (team coordinator,
+   secretary, logistics, communications, volunteer coordinator, referee coordinator).
+   The console has Entries, Categories, Finance and Staff only. Also worth knowing:
+   non-organizer staff can read entries but **not** the contacts (`tec_read` is
+   `can_read_tournament`, organizer or org admin) — a good boundary, but the guides
+   originally claimed otherwise until the policy was read.
+7. **The roster's inline player panel has five tabs and no Documents; the full profile
+   has six.** The panel's Development tab links to the full page ("Open development
+   profile →"), which is the only place Documents appears. Not a bug, but nothing tells
+   a coach that Documents exists.
+
 Smaller: there is no "create team" (the club page only links an unclaimed team),
 no staff sign-up page (the app links a login by email but never creates one), and
 no "forgot password" link. These were known; the guides now say so where a reader
@@ -2333,8 +2354,11 @@ would hit them.
 ### What was and wasn't clicked through
 
 Driven live: the org admin's club page and Staff tab (gap 1), the guardian's normal
-sign-in and page (gap 2, and the guardian guide's tab and banner wording), and the
-console screens' text was read from the running code. **Not clicked through:** the
+sign-in and page (gap 2, and the guardian guide's tab and banner wording), the demo
+`staff` user's whole club page (gap 5), and the coach and team manager on the same
+player (the coach's team page, schedule and add-player forms, the full profile's six
+tabs and development controls; the team manager sees the same sub-tabs with no add
+controls). The console screens' text was otherwise read from the running code. **Not clicked through:** the
 platform console's suspend/provision flows in this session (they were driven in
 earlier ones, §0m/§0n), the club manager's finance and staff forms, and the
 guardian's confirm/decline and payment forms. Their steps come from the code, so

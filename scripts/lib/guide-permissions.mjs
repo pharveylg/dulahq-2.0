@@ -37,8 +37,11 @@ const REACH_ORDER = ['club', 'team', 'tournament', 'player'];
 // limited to the teams they're assigned to.
 const CLUB_WIDE_ROLES = new Set(['club_manager']);
 
-function reachFor(permission, role) {
+function reachFor(permission, role, context) {
   if (permission.scope === 'team' && CLUB_WIDE_ROLES.has(role)) return 'Every team in the club';
+  // The shared keys are catalogued as club scope, but a tournament role holds them for
+  // its own tournament, so "Whole club" would be wrong in a tournament table.
+  if (context === 'tournament' && REUSED_TOURNAMENT_KEYS.has(permission.key)) return REACH.tournament;
   return REACH[permission.scope] ?? cell(permission.scope);
 }
 
@@ -79,7 +82,7 @@ const cell = (text) => String(text ?? '').replace(/\s+/g, ' ').replace(/\|/g, '\
 
 export function renderBlock(catalog, context, role) {
   const rows = bundleFor(catalog, context, role).map(
-    (p) => `| **${cell(p.label)}** | ${cell(p.description)} | ${reachFor(p, role)} |`
+    (p) => `| **${cell(p.label)}** | ${cell(p.description)} | ${reachFor(p, role, context)} |`
   );
   return [
     '_Generated from the platform permission catalog. Edit the catalog, not this table — run `npm run docs:permissions` to refresh it._',
