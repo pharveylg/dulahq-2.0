@@ -2424,3 +2424,33 @@ describe('public directory logos (phase12a)', () => {
     await adminClient.from('clubs').delete().in('id', [listedId, privateId].filter(Boolean));
   });
 });
+
+/**
+ * The permission tables in docs/guides are generated from the live catalog
+ * (npm run docs:permissions). If someone changes what a role can do and forgets
+ * to regenerate, a guide would confidently describe the old role -- so this fails
+ * until they do, the same idea as the anon-executable and org-fence guards.
+ */
+describe('how-to guide permission tables match the live catalog', () => {
+  it('every generated table in docs/guides is current', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { applyBlocks } = await import('../../scripts/lib/guide-permissions.mjs');
+
+    const permissions = must(await adminClient.from('permissions').select('key, scope, label, description'), 'permissions');
+    const roleDefaults = must(await adminClient.from('role_permission_defaults').select('role, permission_key'), 'role defaults');
+    const guardianDefaults = must(await adminClient.from('guardian_permission_defaults').select('permission_key'), 'guardian defaults');
+    const catalog = { permissions, roleDefaults, guardianDefaults };
+
+    const dir = 'docs/guides';
+    let tables = 0;
+    const stale: string[] = [];
+    for (const file of readdirSync(dir).filter((n: string) => n.endsWith('.md'))) {
+      const { changed, blocks } = applyBlocks(readFileSync(`${dir}/${file}`, 'utf-8'), catalog);
+      tables += blocks;
+      if (changed) stale.push(file);
+    }
+    expect(stale, `out of date: ${stale.join(', ')} -- run "npm run docs:permissions"`).toEqual([]);
+    // a guide folder with no tables at all would pass the check above by doing nothing
+    expect(tables).toBeGreaterThan(0);
+  });
+});

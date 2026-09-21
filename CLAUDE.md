@@ -2267,6 +2267,86 @@ restored to their exact original values afterwards. `tsc` clean, build clean.
 
 ---
 
+## 0s. How-to guides, and the product gaps writing them found (2026-09-21)
+
+`docs/guides/` — role guides written from the code, the live database and the demo
+accounts. **First batch only:** `README.md` (start here), `platform-admin.md`,
+`org-admin.md`, `club-manager.md`, `guardian-and-player.md`. **Still to write:**
+club IT admin, coach and team manager, club office roles (treasurer/secretary/
+staff), tournament organizer, other tournament staff. Each guide has a "last
+checked" date and a "not available yet" list, on purpose: a guide that describes
+a feature that doesn't exist is worse than none.
+
+### The permission tables are generated, and that is the point
+
+The tables of "what this role can do" are not typed. `scripts/lib/guide-
+permissions.mjs` renders them from the live catalog (`permissions`,
+`role_permission_defaults`, `guardian_permission_defaults`) between
+`<!-- BEGIN permissions: club:club_manager -->` / `<!-- END permissions -->`
+markers; `npm run docs:permissions` rewrites them and `docs:permissions:check`
+fails if any is stale. **The RLS suite runs the same check against the live
+database**, so changing a role's bundle without regenerating fails a test — I
+corrupted a table to confirm it fails with the file name and the fix in the message.
+
+- The marker is `<context>:<role>` because `secretary` and `treasurer` are one
+  string across the club and tournament worlds (§0l). A club context keeps
+  club/team-scope keys; a tournament context keeps tournament-scope keys plus the
+  three shared ones (`view_audit_log`, `manage_account_status`,
+  `submit_support_request`). A marker that resolves to nothing throws instead of
+  rendering an empty table, since that is nearly always the wrong context.
+- **A bug the first render exposed:** the club manager's team-level permissions
+  were labelled "Assigned teams only". `has_staff_permission` short-circuits the
+  team fence for `club_manager` (§0i), so they reach every team. The renderer now
+  says "Every team in the club" for that role; other roles keep the narrow wording.
+  Worth remembering: a generated table is only as right as the rule that labels it.
+- Platform admin and org admin have no table: they are identities (`platform_
+  admins`, `org_members`), not catalog roles.
+
+### Gaps found while checking the guides against the app
+
+None of these are fixed. Each guide documents the current behaviour honestly and
+points at the workaround.
+
+1. **An org admin cannot add staff to a club — so nobody can appoint the first
+   club manager.** `AddStaffForm` renders only for `is_club_manager`, which is false
+   for an org admin, and the `/clubs/new` page tells them to "add yourself or someone
+   else as club_manager on the club's page". Confirmed live as the Usna Gali org
+   admin: badge "No access here", "My teams (0 of 3)", no form. It is a **UI-only
+   gap**: `club_staff_write` is `can_admin_club`, which includes org admins. Today a
+   platform admin has to do it (`is_club_manager` is true for them).
+2. **Guardians and players land on the public homepage after a normal sign-in, with
+   no link to `/guardian` or `/player`.** Login always redirects to `/`; the only
+   routes into those pages are the `/demo` buttons and notification links. Confirmed
+   live as Mylene Bautista.
+3. **An org admin's Tournaments tile opens the tournament engine (`/t/<org>`), and
+   nothing links to the native console.** `/tournaments` ("Tournaments you manage")
+   and `/tm/<org>/<tournament>` are reachable only by typing them.
+4. **Nothing can list a club or tournament publicly.** `publicly_listed` defaults to
+   `false` on both and no code writes it, so the public directory only ever shows
+   what was set directly in the database.
+
+Smaller: there is no "create team" (the club page only links an unclaimed team),
+no staff sign-up page (the app links a login by email but never creates one), and
+no "forgot password" link. These were known; the guides now say so where a reader
+would hit them.
+
+### What was and wasn't clicked through
+
+Driven live: the org admin's club page and Staff tab (gap 1), the guardian's normal
+sign-in and page (gap 2, and the guardian guide's tab and banner wording), and the
+console screens' text was read from the running code. **Not clicked through:** the
+platform console's suspend/provision flows in this session (they were driven in
+earlier ones, §0m/§0n), the club manager's finance and staff forms, and the
+guardian's confirm/decline and payment forms. Their steps come from the code, so
+treat those sections as "code-checked".
+
+I also could not test whether `/guardian-signup` accepts an email nobody invited:
+Supabase rejects `.local` and `example.com` addresses, and using a real mailbox to
+find out wasn't worth it. The guides therefore say only what the code shows — that
+it is the sole sign-up page and is written for invited guardians.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |
