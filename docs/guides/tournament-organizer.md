@@ -46,11 +46,9 @@ what an organization has switched on.
 ## Getting to your console
 
 The tournament console is at `/tm/your-org/your-tournament`, for example
-`/tm/davao-unity-sports/tiger-cup`. `/tournaments` also lists **Tournaments you
-manage** with a link to each.
-
-**After a normal sign-in you land on the public homepage, and nothing there links to
-your console.** Bookmark the address. This is a known gap.
+`/tm/davao-unity-sports/tiger-cup`. You don't have to type it: after you sign in, the
+homepage shows a **Tournaments you manage** strip with a **Manage** link for each
+tournament, and `/tournaments` lists the same ones.
 
 At the top of the console you'll see the tournament's name, its organization, date and
 venue, and **Open tournament engine**, which goes to the separate app that holds
@@ -177,12 +175,11 @@ it, so the roster step falls to an **organization admin**. Ask yours.
 | *That is still referenced by something else* when deleting a category | Teams have entered it |
 | No **Finance** tab | You hold no finance permission |
 | No **Suspend** button on staff | That's the IT admin's job, or the organization admin's |
-| You can't find the console | Use `/tm/your-org/your-tournament`, or `/tournaments` |
+| You can't find the console | Look for the **Tournaments you manage** strip on the homepage. If it isn't there, you haven't been added as staff on that tournament yet |
 | *You don't have permission to do that* | Your role doesn't include it |
 
 ## Not available yet
 
-- A link to your console from the homepage.
 - Public self-service registration. Teams can't sign themselves up; you or an org
   admin add them.
 - A screen where a team sees its entry invoice and reports a payment. Until one

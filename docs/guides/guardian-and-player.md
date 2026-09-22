@@ -6,7 +6,7 @@ when the team wants to enter a tournament.
 
 _Last checked: 2026-09-21 · Try it: sign in at `/demo` as **Guardian** (Mylene
 Bautista) or **Player** (Angelica Alvarado, the same player). The demo buttons take
-you straight to your page; a normal sign-in doesn't, see the note below._
+you straight to your page, and so does a normal sign-in._
 
 ## Get your account
 
@@ -26,16 +26,14 @@ If you sign in later and the club hasn't linked you, you'll see *No guardian
 account*, or *No children linked to your account yet — ask your club to link you to
 your player.* The club needs to link you.
 
-### Finding your page again (read this)
+### Finding your page again
 
-**After a normal sign-in you land on the Dulà HQ homepage, and there is no link
-from there to your page.** Your page is its own address:
+After you sign in you're taken straight to your page: `/guardian` for guardians,
+`/player` for players. A **My children** (or **My profile**) button also sits in the top
+bar on every page, and notifications link straight to it.
 
-- Guardians: `/guardian`
-- Players: `/player`
-
-**Bookmark it.** Notifications also link straight to it. Until the app adds a link,
-this is the way in.
+If you're also on a club's staff, you keep the club's homepage instead, and use that
+button to reach your children.
 
 ## Your page as a guardian
 
@@ -172,13 +170,12 @@ players 18 and over get the notifications themselves.
 | *No guardian account* | Your login isn't linked to a guardian record. Ask the club to add you and invite you |
 | *No children linked…* | You have an account, but no child is attached. Ask the club to link you |
 | You can't sign up | Use the exact email the club entered. Ask the club to check it and to choose **Invite** |
-| You signed in and see a list of clubs | That's the public homepage. Go to `/guardian` (or `/player`) |
+| You see a list of clubs instead of your child | Use **My children** (or **My profile**) in the top bar. If it isn't there, your login isn't linked to a guardian or player record yet: ask the club |
 | A tab is empty | Either nothing has happened yet, or the club hasn't allowed you to see it |
 | A payment shows "submitted" for days | The club hasn't verified it yet. Ask them |
 
 ## Not available yet
 
-- A link to your page from the homepage or the top bar.
 - A **forgot password** option. Ask the club to pass it to the platform team.
 - Email of any kind: invitations, reminders and receipts.
 - Paying a fee charge inside the app. Only QR invoices in **Billing** can be

@@ -38,8 +38,8 @@ are built, but there is nothing to click. Each section below says so plainly.
 1. An organization admin or the organizer adds you on the console's **Staff** tab,
    using your email and choosing your role. You need a Dulà HQ login first. The app
    can't create one.
-2. Open the console at `/tm/your-org/your-tournament`. Nothing on the homepage links
-   to it, so **bookmark it**. `/tournaments` also lists **Tournaments you manage**.
+2. Sign in and open the **Manage** link in the **Tournaments you manage** strip on the
+   homepage. That opens the console at `/tm/your-org/your-tournament`.
 3. You see this tournament only. You don't need to belong to the organization, and you
    can't see its clubs, players or other tournaments.
 
@@ -213,7 +213,7 @@ emailed: the organizer has to tell them.
 
 | You see | What it means |
 |---|---|
-| You can't find the console | Use `/tm/your-org/your-tournament`; nothing links to it from the homepage |
+| You can't find the console | Look for the **Tournaments you manage** strip on the homepage. If it isn't there, you haven't been added as staff yet |
 | You can open Entries but can't change anything | Expected for every role except the organizer |
 | No **Finance** tab | You hold no finance permission. Only the treasurer and organizer do |
 | No **Suspend** button | Only a tournament IT admin or an organization admin can suspend someone |
@@ -225,5 +225,4 @@ emailed: the organizer has to tell them.
 - Screens for the team coordinator, secretary, logistics, communications, volunteer
   coordinator and referee coordinator roles.
 - A screen for outside team contacts.
-- A link to the console from the homepage.
 - Any email or message telling someone they've been added.

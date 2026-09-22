@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import './globals.css';
-import { getCurrentDulaUser, claimPendingGuardianInvite } from '@/lib/supabase/server';
+import { getCurrentDulaUser, claimPendingGuardianInvite, getMyPersonas } from '@/lib/supabase/server';
+import { personaLinks } from '@/lib/persona-landing';
 import { createClient } from '@/lib/supabase/server';
 import NavActions from './NavActions';
 import RegisterServiceWorker from './RegisterServiceWorker';
@@ -40,6 +41,8 @@ export default async function RootLayout({
   }
 
   const initialNotifications = authUser ? await getMyNotifications() : [];
+  // Guardians and players have a page of their own that nothing else links to.
+  const navPersonaLinks = authUser ? personaLinks(await getMyPersonas()) : [];
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -71,6 +74,11 @@ export default async function RootLayout({
                   )}
                 </span>
               )}
+              {navPersonaLinks.map((l) => (
+                <Link key={l.href} href={l.href} className="btn" style={{ fontSize: 12, padding: '5px 10px' }}>
+                  {l.label}
+                </Link>
+              ))}
               {authUser && <NotificationBell initial={initialNotifications} />}
               <ThemeToggle />
               <NavActions signedIn={!!authUser} />

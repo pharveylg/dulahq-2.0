@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import Reveal from '@/components/motion/Reveal';
 import Spotlight from '@/components/motion/Spotlight';
-import { createClient, getMyOrgProductAccess } from '@/lib/supabase/server';
+import { createClient, getMyOrgProductAccess, getMyPersonas } from '@/lib/supabase/server';
+import { personaLanding } from '@/lib/persona-landing';
 import { loadPublicClubs, loadPublicTournaments } from '@/lib/public-directory';
 import { CourtIcon } from '@/components/directory/DirectoryArt';
 import PublicClubList from './clubs/PublicClubList';
@@ -181,6 +183,52 @@ function OrgHome({ access }: { access: { club: boolean; tournament: boolean; tou
   );
 }
 
+type ManagedTournament = {
+  tournament_id: string;
+  tournament_name: string;
+  tournament_slug: string;
+  org_slug: string;
+  org_name: string;
+};
+
+/**
+ * A way to the native tournament console (/tm/...) for the people who run a
+ * tournament. Nothing linked to it: the organization tile opens the proxied engine
+ * at /t/<org>, and /tournaments -- which lists "Tournaments you manage" -- has no
+ * link either, so an organizer or org admin had to type the address. Tournament staff
+ * belong to no organization, so they see the public directory here, and get this
+ * strip above it.
+ */
+function ManagedTournaments({ items, narrow }: { items: ManagedTournament[]; narrow: boolean }) {
+  if (items.length === 0) return null;
+  return (
+    <Reveal index={1}>
+      <section style={{ maxWidth: narrow ? 1000 : undefined, margin: '0 auto 36px' }}>
+        <h2 style={{ fontSize: 20, marginBottom: 4 }}>Tournaments you manage</h2>
+        <p className="subtitle" style={{ marginBottom: 14 }}>
+          Open the console to handle entries, categories, fees and staff.
+        </p>
+        <div className="card">
+          {items.map((t) => (
+            <Link
+              key={t.tournament_id}
+              href={`/tm/${t.org_slug}/${t.tournament_slug}`}
+              className="list-row"
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+              <div className="list-row-main">
+                <div className="list-row-title">{t.tournament_name}</div>
+                <div className="list-row-meta">{t.org_name}</div>
+              </div>
+              <span className="chip">Manage</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </Reveal>
+  );
+}
+
 /**
  * Public home page (§6.C) -- identical for guests and for a signed-in user
  * with no org. A signed-in user who belongs to at least one org gets a
@@ -193,6 +241,18 @@ export default async function Home() {
   const { data: { user } } = await supabase.auth.getUser();
   const access = user ? await getMyOrgProductAccess() : null;
   const hasOrg = !!(access && (access.club || access.tournament));
+  const managed: ManagedTournament[] = user
+    ? (((await supabase.rpc('my_manageable_tournaments')).data ?? []) as ManagedTournament[])
+    : [];
+
+  // A guardian or player with no organization used to land here, on the public
+  // directory, with no link to the page written for them. Send them to it. Anyone
+  // in an organization, or running a tournament, keeps this page (see
+  // personaLanding for why).
+  if (user) {
+    const landing = personaLanding({ hasOrg, managesTournaments: managed.length > 0, ...(await getMyPersonas()) });
+    if (landing) redirect(landing);
+  }
 
   return (
     <main className="page" style={{ position: 'relative', overflow: 'hidden' }}>
@@ -206,6 +266,8 @@ export default async function Home() {
             </p>
           </div>
         </Reveal>
+
+        <ManagedTournaments items={managed} narrow={hasOrg} />
 
         {hasOrg && access ? <OrgHome access={access} /> : <PublicDirectory />}
       </div>

@@ -2307,22 +2307,22 @@ corrupted a table to confirm it fails with the file name and the fix in the mess
 
 ### Gaps found while checking the guides against the app
 
-None of these are fixed. Each guide documents the current behaviour honestly and
-points at the workaround.
+**Gaps 1–3 were fixed afterwards (§0s.1 below); 4–7 are open.** Each guide documents
+the current behaviour honestly and points at the workaround.
 
-1. **An org admin cannot add staff to a club — so nobody can appoint the first
-   club manager.** `AddStaffForm` renders only for `is_club_manager`, which is false
+1. ~~**An org admin cannot add staff to a club — so nobody can appoint the first
+   club manager.**~~ **Fixed.** `AddStaffForm` renders only for `is_club_manager`, which is false
    for an org admin, and the `/clubs/new` page tells them to "add yourself or someone
    else as club_manager on the club's page". Confirmed live as the Usna Gali org
    admin: badge "No access here", "My teams (0 of 3)", no form. It is a **UI-only
    gap**: `club_staff_write` is `can_admin_club`, which includes org admins. Today a
    platform admin has to do it (`is_club_manager` is true for them).
-2. **Guardians and players land on the public homepage after a normal sign-in, with
-   no link to `/guardian` or `/player`.** Login always redirects to `/`; the only
+2. ~~**Guardians and players land on the public homepage after a normal sign-in, with
+   no link to `/guardian` or `/player`.**~~ **Fixed.** Login always redirects to `/`; the only
    routes into those pages are the `/demo` buttons and notification links. Confirmed
    live as Mylene Bautista.
-3. **An org admin's Tournaments tile opens the tournament engine (`/t/<org>`), and
-   nothing links to the native console.** `/tournaments` ("Tournaments you manage")
+3. ~~**An org admin's Tournaments tile opens the tournament engine (`/t/<org>`), and
+   nothing links to the native console.**~~ **Fixed.** `/tournaments` ("Tournaments you manage")
    and `/tm/<org>/<tournament>` are reachable only by typing them.
 4. **Nothing can list a club or tournament publicly.** `publicly_listed` defaults to
    `false` on both and no code writes it, so the public directory only ever shows
@@ -2350,6 +2350,63 @@ Smaller: there is no "create team" (the club page only links an unclaimed team),
 no staff sign-up page (the app links a login by email but never creates one), and
 no "forgot password" link. These were known; the guides now say so where a reader
 would hit them.
+
+### Fixing gaps 1–3 (2026-09-21) — and the bug underneath gap 1
+
+`phase12b`, `phase12b1`. Checking why gap 1 was a *UI-only* gap turned up that it
+was not only a UI gap: **"Add staff" and "Link player login" have been broken for
+everyone except a platform admin.** Both did `select id from users where email = …`
+from the client, and `public.users`' SELECT policy (`users_read_self_and_org`) exposes
+only your own row, a platform admin's view, or rows with a `role_assignments` entry in
+your org — and `role_assignments` is still empty (§0d). So the lookup returned nothing
+and the action reported "no account", even for a club manager adding a real user. Only
+the platform admin passed, which is why it looked fine in every earlier walkthrough.
+Widening `users` reads would expose every account's email to any tenant, so the fix
+follows `add_tournament_staff` (§0o): the lookup moves into a SECURITY DEFINER
+function that **authorizes first**, then looks up.
+
+- `add_club_staff(club, email, role)` authorizes on `can_admin_club` (club manager or
+  org admin) and audits via `write_audit_system`. Adding someone whose row is
+  `archived` **restores** it; an active duplicate is a `unique_violation`. Its team
+  assignments are not restored — they were deleted on archive (§0j).
+- `link_player_account(player, email)` authorizes exactly like `players_write`, so
+  nothing widened.
+- **The org admin's UI:** the club page computes `canAdminStaff = canManage ||
+  is_org_admin` for the Add-staff form and the Former-staff list. **Remove** is gated
+  on the same flag. Before, every staff member saw **Remove** and got a refusal;
+  RLS was always right, the button was not. Primary-coach designation, rename and
+  team linking stay club-manager-only on purpose (`set_team_primary_coach` needs
+  `manage_staff`, which an org admin doesn't hold).
+- **Guardian/player landing:** `personaLanding()` (`src/lib/persona-landing.ts`, pure,
+  unit-tested) redirects "/" to `/guardian` or `/player` for someone with **no
+  organization and no tournament to manage**. A coach whose child plays for the club is
+  a guardian too and keeps the org home; a top-bar **My children** / **My profile**
+  link (`personaLinks`) reaches the page from anywhere.
+- **Tournaments you manage** strip on "/" (`my_manageable_tournaments()`), linking
+  `/tm/<org>/<tournament>`. Tournament staff have no org membership, so `hasOrg` is
+  false for them; the redirect deliberately skips anyone who manages a tournament, or
+  they would be bounced past the only link to their console.
+
+**A second gap, found doing this and fixed the same day (`phase12c`):** the Add-staff
+role dropdown had no `club_it_admin`, so an IT admin couldn't be appointed from the UI
+(only seeded). Since that role carries no business authority (§0e), appointing one was
+deliberately kept narrower than the other roles: `add_club_staff` now requires
+`is_org_admin` specifically for `p_role = 'club_it_admin'`, on top of the
+`can_admin_club` check every role already needed — a club manager still adds everyone
+else, but not this one. The form only offers the option when `is_org_admin` RPC says
+so, so a club manager never sees a choice the database would refuse. Verified: two more
+RLS tests (an org admin can appoint one; a club manager cannot and nothing is written),
+written before the migration and watched the manager-refusal test fail first.
+
+**Known edge:** the Staff tab's "Assign to team" and "×" controls are still ungated
+in the UI (RLS decides), so a team manager can see one that would be refused.
+
+Verified: unit tests for the landing rules; RLS tests for the org-admin staffing
+contract (11, including restore-on-re-add and the club-IT-admin appointment split) and
+the definer lookups (16), written before the migrations and watched fail. Driven live
+in a browser: the org admin's club Staff tab, a guardian's normal sign-in (lands on
+`/guardian`, nav link present) and the demo
+organizer's homepage (strip present, not redirected).
 
 ### What was and wasn't clicked through
 

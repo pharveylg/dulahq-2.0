@@ -163,7 +163,7 @@ The page also shows each organization's subscriptions and recent usage events.
 | You see | What it usually means |
 |---|---|
 | A new org admin says they can't sign in | The account doesn't exist yet. Provisioning links the email but doesn't create the login |
-| An org admin can create a club but nobody can staff it | The first club manager has to be added by someone who can act in that club. **That's you**: open the club's page, choose **Staff**, and add them. See the [org admin guide](org-admin.md#appoint-the-first-club-manager) |
+| A club has no manager yet | The org admin can add one from the club's **Staff** tab (see the [org admin guide](org-admin.md#appoint-the-first-club-manager)), and so can you. They need a login first |
 | An organization says everything is empty | Check the directory: it may be suspended |
 | A club can't be created | The organization has no **Club** product. Tick it under **Manage** |
 | A payment was rejected by mistake | A rejected payment reopens the invoice for another attempt; ask them to resubmit |

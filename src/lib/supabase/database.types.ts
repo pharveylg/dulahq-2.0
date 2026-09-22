@@ -4720,6 +4720,14 @@ export type Database = {
         Args: { p_tournament_id: string; p_email: string; p_role: string }
         Returns: string
       }
+      add_club_staff: {
+        Args: { p_club_id: string; p_email: string; p_role: string }
+        Returns: string
+      }
+      link_player_account: {
+        Args: { p_player_id: string; p_email: string }
+        Returns: undefined
+      }
       my_manageable_tournaments: {
         Args: never
         Returns: {

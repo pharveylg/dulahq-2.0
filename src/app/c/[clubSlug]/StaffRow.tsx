@@ -122,6 +122,7 @@ export default function StaffRow({
   assignedTeams: assignments,
   teamsWithPrimary,
   canManageStaff,
+  canRemoveStaff,
   profile,
   isSelf,
 }: {
@@ -130,7 +131,10 @@ export default function StaffRow({
   clubTeams: Team[];
   assignedTeams: Assignment[];
   teamsWithPrimary: string[];
+  /** Designating a primary coach. Club managers only: the RPC needs manage_staff. */
   canManageStaff: boolean;
+  /** Removing (archiving) someone: club managers and org admins (club_staff_write is can_admin_club). */
+  canRemoveStaff: boolean;
   profile?: StaffProfile | null;
   isSelf?: boolean;
 }) {
@@ -198,9 +202,13 @@ export default function StaffRow({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={`chip chip-${staff.role}`}>{staff.role}</span>
-          <button className="btn" onClick={handleRemoveStaff} disabled={pending} style={{ fontSize: 12 }}>
-            Remove
-          </button>
+          {/* Was shown to everyone, so a coach or team manager got a button the
+              database then refused. Gated on the same authority as the write. */}
+          {canRemoveStaff && (
+            <button className="btn" onClick={handleRemoveStaff} disabled={pending} style={{ fontSize: 12 }}>
+              Remove
+            </button>
+          )}
         </div>
       </div>
 

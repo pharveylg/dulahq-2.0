@@ -102,10 +102,15 @@ export async function updateClubProfile(clubId: string, formData: FormData) {
 }
 
 /**
- * Adds staff by EMAIL LOOKUP against the existing public.users table --
- * this app doesn't create accounts. If nobody with that email exists in
- * public.users yet, this fails with a clear message rather than
- * silently creating a partial record.
+ * Adds staff by email. The person must already have a Dula HQ login -- this app
+ * doesn't create accounts -- and if they don't it fails with a clear message rather
+ * than creating a partial record.
+ *
+ * The lookup happens inside add_club_staff, not here. It used to be a plain select
+ * on public.users, which only lets you read your own row (plus a platform admin's
+ * view of everyone), so for every club manager and org admin it found nothing and
+ * claimed the person had no account. The function checks the caller may staff this
+ * club first, then looks the email up, inserts, and audits.
  */
 export async function addStaff(clubId: string, formData: FormData) {
   const email = (formData.get('email') as string)?.trim().toLowerCase();
@@ -115,42 +120,19 @@ export async function addStaff(clubId: string, formData: FormData) {
 
   const supabase = await createClient();
 
-  const { data: existingUser, error: lookupError } = await supabase
-    .from('users')
-    .select('id, name')
-    .eq('email', email)
-    .maybeSingle();
+  // add_club_staff audits the addition itself (gap analysis P0-4), so there is no
+  // separate write_audit call here.
+  const { error } = await supabase.rpc('add_club_staff', { p_club_id: clubId, p_email: email, p_role: role });
 
-  if (lookupError) return { error: friendlyError(lookupError) };
-  if (!existingUser) {
-    return {
-      error: `No existing Dula HQ account found for ${email}. This app can't create new accounts -- ask an admin to add them first.`,
-    };
-  }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from('club_staff')
-    .insert({ club_id: clubId, user_id: existingUser.id, role })
-    .select('id, org_id')
-    .single();
-
-  if (insertError) {
-    if (insertError.code === '23505') {
-      return { error: `${existingUser.name ?? email} already has that role at this club.` };
+  if (error) {
+    if (error.message.toLowerCase().includes('no dula hq account')) {
+      return {
+        error: `No existing Dula HQ account found for ${email}. This app can't create new accounts -- ask an admin to add them first.`,
+      };
     }
-    return { error: friendlyError(insertError) };
+    if (error.code === '23505') return { error: `${email} already has that role at this club.` };
+    return { error: friendlyError(error) };
   }
-
-  // gap analysis P0-4: staff add/remove/reassign wrote zero audit rows.
-  await supabase.rpc('write_audit', {
-    p_org_id: inserted.org_id,
-    p_action: 'staff.added',
-    p_scope_type: 'club',
-    p_scope_id: clubId,
-    p_entity_type: 'club_staff',
-    p_entity_id: inserted.id,
-    p_after: { user_id: existingUser.id, name: existingUser.name, email, role },
-  });
 
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };

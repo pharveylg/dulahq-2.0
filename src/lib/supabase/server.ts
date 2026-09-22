@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import type { Database } from './database.types';
 
 export async function createClient() {
@@ -329,3 +330,20 @@ export async function claimPendingGuardianInvite() {
 
   await supabase.from('guardians').update({ user_id: dulaUser.id, account_status: 'active' }).eq('id', invite.id);
 }
+
+/**
+ * Whether this person has a guardian record and/or a player record -- the two
+ * people /guardian and /player exist for. Keyed the same way those pages find
+ * them (user_id = the public.users id), and memoised per request because both the
+ * homepage and the layout ask.
+ */
+export const getMyPersonas = cache(async (): Promise<{ guardian: boolean; player: boolean }> => {
+  const dulaUser = await getCurrentDulaUser();
+  if (!dulaUser) return { guardian: false, player: false };
+  const supabase = await createClient();
+  const [guardians, players] = await Promise.all([
+    supabase.from('guardians').select('id', { count: 'exact', head: true }).eq('user_id', dulaUser.id),
+    supabase.from('players').select('id', { count: 'exact', head: true }).eq('user_id', dulaUser.id),
+  ]);
+  return { guardian: (guardians.count ?? 0) > 0, player: (players.count ?? 0) > 0 };
+});

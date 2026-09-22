@@ -56,12 +56,14 @@ teams they're assigned to. Club managers see every team in their club.
 ## Signing in
 
 1. Go to `/login`, enter your email and password, and choose **Sign in**.
-2. You'll land on the Dulà HQ homepage. What you see there depends on who you are:
-   - **Signed in, with an organization:** tiles for Clubs, Tournaments and Courts.
-   - **Everyone else** (including guardians and players): the public directory of
-     clubs and tournaments. Your own page is a separate address, `/guardian` or
-     `/player`. See the [guardian and player guide](guardian-and-player.md) —
-     bookmark it, because there is no link to it from the homepage yet.
+2. Where you land depends on who you are:
+   - **A guardian or player** goes straight to their own page, `/guardian` or
+     `/player` (see the [guardian and player guide](guardian-and-player.md)).
+   - **Signed in, with an organization:** the Dulà HQ homepage, with tiles for Clubs,
+     Tournaments and Courts.
+   - **Running a tournament:** the homepage, with a **Tournaments you manage** strip
+     linking to your console.
+   - **Everyone else:** the public directory of clubs and tournaments.
 
 **Creating an account.** The only sign-up page is for guardians who have been
 invited (`/guardian-signup`). There is no self-service sign-up for staff, org

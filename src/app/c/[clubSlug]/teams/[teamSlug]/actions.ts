@@ -150,8 +150,10 @@ export async function inviteGuardian(clubId: string, teamId: string, guardianId:
 
 /**
  * Links an existing Dula HQ account to this player (RBAC Phase 4) --
- * staff/guardian-initiated by email lookup, the same pattern as
- * AddStaffForm's addStaff, deliberately NOT a public player-signup route.
+ * staff-initiated by email, the same pattern as AddStaffForm's addStaff (and, like
+ * it, done inside a definer function: a plain select on public.users can't see
+ * anyone but yourself, so the old client-side lookup reported "no account" for
+ * people who had one). Deliberately NOT a public player-signup route.
  * Building self-service signup for a player means deciding a minor-consent
  * policy, which isn't an engineering call -- this sidesteps that
  * entirely by requiring the account to already exist and an adult
@@ -163,19 +165,13 @@ export async function linkPlayerAccount(clubId: string, teamId: string, playerId
 
   const supabase = await createClient();
 
-  const { data: existingUser, error: lookupError } = await supabase
-    .from('users')
-    .select('id, name')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (lookupError) return { error: friendlyError(lookupError) };
-  if (!existingUser) {
-    return { error: `No existing Dula HQ account found for ${email}. They need to sign up (or be added as staff/guardian) first.` };
+  const { error: linkError } = await supabase.rpc('link_player_account', { p_player_id: playerId, p_email: email });
+  if (linkError) {
+    if (linkError.message.toLowerCase().includes('no dula hq account')) {
+      return { error: `No existing Dula HQ account found for ${email}. They need to sign up (or be added as staff/guardian) first.` };
+    }
+    return { error: friendlyError(linkError) };
   }
-
-  const { error: linkError } = await supabase.from('players').update({ user_id: existingUser.id }).eq('id', playerId);
-  if (linkError) return { error: friendlyError(linkError) };
 
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };

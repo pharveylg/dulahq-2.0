@@ -123,6 +123,11 @@ are created outside the app today. Add them once they exist.
 
 Exactly what each role holds is in the table at the top of its own guide.
 
+**Club IT admin isn't on this list.** It carries no business authority at all —
+see the [club IT admin guide](club-it-admin.md) — so appointing one is
+deliberately kept out of your hands, the same way appointing you was kept out of
+your own. Only an organization admin can add one, from this same Staff tab.
+
 ### Put people on teams
 
 Coaches, team managers and assistant coaches only see the teams they're assigned
@@ -140,7 +145,12 @@ so the team is never left without a lead. Assistant coaches can't be primary.
 Choose **Remove** on their row. This **archives** them rather than deleting them:
 they lose all access to the club immediately and their team assignments are
 cleared, but the record stays under **Former staff**, so their history isn't lost.
-Their login still exists; it just does nothing at this club.
+Their login still exists; it just does nothing at this club. To bring someone back,
+add them again with the same role: their old record is restored (without their team
+assignments, which you'd need to give them again).
+
+Only club managers and organization admins see **Remove**. Other staff, who used to
+be shown the button and then refused, no longer are.
 
 ### People edit their own profile
 

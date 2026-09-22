@@ -39,11 +39,9 @@ After you sign in you land on the Dulà HQ homepage with tiles for **Clubs**,
   console described below.
 - **Courts** opens the separate court-booking app.
 
-**Bookmark two addresses.** Nothing on the homepage links to your tournament
-console yet:
-
-- `/tournaments` lists **Tournaments you manage** and links each to its console.
-- A tournament's console is at `/tm/your-org/your-tournament`.
+Above the tiles, a **Tournaments you manage** strip lists each of your organization's
+tournaments with a **Manage** link straight to its console. A console lives at
+`/tm/your-org/your-tournament`, and `/tournaments` lists the same tournaments too.
 
 ## Create a club
 
@@ -57,22 +55,28 @@ console yet:
 
 ## Appoint the first club manager
 
-A new club has nobody running it. Someone has to be added as its **club manager**.
-The new-club page tells you to "add yourself or someone else as club_manager on
-the club's page".
+A new club has nobody running it. Someone has to be added as its **club manager**,
+and you can do that yourself.
 
-**Today an org admin can't do that from the club page.** Open a club you don't
-staff and you'll see a **No access here** badge, a "My teams (0 of 3)" list with
-every team marked **Not assigned**, and no **Add staff** form. Only a club manager
-(or a platform admin) sees that form.
+1. Open the club and choose its **Staff** tab.
+2. Under **Add staff**, enter the person's **Email**, choose **club_manager**, and
+   choose **Add**.
 
-What to do instead, until this is fixed:
+The person must **already have a Dulà HQ login**. If they don't, the form says *"No
+existing Dula HQ account found… This app can't create new accounts"*, because logins
+are created outside the app today.
 
-- **Ask the platform team** to add the club manager. A platform admin can open the
-  club's **Staff** tab and add them.
-- The person being added must **already have a Dulà HQ login**. The form looks the
-  person up by email and says *"No existing Dula HQ account found… This app can't
-  create new accounts"* if there isn't one.
+You'll notice that on a club you don't staff you still see a **No access here** badge
+and "My teams (0 of 3)" with every team marked **Not assigned**. That's expected: an
+org admin can staff a club without being on its staff. **Add staff** and **Remove** are
+the only staff controls you get. Designating a primary coach, renaming the club and
+linking teams stay with the club manager.
+
+**You're also the only one who can appoint a club IT admin.** The role picker only
+offers it to you — a club manager doesn't see it, and the database refuses it even
+if they did. That's deliberate: the [club IT admin](club-it-admin.md) role carries no
+business authority, so who gets it is kept out of the business owner's hands, the
+same way appointing the first club manager is kept out of theirs.
 
 Once someone is a club manager, they add everyone else. See the
 [club manager guide](club-manager.md).
@@ -142,14 +146,14 @@ contact them.
 
 | You see | What it means |
 |---|---|
-| **Add staff** is missing on a club | You're not on that club's staff. See [Appoint the first club manager](#appoint-the-first-club-manager) |
+| Nothing happens, or *No existing Dula HQ account found*, when adding staff | The person has no login yet. Logins are created outside the app |
 | **New club** is missing | Your organization has no **Club** product |
 | Nothing is under **Tournaments you manage** | Your organization may not have the **Tournament** product, or has no tournaments yet |
 | *No Dula HQ account exists for that email* | The person has no login. Logins are created outside the app today |
 
 ## Not available yet
 
-- Adding the first club manager from the club page (see above).
+- Designating a primary coach, renaming a club and linking teams, which are the club manager's.
 - A screen where you see and pay Dulà HQ's own invoices to your organization. The
   platform team sends you the payment instructions.
 - Filing a support request yourself. Club managers and club IT admins can; you can

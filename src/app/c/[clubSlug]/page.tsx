@@ -108,14 +108,24 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     { data: canSubmitSupport },
     { data: canViewFinancesRpc },
     { data: canManageFinancesRpc },
+    { data: isOrgAdminRpc },
   ] = await Promise.all([
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'submit_support_request', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_finances', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubId }),
+    supabaseForPerms.rpc('is_org_admin', { org: club.org_id }),
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
+
+  // An org admin who isn't on the club's staff isn't a club manager, so `canManage`
+  // is false for them -- but club_staff_write is can_admin_club (club manager OR org
+  // admin), so the database has always let them staff the club. Hiding the form left
+  // a new club with no way to get its first manager short of a platform admin.
+  // Staffing is all this widens: renaming, linking teams and designating a primary
+  // coach stay club-manager-only (the primary-coach RPC needs manage_staff).
+  const canAdminStaff = canManage || !!isOrgAdminRpc;
 
   // The club-wide Finances tab used to be `isClubManager || role === 'staff'`,
   // a role-literal check from before the permission catalog existed -- so the
@@ -725,17 +735,18 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                       assignedTeams={assignedTeamsByUser.get(s.user_id) ?? []}
                       teamsWithPrimary={[...teamsWithPrimary]}
                       canManageStaff={canManage}
+                      canRemoveStaff={canAdminStaff}
                       profile={profileByStaffId.get(s.id) ?? null}
                       isSelf={s.user_id === user.id}
                     />
                   );
                 })}
               </div>
-              {canManage ? (
-                <AddStaffForm clubId={club.id} />
+              {canAdminStaff ? (
+                <AddStaffForm clubId={club.id} isOrgAdmin={!!isOrgAdminRpc} />
               ) : (
                 <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-                  Only a club admin or a platform admin can manage club settings and staff.
+                  Only a club manager, an organization admin or a platform admin can add or remove staff.
                 </p>
               )}
 
@@ -743,7 +754,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                   it's archived, so the club keeps a record of who worked
                   here. Read-only: no reactivation flow yet (gap analysis
                   P1 #11, deliberately separate from this fix). */}
-              {canManage && archivedStaffRows.length > 0 && (
+              {canAdminStaff && archivedStaffRows.length > 0 && (
                 <>
                   <div className="section-label" style={{ marginTop: 24 }}>Former staff ({archivedStaffRows.length})</div>
                   <div className="card">

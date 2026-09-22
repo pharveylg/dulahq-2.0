@@ -5,7 +5,7 @@ import { addStaff } from './actions';
 
 // Must stay in step with club_staff_role_check (phase6k/phase6l). Ordered
 // roughly by breadth of authority so the picker reads as a hierarchy.
-const ROLES = [
+const BUSINESS_ROLES = [
   'club_manager',
   'team_manager',
   'coach',
@@ -18,7 +18,13 @@ const ROLES = [
 type ActionState = { error?: string; success?: boolean };
 const initialState: ActionState = {};
 
-export default function AddStaffForm({ clubId }: { clubId: string }) {
+export default function AddStaffForm({ clubId, isOrgAdmin }: { clubId: string; isOrgAdmin: boolean }) {
+  // club_it_admin holds no business authority (§0e), so who appoints one is a
+  // narrower call than the business roles above: only an organization admin
+  // (add_club_staff itself enforces this -- the option is hidden here purely
+  // so a club manager doesn't pick something the database will refuse).
+  const roles = isOrgAdmin ? [...BUSINESS_ROLES, 'club_it_admin'] : BUSINESS_ROLES;
+
   const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (_prev, formData) => (await addStaff(clubId, formData)) ?? {},
@@ -43,7 +49,7 @@ export default function AddStaffForm({ clubId }: { clubId: string }) {
         <div className="form-group" style={{ flex: '0 0 160px' }}>
           <label htmlFor="role">Role</label>
           <select id="role" name="role" defaultValue="coach">
-            {ROLES.map((r) => (
+            {roles.map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>

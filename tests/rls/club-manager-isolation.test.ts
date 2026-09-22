@@ -2454,3 +2454,214 @@ describe('how-to guide permission tables match the live catalog', () => {
     expect(tables).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The club page used to hide "Add staff" from an org admin, so a newly created
+ * club could never get its first club manager without a platform admin. The
+ * database always allowed it (club_staff_write is can_admin_club, which includes
+ * an org admin); the screen now matches. This pins the contract the screen relies
+ * on, including who is still refused.
+ */
+describe("an org admin can staff a club they don't belong to (club page fix)", () => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  let newHireId: string;
+  let staffRowId: string;
+
+  it('sets up a person with a login and no role at this club', async () => {
+    newHireId = (await createTestUser(`rls-newhire-${suffix}@rls-test.local`, 'audience')).publicUser.id;
+  });
+
+  it('an org admin who is NOT club staff can add them as club manager', async () => {
+    const { data, error } = await orgAdminAClient
+      .from('club_staff')
+      .insert({ club_id: clubA.id, user_id: newHireId, role: 'club_manager' })
+      .select('id')
+      .single();
+    expect(error).toBeNull();
+    staffRowId = data!.id;
+  });
+
+  it('that person is then a club manager of the club', async () => {
+    const { data } = await adminClient.from('club_staff').select('role, status').eq('id', staffRowId).single();
+    expect(data).toMatchObject({ role: 'club_manager', status: 'active' });
+  });
+
+  it('the org admin can archive them again (Remove archives rather than deletes)', async () => {
+    const { data, error } = await orgAdminAClient.from('club_staff').update({ status: 'archived' }).eq('id', staffRowId).select('id');
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+  });
+
+  it('a coach at the club cannot add staff', async () => {
+    const { error } = await coachA1Client.from('club_staff').insert({ club_id: clubA.id, user_id: newHireId, role: 'staff' });
+    expect(error).not.toBeNull();
+  });
+
+  it("another organization's admin-level user cannot add staff to this club", async () => {
+    const { error } = await clubStaffBClient.from('club_staff').insert({ club_id: clubA.id, user_id: newHireId, role: 'staff' });
+    expect(error).not.toBeNull();
+  });
+
+  it('the org admin still cannot assign a PRIMARY coach (that function needs manage_staff, which an org admin does not hold)', async () => {
+    const { error } = await orgAdminAClient.rpc('set_team_primary_coach', { p_team_id: teamA1.id, p_user_id: coachA1UserId });
+    expect(error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('club_staff').delete().eq('user_id', newHireId);
+    await adminClient.from('audit_log').delete().eq('entity_id', newHireId);
+    await adminClient.auth.admin.deleteUser(newHireId);
+  });
+});
+
+/**
+ * "Add staff" and "Link player login" both look a person up by email, and both did
+ * it with a plain select on public.users. That table lets you read your own row,
+ * a platform admin's view, and rows with a role_assignments entry in your org --
+ * and role_assignments is empty -- so for everyone except a platform admin the
+ * lookup found nothing and said "No existing Dula HQ account found" about people
+ * who had one. Confirmed live as the real club manager. The fix is the pattern
+ * add_tournament_staff already uses: a definer function that checks the caller's
+ * authority FIRST and only then looks the email up, so the lookup isn't a way to
+ * probe which emails have accounts.
+ */
+describe('adding staff and linking a player login by email (definer lookups)', () => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  let userOne: string;
+  let userTwo: string;
+  let staffRowOne: string;
+  const emailOne = `rls-hire1-${suffix}@rls-test.local`;
+  const emailTwo = `rls-hire2-${suffix}@rls-test.local`;
+
+  it('sets up two people who have a login and no role at this club', async () => {
+    userOne = (await createTestUser(emailOne, 'audience')).publicUser.id;
+    userTwo = (await createTestUser(emailTwo, 'audience')).publicUser.id;
+  });
+
+  describe('add_club_staff', () => {
+    it('an org admin who is NOT club staff can add someone as club manager', async () => {
+      const { data, error } = await orgAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'club_manager' });
+      expect(error).toBeNull();
+      staffRowOne = data as unknown as string;
+      const row = must(await adminClient.from('club_staff').select('role, status, user_id').eq('id', staffRowOne).single(), 'staff row');
+      expect(row).toMatchObject({ role: 'club_manager', status: 'active', user_id: userOne });
+    });
+
+    it('a club manager can add someone (the case that was silently broken)', async () => {
+      const { error } = await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailTwo, p_role: 'coach' });
+      expect(error).toBeNull();
+    });
+
+    it('the email is matched without regard to case or stray spaces', async () => {
+      const { error } = await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: `  ${emailTwo.toUpperCase()} `, p_role: 'assistant_coach' });
+      expect(error).toBeNull();
+    });
+
+    it('adding is audited', async () => {
+      const { data } = await adminClient.from('audit_log').select('action, scope_id').eq('entity_id', staffRowOne).eq('action', 'staff.added');
+      expect(data).toHaveLength(1);
+      expect(data![0].scope_id).toBe(clubA.id);
+    });
+
+    it('a coach, a guardian and another organization are all refused', async () => {
+      for (const client of [coachA1Client, guardianOfA1Client, clubStaffBClient]) {
+        const { error } = await client.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'staff' });
+        expect(error).not.toBeNull();
+      }
+      const anon = createClient(SUPABASE_URL, ANON_KEY);
+      expect((await anon.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'staff' })).error).not.toBeNull();
+    });
+
+    it('the refusal comes BEFORE the lookup, so it cannot be used to probe which emails have accounts', async () => {
+      const real = await coachA1Client.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'staff' });
+      const fake = await coachA1Client.rpc('add_club_staff', { p_club_id: clubA.id, p_email: `nobody-${suffix}@rls-test.local`, p_role: 'staff' });
+      expect(real.error?.message).toBe(fake.error?.message);
+    });
+
+    it('an email with no account says so, plainly', async () => {
+      const { error } = await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: `nobody-${suffix}@rls-test.local`, p_role: 'staff' });
+      expect(error?.message).toMatch(/no dul(a|à) hq account/i);
+    });
+
+    it('adding the same person to the same role twice is refused; an unknown role is refused', async () => {
+      expect((await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'club_manager' })).error).not.toBeNull();
+      expect((await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'wizard' })).error).not.toBeNull();
+    });
+
+    it('re-adding someone who was archived restores the same row instead of failing', async () => {
+      must(await adminClient.from('club_staff').update({ status: 'archived' }).eq('id', staffRowOne).select('id').single(), 'archive');
+      const { data, error } = await orgAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'club_manager' });
+      expect(error).toBeNull();
+      expect(data).toBe(staffRowOne);
+      const row = must(await adminClient.from('club_staff').select('status').eq('id', staffRowOne).single(), 'row');
+      expect(row.status).toBe('active');
+    });
+
+    // The IT role holds no business authority, so who may appoint one is a product
+    // decision: the organization's admin does; a club manager does not.
+    it('an org admin can appoint a club IT admin', async () => {
+      const { data, error } = await orgAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailTwo, p_role: 'club_it_admin' });
+      expect(error).toBeNull();
+      const row = must(await adminClient.from('club_staff').select('role, status, user_id').eq('id', data as unknown as string).single(), 'it row');
+      expect(row).toMatchObject({ role: 'club_it_admin', status: 'active', user_id: userTwo });
+    });
+
+    it('a club manager cannot appoint a club IT admin, and nothing is written', async () => {
+      const { error } = await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'club_it_admin' });
+      expect(error).not.toBeNull();
+      const { data } = await adminClient.from('club_staff').select('id').eq('club_id', clubA.id).eq('user_id', userOne).eq('role', 'club_it_admin');
+      expect(data).toHaveLength(0);
+    });
+
+    it('a club manager can still appoint every other role', async () => {
+      const { error } = await clubAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailOne, p_role: 'treasurer' });
+      expect(error).toBeNull();
+    });
+
+    it('a suspended organization cannot add staff', async () => {
+      await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+      const { error } = await orgAdminAClient.rpc('add_club_staff', { p_club_id: clubA.id, p_email: emailTwo, p_role: 'secretary' });
+      await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+      expect(error).not.toBeNull();
+    });
+  });
+
+  describe('link_player_account', () => {
+    const linked = async () => must(await adminClient.from('players').select('user_id').eq('id', playerA1.id).single(), 'player').user_id;
+    const reset = async () => { await adminClient.from('players').update({ user_id: null }).in('id', [playerA1.id, playerA2.id]); };
+
+    it("a coach assigned to the player's team can link a login", async () => {
+      const { error } = await coachA1Client.rpc('link_player_account', { p_player_id: playerA1.id, p_email: emailOne });
+      expect(error).toBeNull();
+      expect(await linked()).toBe(userOne);
+      await reset();
+    });
+
+    it('a club manager and an org admin can link one', async () => {
+      expect((await clubAdminAClient.rpc('link_player_account', { p_player_id: playerA2.id, p_email: emailOne })).error).toBeNull();
+      await reset();
+      expect((await orgAdminAClient.rpc('link_player_account', { p_player_id: playerA1.id, p_email: emailTwo })).error).toBeNull();
+      await reset();
+    });
+
+    it("a coach NOT assigned to that player's team, a guardian, and another organization are refused", async () => {
+      expect((await coachA1Client.rpc('link_player_account', { p_player_id: playerA2.id, p_email: emailOne })).error).not.toBeNull();
+      expect((await guardianOfA1Client.rpc('link_player_account', { p_player_id: playerA1.id, p_email: emailOne })).error).not.toBeNull();
+      expect((await clubStaffBClient.rpc('link_player_account', { p_player_id: playerA1.id, p_email: emailOne })).error).not.toBeNull();
+      expect(await linked()).toBeNull();
+    });
+
+    it('an email with no account says so, and changes nothing', async () => {
+      const { error } = await coachA1Client.rpc('link_player_account', { p_player_id: playerA1.id, p_email: `nobody-${suffix}@rls-test.local` });
+      expect(error?.message).toMatch(/no dul(a|à) hq account/i);
+      expect(await linked()).toBeNull();
+    });
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('players').update({ user_id: null }).in('id', [playerA1.id, playerA2.id]);
+    await adminClient.from('club_staff').delete().in('user_id', [userOne, userTwo].filter(Boolean));
+    await adminClient.from('audit_log').delete().in('entity_id', [staffRowOne].filter(Boolean));
+    for (const id of [userOne, userTwo].filter(Boolean)) await adminClient.auth.admin.deleteUser(id);
+  });
+});
