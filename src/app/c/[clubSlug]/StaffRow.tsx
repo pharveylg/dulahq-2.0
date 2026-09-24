@@ -25,7 +25,13 @@ type Assignment = { teamId: string; isPrimary: boolean };
 // phase6x: assistant_coach was created with real team-scope permissions in
 // phase6l and then never offered a team assignment, so none of them could be
 // reached. It belongs on this list.
-const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager'];
+//
+// treasurer/secretary/staff joined for a different reason (§0s finding 5):
+// their fee/document/membership permissions are club-scope already, but
+// opening a specific player's page -- the only way to use one -- requires
+// is_assigned_to_team (players_read has no permission-catalog branch of its
+// own). Team assignment is the real, if per-team-only, way through that gate.
+const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager', 'treasurer', 'secretary', 'staff'];
 
 /**
  * P1-7 (gap analysis §1): self-editable phone/bio/photo/certifications,

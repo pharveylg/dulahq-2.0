@@ -189,11 +189,25 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     ? await supabase.from('teams').select('id, name').is('club_id', null).order('name')
     : { data: [] };
 
-  // Assigned-team lookups, per staff member with a team-scoped role.
+  // Assigned-team lookups, per staff member who can usefully be given one.
   // assistant_coach belongs here too: phase6l created the role with real
   // team-scope permissions, but it was never offered a team assignment, so
   // every one of those permissions was unreachable.
-  const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager'];
+  //
+  // treasurer/secretary/staff joined this list because of a different gap
+  // (§0s finding 5, not a permission that went unreached but a screen that
+  // couldn't be opened): their fee/document/membership permissions are
+  // already club-scope, so has_staff_permission grants them regardless of
+  // team -- but reaching a specific player to *use* one of those permissions
+  // means opening that player's page, and players_read has never consulted
+  // the permission catalog at all. It only opens for someone is_assigned_to_
+  // team, club-wide (club_manager/org_admin) or the player's own guardian.
+  // Assigning a treasurer to a team is a real, if imperfect, way through that
+  // gate -- imperfect because it's per-team, not club-wide like their actual
+  // permission, which a club with fee charges spread across every team will
+  // find limiting. Flagged, not fixed here: widening players_read itself is
+  // a broader RLS change than "let this role be assigned to a team".
+  const TEAM_SCOPED_ROLES = ['coach', 'assistant_coach', 'team_manager', 'treasurer', 'secretary', 'staff'];
   const relevantStaffUserIds = activeStaffRows
     .filter((s) => TEAM_SCOPED_ROLES.includes(s.role))
     .map((s) => s.user_id);

@@ -131,7 +131,12 @@ your own. Only an organization admin can add one, from this same Staff tab.
 ### Put people on teams
 
 Coaches, team managers and assistant coaches only see the teams they're assigned
-to. For each of them:
+to — this genuinely matters for them, and is how you give them a team at all.
+Treasurers, secretaries and staff can be assigned too, but it's a smaller thing
+for them: their finance, document and membership permissions are club-wide
+already, so they can open any player on any team without an assignment. What
+assigning one actually adds is the ability to **post an announcement** to that
+specific team's own audience. For each of them:
 
 1. Choose **+ Assign to team** and pick the team.
 2. To remove them from a team, use the **×** next to it.

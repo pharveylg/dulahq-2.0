@@ -2665,3 +2665,83 @@ describe('adding staff and linking a player login by email (definer lookups)', (
     for (const id of [userOne, userTwo].filter(Boolean)) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * §0s finding 5 (phase12d). Team assignment for treasurer/secretary/staff
+ * (StaffRow.tsx/page.tsx's TEAM_SCOPED_ROLES) needed no migration -- uat_insert
+ * authorizes on the ASSIGNER's own authority, never the assignee's role, so
+ * the database already let a club manager put any club_staff row on a team.
+ *
+ * Verifying that live surfaced the real bug this describe pins: players_read
+ * never consulted the permission catalog, so a `staff` role holding
+ * manage_finances/view_finances club-wide -- reachable with NO team
+ * assignment, since those permissions are club-scope -- read a fee_charges
+ * row fine but got a null embedded player, i.e. "Unknown" on the club-wide
+ * Finances tab for every player outside their own assigned teams. Confirmed
+ * live via SQL impersonation before writing this (a `staff` row's embedded
+ * `players(name)` came back null) -- these tests are the same finding, run
+ * through the actual client.
+ */
+describe('players_read honours the same club-wide permissions fee_charges/documents/memberships already do (phase12d)', () => {
+  const staffEmail = `rls-office-staff-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  const secEmail = `rls-office-sec-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  let staffUserId: string;
+  let secUserId: string;
+  let staffClient: ReturnType<typeof createClient>;
+  let secClient: ReturnType<typeof createClient>;
+
+  it('sets up a staff-role and a secretary-role member at club A, neither assigned to any team', async () => {
+    const s = await createTestUser(staffEmail, 'audience');
+    staffUserId = s.publicUser.id;
+    must(await adminClient.from('club_staff').insert({ club_id: clubA.id, user_id: staffUserId, role: 'staff' }).select().single(), 'club_staff staff');
+    staffClient = await signInAs(staffEmail);
+
+    const sec = await createTestUser(secEmail, 'audience');
+    secUserId = sec.publicUser.id;
+    must(await adminClient.from('club_staff').insert({ club_id: clubA.id, user_id: secUserId, role: 'secretary' }).select().single(), 'club_staff secretary');
+    secClient = await signInAs(secEmail);
+  });
+
+  it('neither is assigned to a team', async () => {
+    const { data } = await adminClient.from('user_assigned_teams').select('user_id').in('user_id', [staffUserId, secUserId]);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('the staff role (manage_finances/view_finances) can read a player by name, with no team assignment', async () => {
+    const { data, error } = await staffClient.from('players').select('id, name').eq('id', playerA1.id);
+    expect(error).toBeNull();
+    expect(data).toEqual([{ id: playerA1.id, name: 'Player A1' }]);
+  });
+
+  it("the bug this closes: a fee_charges embed now resolves the player's name instead of coming back null", async () => {
+    const { data, error } = await staffClient.from('fee_charges').select('id, players(name)').eq('id', feeA1.id).single();
+    expect(error).toBeNull();
+    expect((data as any).players).toEqual({ name: 'Player A1' });
+  });
+
+  it('the secretary role (manage_documents/manage_membership) can also read the player, with no team assignment', async () => {
+    const { data, error } = await secClient.from('players').select('id, name').eq('id', playerA1.id);
+    expect(error).toBeNull();
+    expect(data).toEqual([{ id: playerA1.id, name: 'Player A1' }]);
+  });
+
+  it('read only: the staff role still cannot rename the player', async () => {
+    // players_write is untouched by this migration, so this should be refused --
+    // but as with uat_write (phase6x), a policy-filtered UPDATE matches zero rows
+    // rather than raising, so the persisted value is the real assertion, not the
+    // (possibly null) error.
+    await staffClient.from('players').update({ name: 'Renamed' }).eq('id', playerA1.id);
+    const { data: after } = await adminClient.from('players').select('name').eq('id', playerA1.id).single();
+    expect(after?.name).toBe('Player A1');
+  });
+
+  it("the permission is checked against the PLAYER's own club, not the caller's -- a club A staff role cannot read club B's player", async () => {
+    const { data } = await staffClient.from('players').select('id').eq('id', playerB.id);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('club_staff').delete().in('user_id', [staffUserId, secUserId]);
+    for (const id of [staffUserId, secUserId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

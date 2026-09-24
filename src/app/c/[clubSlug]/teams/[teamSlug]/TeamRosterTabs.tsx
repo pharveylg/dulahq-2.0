@@ -29,6 +29,7 @@ export default function TeamRosterTabs({
   entries,
   canManage,
   canManageFees,
+  canManageMembership,
 }: {
   clubId: string;
   teamId: string;
@@ -39,6 +40,7 @@ export default function TeamRosterTabs({
   entries: Entry[];
   canManage: boolean;
   canManageFees: boolean;
+  canManageMembership: boolean;
 }) {
   const [topTab, setTopTab] = useState('roster');
   const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '');
@@ -88,6 +90,7 @@ export default function TeamRosterTabs({
                       player={selectedPlayer}
                       canManage={canManage}
                       canManageFees={canManageFees}
+                      canManageMembership={canManageMembership}
                     />
                   </Reveal>
                 )}

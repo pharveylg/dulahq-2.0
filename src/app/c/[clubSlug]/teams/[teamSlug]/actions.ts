@@ -19,6 +19,12 @@ export async function addPlayer(clubId: string, teamId: string, formData: FormDa
   const age = (formData.get('age') as string)?.trim() || null;
 
   const supabase = await createClient();
+  // team_id is enough -- fill_club_id (phase12d) derives club_id from it the
+  // same way fill_org_id already derives org_id, so this form never needs to
+  // pass either. Found while building phase12d: nothing derived club_id
+  // before, and this form's clubId parameter went unused, so a player added
+  // here got a permanently null club_id -- latent until a policy started
+  // reading it.
   const { error } = await supabase.from('players').insert({ team_id: teamId, name, jersey, position, age });
 
   if (error) return { error: friendlyError(error) };

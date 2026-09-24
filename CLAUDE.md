@@ -2328,13 +2328,14 @@ the current behaviour honestly and points at the workaround.
    `false` on both and no code writes it, so the public directory only ever shows
    what was set directly in the database.
 
-5. **Club office roles can't be given a team, so their document, membership and fee
-   permissions have no screen.** `TEAM_SCOPED_ROLES` in `StaffRow.tsx` is coach,
-   assistant coach and team manager only; a player's profile opens only for someone
-   assigned to the team (`view_player` is team-scoped). Confirmed live as the demo
-   `staff` user: every team says "Not assigned", the team page shows 0 players, and
-   the Finances tab offers only "+ Add expense". A treasurer therefore can't record a
-   fee charge or payment, and there is no club-level way to add a charge.
+5. ~~**Club office roles can't be given a team, so their document, membership and fee
+   permissions have no screen.**~~ **Fixed (§0s.3 below), and turned out to be three
+   bugs, not one.** `TEAM_SCOPED_ROLES` in `StaffRow.tsx` was coach, assistant coach
+   and team manager only; a player's profile opened only for someone assigned to the
+   team (`view_player` is team-scoped). Confirmed live as the demo `staff` user:
+   every team said "Not assigned", the team page showed 0 players, and the Finances
+   tab offered only "+ Add expense". A treasurer therefore couldn't record a fee
+   charge or payment, and there was no club-level way to add a charge.
 6. **Six tournament roles hold a permission that no screen uses** (team coordinator,
    secretary, logistics, communications, volunteer coordinator, referee coordinator).
    The console has Entries, Categories, Finance and Staff only. Also worth knowing:
@@ -2407,6 +2408,97 @@ the definer lookups (16), written before the migrations and watched fail. Driven
 in a browser: the org admin's club Staff tab, a guardian's normal sign-in (lands on
 `/guardian`, nav link present) and the demo
 organizer's homepage (strip present, not redirected).
+
+### Fixing gap 5 (2026-09-22/23) — club office roles, and two bugs found underneath it
+
+`phase12d`, `phase12d1`. Asked as "club office roles team assignment" -- widen
+`TEAM_SCOPED_ROLES` (StaffRow.tsx/page.tsx) to also offer treasurer/secretary/
+staff a team, matching how assistant_coach was added in phase6x. That part
+needed **no migration**: `uat_insert` authorizes on the ASSIGNER's own
+`assign_team_staff`/`is_org_admin`, never on the assignee's role, so a club
+manager could already put any `club_staff` row on a team -- only the UI array
+was stopping it.
+
+Verifying that live surfaced something bigger: **`players_read` has never
+consulted the permission catalog at all** -- only `is_assigned_to_team`,
+`can_read_club` (club_manager/org_admin only), or guardian/self. So even after
+team assignment, a treasurer's `manage_finances`/`view_finances` -- club-scope
+permissions, exactly like `fee_charges`'/`memberships`'/`document_uploads`' own
+policies already honour club-wide -- only worked on the ONE team they'd been
+assigned to, not the whole club their permission was supposed to reach. Worse:
+the club-wide **Finances tab**, reachable with no assignment at all since
+`view_finances` is club-scope, was already showing every fee charge -- with
+**"Unknown" as the player name** for anyone outside the viewer's own assigned
+teams, confirmed live via SQL impersonation before writing a single line of
+fix (a `staff` role's embedded `players(name)` came back null while the
+`fee_charges` row itself read fine).
+
+Fixed by giving `players_read` the same club-scope branch its three dependent
+tables already have: read access for whoever holds `view_finances`,
+`manage_finances`, `manage_documents` or `manage_membership` at that player's
+own club. Read only -- `players_write` is untouched, so a treasurer still
+cannot rename a player, only see who they are.
+
+**A second bug, found pinning the first one with a test rather than by
+inspection:** all 108 real players in the database have `club_id` set, which
+looked like nothing to check -- until tracing how they got it showed no
+trigger or default ever sets it, and `addPlayer` (`teams/[teamSlug]/
+actions.ts`) receives a `clubId` parameter and never uses it. Those 108 are
+all seeded directly; the next player added through the live "+ Add player"
+form would have been the first with a permanently null `club_id`, invisible to
+the branch just added. `fill_org_id_from_parent` already derives `org_id` from
+`team_id` on insert; `club_id` gets the same treatment now
+(`fill_club_id_from_team`, a new trigger) rather than a one-off fix in the
+action, so every insert path is covered the way `org_id` already is, and the
+action needed no code change. The new trigger function itself tripped §0g's
+own guard on the very first full suite run afterward -- created without the
+revoke-from-anon/grant-to-authenticated block every other SECURITY DEFINER
+function here carries, caught immediately by `anon_executable_secdef_count()`
+going from 0 to 1.
+
+**A third, smaller thing, found by actually clicking through as the `staff`
+persona rather than trusting the RLS fix alone:** the team roster page's own
+inline player panel -- the first thing anyone actually opens, before "Open
+development profile →" -- computed its Fees/Membership controls from
+`canManage` (team-assignment only) plus a role-literal `access.role ===
+'staff'` fallback for fees alone. That fallback matched the literal string
+`'staff'` and nothing else, so a **treasurer** (not generic staff) got no
+"+ Add charge" here despite holding `manage_finances`, and **nobody** got
+"+ Add period" without being individually team-assigned, even though
+`manage_membership` is club-scope too. The full player-profile page
+(`PlayerProfile.tsx`) already computed these correctly via
+`has_staff_permission` -- this inline panel just hadn't been cut over.
+Fixed by computing `canManageFees`/`canManageMembership` from
+`has_staff_permission('manage_finances'/'manage_membership', clubId)` on the
+roster page itself and threading them down (`TeamRosterTabs` →
+`PlayerDetailPanel` → `PlayerFees`/`PlayerMembership`) instead of reusing the
+coarser `canManage`, which stays exactly as it was for player-removal and
+guardian-linking (Family tab) -- those genuinely are team-scoped, coach-ish
+actions and weren't touched.
+
+**Net effect: team assignment is no longer what makes a club office role's
+screen work.** It already wasn't the club-wide permission holder's real
+gate -- that was `players_read` and the two role-literal spots above. What
+being assigned to a team now actually adds for treasurer/secretary/staff is
+narrow and real: posting an **announcement** to that team's own audience
+(`ann_write` still has no permission-catalog branch, only
+`can_admin_club`/`is_assigned_to_team` -- not touched here, flagged as a
+smaller, separate thing) and the roster page's own "assigned" badge. Fees,
+Documents and Membership all work club-wide today with zero assignment.
+
+Verified: the RLS suite grew 215 → **223** (8 new tests for this finding,
+written before the migration and watched fail for the right reason -- 3 of 8
+failed on the first run, all matching the exact "Unknown"/refused-read bug
+just diagnosed; a full-suite run afterward caught the anon-execute regression,
+fixed before the suite went green). Driven live end-to-end as the demo
+`staff` persona (no team assignment, confirmed via a direct query first): the
+U15 Girls roster -- a team she does not staff -- rendered its real 12-player
+list instead of the old "0 players"; the FEES tab offered **+ Add charge**;
+the MEMBERSHIP tab, previously offering nothing at all, now offered
+**+ Add period**, and using it wrote a real `memberships` row (confirmed by
+direct query, then by reload showing it) -- cleaned up afterward. `npx tsc
+--noEmit` clean, `npm run build` clean, `npm run docs:permissions:check`
+clean (the generated tables were untouched by this pass).
 
 ### What was and wasn't clicked through
 

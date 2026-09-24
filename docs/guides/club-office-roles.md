@@ -1,12 +1,9 @@
 # Club office roles guide
 
 For the club's **treasurer**, **secretary** and general **staff**: the people who
-handle money, paperwork and communications rather than coaching. This guide is
-short on purpose, because for these roles there is a real difference between what
-the role is *allowed* to do and what the app has a screen for today. It tells you
-both.
+handle money, paperwork and communications rather than coaching.
 
-_Last checked: 2026-09-21 · Try it: there's no treasurer or secretary demo account.
+_Last checked: 2026-09-23 · Try it: there's no treasurer or secretary demo account.
 Sign in at `/login` as `staff.u15-boys.usna-gali-fc@dulahq-showcase.local` (Corazon
 Estrada, role **staff**, password `DemoPass2026!`) to see the office view._
 
@@ -18,8 +15,9 @@ Estrada, role **staff**, password `DemoPass2026!`) to see the office view._
 | **Secretary** | Paperwork and communications | Documents, membership, communications |
 | **Staff** | A general helper | Finances, documents, membership, communications |
 
-All three can also **view** players, teams and tournaments, but only **on teams
-they're assigned to**. That limit matters a great deal here (see below).
+Every permission below reaches **the whole club**, not just a team you're on — open
+any team, open any player, and your role's controls are there. This is true even if
+you're never assigned to a single team.
 
 ### Treasurer
 
@@ -67,6 +65,12 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **View tournament** | View tournaments an assigned team is entered in | Assigned teams only |
 <!-- END permissions -->
 
+**"View player"/"View team"/"View tournament" say "Assigned teams only" in the
+catalog, but don't let that mislead you** — that's the permission's own narrow
+label, not the whole story. Your manage/view finance, document and membership
+permissions are club-scope, and the app opens a player to anyone holding one,
+whichever team they're on. See [Reaching a player](#reaching-a-player) below.
+
 ## What you'll actually see
 
 Open the club at `/c/your-club`. Your badge shows your role. The tabs you get depend
@@ -74,7 +78,7 @@ on what you hold:
 
 | Tab | Treasurer | Secretary | Staff |
 |---|---|---|---|
-| **Teams** | Yes, but every team says **Not assigned →** | Same | Same |
+| **Teams** | Every team, with its real roster | Same | Same |
 | **Staff** | Your own row | Your own row | Your own row |
 | **Finances** | Yes | No | Yes |
 | **Reports** | Yes | No | Yes |
@@ -93,10 +97,13 @@ people with teams.
 ### Finances and Reports (treasurer, staff)
 
 **Finances** shows what's **Collected**, **Outstanding**, **Overdue charges**,
-**Expenses** and **Net**, every fee charge, and the club's **Expenses**.
+**Expenses** and **Net**, every fee charge with the player's real name, and the
+club's **Expenses**.
 
 - To record an expense choose **+ Add expense**, fill in a description, category and
   amount, and **Save expense**. **Delete** takes one off.
+- There's no club-level "+ Add fee charge" here — a fee charge is always about one
+  player, so you record it from that player's own page. See below.
 - **Reports** gives the club-wide totals, attendance and development by team for the
   last 30 days, and a financial summary. It's read-only.
 
@@ -106,27 +113,27 @@ people with teams.
   meeting to add **Notes** and **Action items**.
 - **Trips.** Create a trip by name.
 
-## What you can't do today, and why
+## Reaching a player
 
-This is the important part. **The screens for a player's documents, membership,
-and fees all live on the player's own profile**, and a player's profile only opens
-for someone assigned to that player's team. The app can assign only **coaches,
-assistant coaches and team managers** to teams. A treasurer, secretary or staff member
-can't be assigned to one from the screen.
+Open **Teams**, choose any team — you don't need to be assigned to it — and pick a
+player from the roster on the left. Their panel opens with **Overview / Development
+/ Fees / Membership / Family** tabs:
 
-The result, confirmed as the demo `staff` user:
+- **Fees** (treasurer, staff): **+ Add charge**, and payments against existing
+  charges.
+- **Membership** (secretary, staff): **+ Add period**, and a status dropdown
+  (pending/active/expired/transferred) on each one.
+- **Development** links out to the player's full profile — documents live there
+  too, not on this panel (see the coach guide's own note on this).
+- **Family** (guardians, player account) stays coach/club-manager territory —
+  that one genuinely does need you to be assigned to the team.
 
-- Every team page opens but shows *0 players* and *"You can manage teams you're
-  assigned to — ask a club admin to assign you to this one."*
-- So you **can't** open a player, record or edit a fee charge, review a document,
-  or change membership status, even though your role holds those permissions.
-- **Announcements** can be posted only to a team you're assigned to, so without a team
-  there's no form.
-
-Until that changes, the tabs above are the useful part of these roles. **Fee
-charges, document review and membership changes are done by the club manager**, who
-sees every player. If your club needs a treasurer to record fee payments, ask the
-club manager to do it or to raise it with the platform team.
+None of this needed an assignment. Assigning yourself to a team (ask your club
+manager — **Staff** tab → your row → **+ Assign to team**) adds exactly two things
+on top: it lets you **post an announcement** to that team's own audience (the club
+never opened that up club-wide to anyone but the club manager), and it changes your
+badge from *"not assigned here"* to *"assigned"*. Nothing about Fees, Documents or
+Membership needs it.
 
 ## Ask for help
 
@@ -139,14 +146,13 @@ for you.
 
 | You see | What it means |
 |---|---|
-| Teams all say **Not assigned →** | Expected for these roles today. See above |
+| No **Fees**/**Membership** controls on a player | You hold no matching permission. The tables at the top list what your role has |
 | No **Finances** tab | You hold no finance permission (a secretary doesn't) |
-| A team page shows *0 players* | You aren't assigned to it, and can't be from the screen |
-| *You don't have permission to do that* | Your role doesn't include it. The tables at the top list what it does |
+| No form under **Announcements** on a specific team | You need to be assigned to that team first — this one genuinely requires it |
+| *You don't have permission to do that* | Your role doesn't include it |
 
 ## Not available yet
 
-- Assigning a treasurer, secretary or staff member to a team, so their document,
-  membership and fee permissions have a screen to use.
 - A club-level way to add a fee charge without opening a player.
 - Posting a club-wide announcement as anyone but a club manager.
+- A Documents tab on this inline panel — open the player's full profile for that.

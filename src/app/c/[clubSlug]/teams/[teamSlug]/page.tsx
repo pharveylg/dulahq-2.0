@@ -45,10 +45,25 @@ export default async function TeamRosterPage({
   const access = await getClubAccess(clubId);
   const assignedTeamIds = access.isClubManager ? [] : await getAssignedTeamIds();
   const canManage = access.isClubManager || assignedTeamIds.includes(teamId);
-  // Fees specifically are also settable by a plain 'staff' club_staff
-  // member, not just club_admin or the assigned coach -- matches
-  // widen_fee_management_to_staff_role.
-  const canManageFees = canManage || access.role === 'staff';
+
+  // Fees and membership are also settable club-wide, by anyone whose role
+  // holds the matching catalog permission (treasurer/staff for finances,
+  // secretary/staff for membership) -- not just club_admin or a coach
+  // assigned to this specific team. This used to be a role-literal check
+  // (`access.role === 'staff'`) for fees only, and nothing at all for
+  // membership -- found while giving club office roles a team assignment
+  // (§0s finding 5, phase12d): PlayerProfile.tsx's full-profile page already
+  // computed these correctly via has_staff_permission, but this page's own
+  // inline roster panel -- the first thing anyone actually clicks -- did not,
+  // so a treasurer (not the literal 'staff' role) got no "+ Add charge" here,
+  // and nobody got "+ Add period" without being individually team-assigned,
+  // even though manage_finances/manage_membership are both club-scope.
+  const [{ data: manageFinancesRpc }, { data: manageMembershipRpc }] = await Promise.all([
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubId }),
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_membership', p_club_id: clubId }),
+  ]);
+  const canManageFees = canManage || !!manageFinancesRpc;
+  const canManageMembership = canManage || !!manageMembershipRpc;
 
   const { data: players, error: playersError } = await supabase
     .from('players')
@@ -163,6 +178,7 @@ export default async function TeamRosterPage({
           entries={tournamentEntries}
           canManage={canManage}
           canManageFees={canManageFees}
+          canManageMembership={canManageMembership}
         />
 
         {!canManage && (
