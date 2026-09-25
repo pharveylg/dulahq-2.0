@@ -25,6 +25,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 
 | Permission | What it allows | Reach |
 |---|---|---|
+| **Manage public listing** | Show the club in, or remove it from, the public directory | Whole club |
 | **Submit support request** | Escalate an issue to the Dula HQ platform team on behalf of the organization | Whole club |
 | **Suspend/reactivate account** | Temporarily suspend or reactivate a staff member's access without removing them from the club | Whole club |
 | **View as another user** | Start a logged, time-limited session to inspect another user's effective access for troubleshooting | Whole club |
@@ -94,6 +95,19 @@ Suspending is reversible and is **yours**. **Removing** someone permanently is t
 club manager's decision. They archive the person, which ends their access while
 keeping the record. Use suspension for "pause this account while we look
 into it".
+
+## List the club in the public directory
+
+At the top of the IT page is **Public directory**. A new club is **private**: only its own
+people can find it. Choose **List publicly** and it appears for everyone, signed in or not.
+The card first shows exactly what people will see (name, about text, location, logo) and
+warns about anything not set yet, and says plainly that no players, guardians, staff or
+fees are ever shown. **Remove from public directory** takes it down again.
+
+The listing is yours and the organization admin's to switch on. The club manager can take
+it down but can't list it. Every change is recorded in the audit log. If the platform team
+has hidden the club, the card says **blocked**, gives their reason, and keeps your setting
+underneath so it applies again once they lift the block.
 
 ## Read the audit trail
 

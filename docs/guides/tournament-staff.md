@@ -92,6 +92,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Submit support request** | Escalate an issue to the Dula HQ platform team on behalf of the organization | This tournament |
 | **Suspend/reactivate account** | Temporarily suspend or reactivate a staff member's access without removing them from the club | This tournament |
 | **View audit log** | Review administrative and security activity for the club | This tournament |
+| **Manage public listing** | Show the tournament in, or remove it from, the public directory | This tournament |
 <!-- END permissions -->
 
 On the **Staff** tab you can:
@@ -99,6 +100,13 @@ On the **Staff** tab you can:
 - **Suspend** a staff member to cut their access at once, and **Reactivate** them to
   restore it. They keep their record.
 - Read the **Audit trail** of what's happened in this tournament.
+
+You can also list the tournament in the public directory: on the **Public listing** tab,
+choose **List publicly**. It first shows exactly what people will see (name, organizer,
+date, venue, poster) and never shows entries, players or finances. **Remove from public
+directory** takes it down; the organizer can do that too, but only you and an
+organization admin can list it. If the platform team has hidden it, the tab says so and
+why, and your setting applies again once they lift the block.
 
 You can't add or remove staff (that's the organizer or an organization admin). There
 is no "view as" tool at tournament level: that exists for club IT admins and the

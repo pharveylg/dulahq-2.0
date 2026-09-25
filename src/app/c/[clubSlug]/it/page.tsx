@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import ViewAsPanel, { type AccessReadout } from './ViewAsPanel';
 import AccountStatusPanel from './AccountStatusPanel';
+import PublicListingCard from '@/components/PublicListingCard';
 
 /**
  * IT administration (Club Admin spec §24). Deliberately a separate route
@@ -15,16 +16,21 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
   if (!dulaUser) redirect('/login');
 
   const supabase = await createClient();
-  const { data: club } = await supabase.from('clubs').select('id, name, slug').eq('slug', clubSlug).maybeSingle();
+  const { data: club } = await supabase.from('clubs')
+    .select('id, name, slug, about, location, branding, publicly_listed, listing_blocked, listing_block_reason, org_id')
+    .eq('slug', clubSlug)
+    .maybeSingle();
   if (!club) notFound();
 
-  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canManageAccountStatus }] = await Promise.all([
+  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canManageAccountStatus }, { data: canManageListing }, { data: isOrgAdmin }] = await Promise.all([
     supabase.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: club.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: club.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'manage_account_status', p_club_id: club.id }),
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_club_listing', p_club_id: club.id }),
+    supabase.rpc('is_org_admin', { org: club.org_id }),
   ]);
 
-  if (!canImpersonate && !canViewAudit && !canManageAccountStatus) notFound();
+  if (!canImpersonate && !canViewAudit && !canManageAccountStatus && !canManageListing) notFound();
 
   const { data: directoryRows } = await supabase.rpc('it_club_directory', { p_club_id: club.id });
   const { data: activeRows } = await supabase.rpc('my_active_impersonation');
@@ -98,6 +104,26 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
             </p>
           </div>
         </div>
+
+        {(canManageListing || isOrgAdmin) && (
+          <PublicListingCard
+            kind="club"
+            id={club.id}
+            listed={club.publicly_listed}
+            blocked={club.listing_blocked}
+            blockReason={club.listing_block_reason}
+            canList={!!canManageListing || !!isOrgAdmin}
+            canUnlist
+            preview={{
+              fields: [
+                { label: 'Name', value: club.name },
+                { label: 'About', value: club.about },
+                { label: 'Location', value: club.location },
+                { label: 'Logo', value: (club.branding as any)?.logoKey ? 'uploaded' : null },
+              ],
+            }}
+          />
+        )}
 
         <div className="section-label">View as a member</div>
         <ViewAsPanel

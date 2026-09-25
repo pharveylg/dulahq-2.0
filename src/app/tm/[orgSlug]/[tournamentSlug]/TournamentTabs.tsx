@@ -12,6 +12,7 @@ export default function TournamentTabs({
   categoriesSlot,
   financeSlot,
   staffSlot,
+  listingSlot,
 }: {
   pendingCount: number;
   categoryCount: number;
@@ -20,12 +21,14 @@ export default function TournamentTabs({
   categoriesSlot: React.ReactNode;
   financeSlot: React.ReactNode | null;
   staffSlot: React.ReactNode | null;
+  listingSlot: React.ReactNode | null;
 }) {
   const tabs: Tab[] = [
     { id: 'entries', label: 'Entries', badge: pendingCount },
     { id: 'categories', label: 'Categories', badge: categoryCount },
     ...(financeSlot ? [{ id: 'finance', label: 'Finance', badge: financeBadge }] : []),
     ...(staffSlot ? [{ id: 'staff', label: 'Staff' }] : []),
+    ...(listingSlot ? [{ id: 'listing', label: 'Public listing' }] : []),
   ];
   const [active, setActive] = useState('entries');
 
@@ -37,6 +40,7 @@ export default function TournamentTabs({
         {active === 'categories' && categoriesSlot}
         {active === 'finance' && financeSlot}
         {active === 'staff' && staffSlot}
+        {active === 'listing' && listingSlot}
       </Reveal>
     </div>
   );

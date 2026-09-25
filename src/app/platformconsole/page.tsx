@@ -6,6 +6,7 @@ import ProvisionForm from './ProvisionForm';
 import SupportQueue from './SupportQueue';
 import BillingConsole from './BillingConsole';
 import Troubleshoot from './Troubleshoot';
+import Listings, { type ListingRow } from './Listings';
 
 export default async function PlatformConsolePage({
   searchParams,
@@ -30,7 +31,7 @@ export default async function PlatformConsolePage({
   }
 
   const { tab } = await searchParams;
-  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : tab === 'troubleshoot' ? 'troubleshoot' : 'directory';
+  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : tab === 'troubleshoot' ? 'troubleshoot' : tab === 'listings' ? 'listings' : 'directory';
 
   const { count: openSupportCount } = await supabase
     .from('support_requests')
@@ -113,6 +114,18 @@ export default async function PlatformConsolePage({
   let billingAccounts: any[] = [];
   let billingUsageEvents: any[] = [];
   let billingSubscriptions: any[] = [];
+  let listingRows: ListingRow[] = [];
+  if (activeTab === 'listings') {
+    const [{ data: clubRows }, { data: tournamentRows }] = await Promise.all([
+      supabase.from('clubs').select('id, name, publicly_listed, listing_blocked, listing_block_reason, organizations(name)').order('name'),
+      supabase.from('tournaments').select('id, name, publicly_listed, listing_blocked, listing_block_reason, organizations(name)').order('name'),
+    ]);
+    const map = (kind: 'club' | 'tournament') => (r: any): ListingRow => ({
+      kind, id: r.id, name: r.name, org: r.organizations?.name ?? '', listed: r.publicly_listed, blocked: r.listing_blocked, reason: r.listing_block_reason,
+    });
+    listingRows = [...(clubRows ?? []).map(map('club')), ...(tournamentRows ?? []).map(map('tournament'))];
+  }
+
   if (activeTab === 'billing') {
     const db = supabase as any;
     const [{ data: invoiceRows }, { data: paymentRows }, { data: billingAccountRows }, { data: usageRows }, { data: subscriptionRows }] = await Promise.all([
@@ -165,12 +178,16 @@ export default async function PlatformConsolePage({
           <Link href="/platformconsole?tab=troubleshoot" className={activeTab === 'troubleshoot' ? 'btn btn-primary' : 'btn'}>
             Troubleshoot
           </Link>
+          <Link href="/platformconsole?tab=listings" className={activeTab === 'listings' ? 'btn btn-primary' : 'btn'}>
+            Listings
+          </Link>
         </div>
 
         {activeTab === 'directory' && <Directory orgs={orgs} />}
         {activeTab === 'provision' && <ProvisionForm />}
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
         {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} />}
+        {activeTab === 'listings' && <Listings rows={listingRows} />}
         {activeTab === 'troubleshoot' && <Troubleshoot orgs={orgs} activeSession={activeSession} />}
       </div>
     </main>

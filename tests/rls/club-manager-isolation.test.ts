@@ -2879,3 +2879,115 @@ describe('creating a team (createTeam)', () => {
     await adminClient.from('teams').delete().in('id', made);
   });
 });
+
+/**
+ * Public listing (phase13a, docs/proposals/public-listing.md). The owner opts in, held
+ * by the club IT admin and tournament IT admin (plus org admin); a platform admin can
+ * block. The flag was writable by any club manager through the API with nothing
+ * guarding it, and a tournament IT admin could not write it at all.
+ */
+describe('public listing: owner opt-in, platform block (phase13a)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const paEmail = `rls-list-pa-${tag}@rls-test.local`;
+  const titEmail = `rls-list-tit-${tag}@rls-test.local`;
+  let paId: string;
+  let titId: string;
+  let paClient: ReturnType<typeof createClient>;
+  let titClient: ReturnType<typeof createClient>;
+  let tId: string;
+  const anon = () => createClient(SUPABASE_URL, ANON_KEY);
+  const listedClubs = async () => ((await anon().from('public_clubs').select('id').eq('id', clubA.id)).data ?? []).length === 1;
+  const listedTournament = async () => ((await anon().from('public_tournaments').select('id').eq('id', tId)).data ?? []).length === 1;
+  const flag = async (table: 'clubs' | 'tournaments', id: string) =>
+    (await adminClient.from(table).select('publicly_listed, listing_blocked').eq('id', id).single()).data as any;
+
+  it('sets up a platform admin, a tournament IT admin and a tournament, all unlisted', async () => {
+    paId = (await createTestUser(paEmail, 'platform_admin')).publicUser.id;
+    must(await adminClient.from('platform_admins').insert({ email: paEmail }).select().single(), 'platform admin');
+    paClient = await signInAs(paEmail);
+    titId = (await createTestUser(titEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments')
+      .insert({ name: 'RLS Listing Cup', org_id: orgA.id, slug: `rls-list-${tag}` }).select().single(), 'tournament').id;
+    must(await adminClient.from('tournament_staff')
+      .insert({ tournament_id: tId, user_id: titId, role: 'tournament_it_admin', org_id: orgA.id }).select().single(), 'tournament it admin');
+    titClient = await signInAs(titEmail);
+    await adminClient.from('clubs').update({ publicly_listed: false }).eq('id', clubA.id);
+    expect(await listedClubs()).toBe(false);
+    expect(await listedTournament()).toBe(false);
+  });
+
+  it('the IT roles hold the listing permission; nobody else does by default', async () => {
+    const club = (c: ReturnType<typeof createClient>) => c.rpc('has_staff_permission', { p_permission_key: 'manage_club_listing', p_club_id: clubA.id });
+    expect((await club(itAdminAClient)).data).toBe(true);
+    expect((await club(clubAdminAClient)).data).toBe(false);
+    expect((await club(coachA1Client)).data).toBe(false);
+    const t = (c: ReturnType<typeof createClient>) => c.rpc('has_tournament_permission', { p_permission_key: 'manage_tournament_listing', p_tournament_id: tId });
+    expect((await t(titClient)).data).toBe(true);
+    expect((await t(coachA1Client)).data).toBe(false);
+  });
+
+  it('the club IT admin can list the club, and it appears in the public directory', async () => {
+    const { error } = await itAdminAClient.rpc('set_public_listing', { p_kind: 'club', p_id: clubA.id, p_listed: true });
+    expect(error).toBeNull();
+    expect(await listedClubs()).toBe(true);
+  });
+
+  it('a club manager, a coach and another clubs manager cannot LIST a club, by RPC or by a direct write', async () => {
+    await adminClient.from('clubs').update({ publicly_listed: false }).eq('id', clubA.id);
+    for (const c of [clubAdminAClient, coachA1Client, clubStaffBClient]) {
+      expect((await c.rpc('set_public_listing', { p_kind: 'club', p_id: clubA.id, p_listed: true })).error).not.toBeNull();
+    }
+    // the hole this closes: clubs_admin_write let a club manager write any column
+    await clubAdminAClient.from('clubs').update({ publicly_listed: true }).eq('id', clubA.id);
+    expect((await flag('clubs', clubA.id)).publicly_listed).toBe(false);
+  });
+
+  it('an org admin can list; a club manager can take a listing DOWN', async () => {
+    expect((await orgAdminAClient.rpc('set_public_listing', { p_kind: 'club', p_id: clubA.id, p_listed: true })).error).toBeNull();
+    expect(await listedClubs()).toBe(true);
+    expect((await clubAdminAClient.rpc('set_public_listing', { p_kind: 'club', p_id: clubA.id, p_listed: false })).error).toBeNull();
+    expect(await listedClubs()).toBe(false);
+  });
+
+  it('only a platform admin can block; a block hides a listed club, from the views AND the table', async () => {
+    await itAdminAClient.rpc('set_public_listing', { p_kind: 'club', p_id: clubA.id, p_listed: true });
+    for (const c of [itAdminAClient, orgAdminAClient, clubAdminAClient]) {
+      expect((await c.rpc('set_listing_block', { p_kind: 'club', p_id: clubA.id, p_blocked: true, p_reason: 'no' })).error).not.toBeNull();
+    }
+    await orgAdminAClient.from('clubs').update({ listing_blocked: true }).eq('id', clubA.id);
+    expect((await flag('clubs', clubA.id)).listing_blocked).toBe(false);
+
+    expect((await paClient.rpc('set_listing_block', { p_kind: 'club', p_id: clubA.id, p_blocked: true, p_reason: 'test' })).error).toBeNull();
+    expect((await flag('clubs', clubA.id)).publicly_listed).toBe(true); // the owner's choice is kept
+    expect(await listedClubs()).toBe(false);
+    expect(((await anon().from('clubs').select('id').eq('id', clubA.id)).data ?? [])).toHaveLength(0);
+
+    expect((await paClient.rpc('set_listing_block', { p_kind: 'club', p_id: clubA.id, p_blocked: false, p_reason: null })).error).toBeNull();
+    expect(await listedClubs()).toBe(true);
+  });
+
+  it('the tournament IT admin can list a tournament; a coach cannot; a block hides it', async () => {
+    expect((await coachA1Client.rpc('set_public_listing', { p_kind: 'tournament', p_id: tId, p_listed: true })).error).not.toBeNull();
+    expect((await titClient.rpc('set_public_listing', { p_kind: 'tournament', p_id: tId, p_listed: true })).error).toBeNull();
+    expect(await listedTournament()).toBe(true);
+    expect((await titClient.rpc('set_listing_block', { p_kind: 'tournament', p_id: tId, p_blocked: true, p_reason: 'x' })).error).not.toBeNull();
+    expect((await paClient.rpc('set_listing_block', { p_kind: 'tournament', p_id: tId, p_blocked: true, p_reason: 'test' })).error).toBeNull();
+    expect(await listedTournament()).toBe(false);
+  });
+
+  it('listing and blocking are audited', async () => {
+    const { data } = await adminClient.from('audit_log').select('action').eq('entity_id', clubA.id).like('action', 'club.listing%');
+    const actions = (data ?? []).map((r: any) => r.action);
+    expect(actions).toContain('club.listing.changed');
+    expect(actions).toContain('club.listing.blocked');
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('audit_log').delete().in('entity_id', [clubA.id, tId]).like('action', '%.listing.%');
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    await adminClient.from('clubs').update({ publicly_listed: false, listing_blocked: false }).eq('id', clubA.id);
+    await adminClient.from('platform_admins').delete().eq('email', paEmail);
+    for (const id of [paId, titId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

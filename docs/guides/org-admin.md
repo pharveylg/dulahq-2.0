@@ -43,6 +43,15 @@ Above the tiles, a **Tournaments you manage** strip lists each of your organizat
 tournaments with a **Manage** link straight to its console. A console lives at
 `/tm/your-org/your-tournament`, and `/tournaments` lists the same tournaments too.
 
+## Put a club or tournament in the public directory
+
+New clubs and tournaments are private. As an org admin you can list either one: on a club's
+page, use the **Public directory** card at the top and choose **List publicly**; for a
+tournament, open its console and use the **Public listing** tab. Each shows exactly what
+people will see, and never any players, guardians, staff or money. The club IT admin and the
+tournament IT admin can do the same, and anyone running the club or tournament can take it
+down. The platform team can hide a listing that shouldn't be public, and will give a reason.
+
 ## Create a club
 
 1. On **Clubs**, choose **New club**. (If you don't see it, your organization

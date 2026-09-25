@@ -5,6 +5,7 @@ import EditNameForm from './EditNameForm';
 import AddStaffForm from './AddStaffForm';
 import LinkTeamForm from './LinkTeamForm';
 import CreateTeamForm from './CreateTeamForm';
+import PublicListingCard from '@/components/PublicListingCard';
 import StaffRow from './StaffRow';
 import Trips from './Trips';
 import Announcements from './Announcements';
@@ -72,7 +73,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
-    .select('id, slug, name, created_at, about, location, branding, org_id')
+    .select('id, slug, name, created_at, about, location, branding, org_id, publicly_listed, listing_blocked, listing_block_reason')
     .eq('slug', clubSlug)
     .maybeSingle();
 
@@ -113,6 +114,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     { data: canCommunicateRpc },
     { data: canMembershipRpc },
     { data: canDocsRpc },
+    { data: canListRpc },
   ] = await Promise.all([
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
@@ -123,6 +125,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_communications', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_membership', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_documents', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_club_listing', p_club_id: clubId }),
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
 
@@ -675,6 +678,28 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
             {access.isPlatformAdmin ? 'Platform admin' : access.role ? access.role.replace('_', ' ') : 'No access here'}
           </span>
         </div>
+
+        {/* Listing is the IT admin's and org admin's to switch on; a club manager can take
+            it down. The IT admin has no business console, so they get this card on /it. */}
+        {(canManage || isOrgAdminRpc) && (
+          <PublicListingCard
+            kind="club"
+            id={club.id}
+            listed={club.publicly_listed}
+            blocked={club.listing_blocked}
+            blockReason={club.listing_block_reason}
+            canList={!!isOrgAdminRpc || !!canListRpc}
+            canUnlist
+            preview={{
+              fields: [
+                { label: 'Name', value: club.name },
+                { label: 'About', value: club.about },
+                { label: 'Location', value: club.location },
+                { label: 'Logo', value: clubLogoUrl ? 'uploaded' : null },
+              ],
+            }}
+          />
+        )}
 
         {(club.location || club.about) && (
           <p className="subtitle" style={{ marginTop: -8, marginBottom: 16 }}>

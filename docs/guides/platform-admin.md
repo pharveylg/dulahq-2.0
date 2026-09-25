@@ -30,6 +30,7 @@ Open `/platformconsole`. Five tabs run across the top:
 | **Support** | The queue of requests organizations send you. The number in brackets is how many are open |
 | **Billing** | Invoice organizations, set payment instructions, verify payments |
 | **Troubleshoot** | See exactly what a person in an organization can and can't do |
+| **Listings** | Every club and tournament, whether it's in the public directory, and a **Block** to hide one |
 
 Anyone who isn't a platform admin who opens the console sees only a short notice
 that it's for platform admins.
@@ -123,6 +124,15 @@ The rules built into it:
 - The audit record shows **you** as the actor, never the person you inspected.
 - If the organization is suspended, the panel says so, because their permissions
   look healthy on paper while every check is being refused.
+
+## Hide something from the public directory (Listings)
+
+Owners decide whether their own club or tournament is listed: the club IT admin, tournament
+IT admin or an organization admin switches it on. You only step in to hide something that
+shouldn't be public. On **Listings**, filter by **Listed**, **Blocked** or **Everything**, and
+choose **Block** next to it. A reason is required, and the owner sees it. A blocked item
+disappears from the public directory even if its owner has it switched on; their setting is
+kept, and **Unblock** brings it straight back. Blocks and unblocks are audited.
 
 ## Answer support requests
 

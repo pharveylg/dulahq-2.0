@@ -6,6 +6,7 @@ import EntryQueue, { type Entry, type CategoryOption } from './EntryQueue';
 import Categories, { type Category } from './Categories';
 import StaffPanel, { type StaffMember, type AuditRow } from './StaffPanel';
 import Finance, { type FinanceInvoice, type PendingPayment } from './Finance';
+import PublicListingCard from '@/components/PublicListingCard';
 
 /**
  * The native organizer workspace for one tournament
@@ -29,7 +30,7 @@ export default async function TournamentConsolePage({
 
   const { data: tournament } = await supabase
     .from('tournaments')
-    .select('id, name, slug, org_id, venue, event_date, organizations!inner(slug, name)')
+    .select('id, name, slug, org_id, venue, event_date, poster_url, publicly_listed, listing_blocked, listing_block_reason, organizations!inner(slug, name)')
     .eq('slug', tournamentSlug)
     .eq('organizations.slug', orgSlug)
     .maybeSingle();
@@ -51,6 +52,7 @@ export default async function TournamentConsolePage({
     { data: pAudit },
     { data: pViewFinance },
     { data: pManageFinance },
+    { data: pListing },
   ] = await Promise.all([
     supabase.rpc('is_org_admin', { org: orgId }),
     supabase.rpc('is_tournament_staff', { check_tournament_id: tournamentId }),
@@ -62,6 +64,7 @@ export default async function TournamentConsolePage({
     perm('view_audit_log'),
     perm('view_tournament_finances'),
     perm('manage_tournament_finances'),
+    perm('manage_tournament_listing'),
   ]);
 
   // RLS already hides the tournament from anyone else; this is the explicit
@@ -77,6 +80,10 @@ export default async function TournamentConsolePage({
   const canViewAudit = can(pAudit);
   const canManageFinance = can(pManageFinance);
   const showFinanceTab = canManageFinance || can(pViewFinance);
+  // Listing: the tournament IT admin and org admin turn it on; the Organizer
+  // (manage_tournament) can take it down.
+  const canList = can(pListing);
+  const showListingTab = canList || canAddEntries;
 
   const [{ data: entryRows }, { data: categoryRows }] = await Promise.all([
     supabase
@@ -214,6 +221,28 @@ export default async function TournamentConsolePage({
           pendingCount={pendingCount}
           categoryCount={categories.length}
           financeBadge={pendingPayments.length}
+          listingSlot={
+            showListingTab ? (
+              <PublicListingCard
+                kind="tournament"
+                id={tournamentId}
+                listed={tournament.publicly_listed}
+                blocked={tournament.listing_blocked}
+                blockReason={tournament.listing_block_reason}
+                canList={canList}
+                canUnlist
+                preview={{
+                  fields: [
+                    { label: 'Name', value: tournament.name },
+                    { label: 'Organizer', value: org.name },
+                    { label: 'Date', value: tournament.event_date ? new Date(tournament.event_date).toLocaleDateString() : null },
+                    { label: 'Venue', value: tournament.venue },
+                    { label: 'Poster', value: tournament.poster_url ? 'uploaded' : null },
+                  ],
+                }}
+              />
+            ) : null
+          }
           entriesSlot={
             <EntryQueue
               tournamentId={tournamentId}

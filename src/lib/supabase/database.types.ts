@@ -515,6 +515,8 @@ export type Database = {
           location: string | null
           name: string
           org_id: string
+          listing_block_reason: string | null
+          listing_blocked: boolean
           publicly_listed: boolean
           settings: Json
           slug: string
@@ -530,6 +532,8 @@ export type Database = {
           location?: string | null
           name: string
           org_id: string
+          listing_block_reason?: string | null
+          listing_blocked?: boolean
           publicly_listed?: boolean
           settings?: Json
           slug: string
@@ -545,6 +549,8 @@ export type Database = {
           location?: string | null
           name?: string
           org_id?: string
+          listing_block_reason?: string | null
+          listing_blocked?: boolean
           publicly_listed?: boolean
           settings?: Json
           slug?: string
@@ -4097,6 +4103,8 @@ export type Database = {
           name: string
           org_id: string | null
           poster_url: string | null
+          listing_block_reason: string | null
+          listing_blocked: boolean
           publicly_listed: boolean
           slug: string | null
           sport_id: string | null
@@ -4112,6 +4120,8 @@ export type Database = {
           name?: string
           org_id?: string | null
           poster_url?: string | null
+          listing_block_reason?: string | null
+          listing_blocked?: boolean
           publicly_listed?: boolean
           slug?: string | null
           sport_id?: string | null
@@ -4127,6 +4137,8 @@ export type Database = {
           name?: string
           org_id?: string | null
           poster_url?: string | null
+          listing_block_reason?: string | null
+          listing_blocked?: boolean
           publicly_listed?: boolean
           slug?: string | null
           sport_id?: string | null
@@ -4931,6 +4943,18 @@ export type Database = {
           p_scope_type?: string
         }
         Returns: number
+      }
+      can_change_listing: {
+        Args: { p_id: string; p_kind: string; p_org: string; p_turning_on: boolean }
+        Returns: boolean
+      }
+      set_listing_block: {
+        Args: { p_blocked: boolean; p_id: string; p_kind: string; p_reason: string }
+        Returns: undefined
+      }
+      set_public_listing: {
+        Args: { p_id: string; p_kind: string; p_listed: boolean }
+        Returns: undefined
       }
       write_audit_system: {
         Args: {

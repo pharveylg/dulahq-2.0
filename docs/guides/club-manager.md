@@ -92,9 +92,11 @@ The logo appears on your club's tile in the public directory. If the club has no
 logo it falls back to the organization's, and then to a generated crest made from
 the club's initials.
 
-**Being in the public directory is not something you can switch on.** A new club
-is private, and the app has no setting that lists it. Until the platform team lists
-it, only signed-in people who belong to it can find it.
+**Listing the club in the public directory** is the club IT admin's and the organization
+admin's to switch on, not yours. A new club is private: only signed-in people who belong
+to it can find it. At the top of the club page you'll see a **Public directory** card that
+shows whether it's listed and exactly what people would see. If it's listed, **Remove from
+public directory** takes it down.
 
 ## Manage your staff
 
@@ -281,4 +283,4 @@ platform team's replies appear in the same place.
   them on) but never emailed.
 - Creating logins or resetting passwords.
 - Changing an individual staff member's permissions.
-- Listing your club (or a tournament) in the public directory yourself.
+- Listing your club in the public directory yourself (you can take it down, but the IT admin or an organization admin lists it).

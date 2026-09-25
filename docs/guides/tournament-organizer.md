@@ -185,8 +185,8 @@ it, so the roster step falls to an **organization admin**. Ask yours.
 - A screen where a team sees its entry invoice and reports a payment. Until one
   exists you record payments yourself, and **Payments to verify** will mostly stay
   empty.
-- Setting the tournament live in the public directory. That's done by the platform
-  team.
+- Listing the tournament in the public directory. The tournament IT admin or an
+  organization admin does that on the **Public listing** tab; you can take it down there.
 - Assigning referees and officials, and the "flag for review" step for team
   coordinators.
 - Brackets, schedules and live scores in the console. They're in the tournament

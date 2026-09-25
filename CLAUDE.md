@@ -2324,9 +2324,9 @@ the current behaviour honestly and points at the workaround.
 3. ~~**An org admin's Tournaments tile opens the tournament engine (`/t/<org>`), and
    nothing links to the native console.**~~ **Fixed.** `/tournaments` ("Tournaments you manage")
    and `/tm/<org>/<tournament>` are reachable only by typing them.
-4. **Nothing can list a club or tournament publicly.** `publicly_listed` defaults to
-   `false` on both and no code writes it, so the public directory only ever shows
-   what was set directly in the database.
+4. ~~**Nothing can list a club or tournament publicly.**~~ **Fixed (below).** `publicly_listed`
+   defaults to `false`; only tournaments had a checkbox (in the tournament app's platform
+   console), clubs none, so the directory only showed clubs set by direct database writes.
 
 5. ~~**Club office roles can't be given a team, so their document, membership and fee
    permissions have no screen.**~~ **Fixed (§0s.3 below), and turned out to be three
@@ -2576,6 +2576,57 @@ Verified: 3 RLS tests pin the write side (a club manager and an org admin create
 a guardian and another club's manager are refused; a duplicate slug is a clean 23505). Driven
 live as the demo club manager: created a team (slug, org, sport and audit row all correct),
 created a second with the same name and got the `-2` slug; test rows removed.
+
+### Public listing: owner opt-in (2026-09-25) — gap 4
+
+Design in `docs/proposals/public-listing.md` (with the two other proposals in
+`docs/proposals/`). `phase13a`, `phase13a1`.
+
+**A correction to §0s.** Finding 4 said nothing writes `publicly_listed`. That was true for
+**clubs** only: the tournament app's platform console has a "List publicly" checkbox and its
+creation forms set the flag. Clubs had no screen; all four listed clubs were listed by a
+direct database write.
+
+**Decision:** the owner opts in, held by the **club IT admin and tournament IT admin** (plus
+org admin and platform admin). New catalog keys `manage_club_listing` (club scope, held by
+`club_it_admin`) and `manage_tournament_listing` (tournament scope, held by
+`tournament_it_admin`) rather than one reused key, because the club and tournament
+resolvers differ. A **platform admin can block** via a separate `listing_blocked` flag, so
+unblocking restores exactly what the owner had; the views require listed and not blocked.
+The club manager and the Organizer can take a listing **down** but not list it.
+
+**A hole found first:** `clubs_admin_write` lets a club manager write any column, so any
+club manager could flip `publicly_listed` straight through the API, with no screen and no
+guard; and a tournament IT admin could not write it at all (`tournaments_write` is
+`is_org_admin`). `guard_listing_flags()` (BEFORE INSERT/UPDATE on both tables) now refuses
+turning the flag on without `can_change_listing()`, and any change to the block columns
+unless the caller is a platform admin. Calls with no signed-in user (service role,
+migrations, the SQL editor) pass. The IT roles have no table write access, so
+`set_public_listing()` and `set_listing_block()` (SECURITY DEFINER, authorize first, audited
+via `write_audit_system` as `club|tournament.listing.changed|blocked`) are how they act.
+
+**A second hole, caught by the anon direct-read test:** `clubs` and `tournaments` each
+carried **two** anon/authenticated "listed" SELECT policies under different names. I
+rewrote one of each to add `and not listing_blocked`, but the older twin stayed, and
+permissive policies OR together, so a blocked row was still readable straight from the
+table even though the views hid it. Dropped in `phase13a1`. (My first policy query only
+matched policies naming `anon`, which is why the twin was missed.)
+
+**UI:** a shared `PublicListingCard` shows the state and exactly what becomes public,
+warns about unset fields, and says plainly when the platform has blocked the listing. It is
+on the club **IT page** (IT admin, org admin), on the **club page** (club manager can take
+down, org admin can list), and on a **Public listing** tab in the tournament console. The
+platform console has a **Listings** tab (filter listed/blocked/everything, Block with a
+reason, Unblock).
+
+Verified: 9 RLS tests, written first (all 7 substantive ones failed on the missing
+permission, RPCs and guard), then green after the migration except the anon table read,
+which found the twin policy. Driven live: the club IT admin unlisted and re-listed Usna Gali
+FC through the card (flag, `public_clubs` and the audit row attributed to them all
+correct; restored to listed); the demo organizer sees the tournament tab with the remove
+button and no list button; the platform console Listings tab shows all 4 clubs and 5
+tournaments. Not clicked: Block/Unblock in the platform console (covered by the RLS
+tests), and no demo persona exists for the tournament IT admin.
 
 ### What was and wasn't clicked through
 
