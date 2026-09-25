@@ -4,6 +4,7 @@ import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import ViewAsPanel, { type AccessReadout } from './ViewAsPanel';
 import AccountStatusPanel from './AccountStatusPanel';
 import PublicListingCard from '@/components/PublicListingCard';
+import ProvisionLoginPanel from '@/components/ProvisionLoginPanel';
 
 /**
  * IT administration (Club Admin spec §24). Deliberately a separate route
@@ -22,15 +23,22 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
     .maybeSingle();
   if (!club) notFound();
 
-  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canManageAccountStatus }, { data: canManageListing }, { data: isOrgAdmin }] = await Promise.all([
+  const [{ data: canImpersonate }, { data: canViewAudit }, { data: canManageAccountStatus }, { data: canManageListing }, { data: isOrgAdmin }, { data: canManageLogins }] = await Promise.all([
+
     supabase.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: club.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: club.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'manage_account_status', p_club_id: club.id }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'manage_club_listing', p_club_id: club.id }),
     supabase.rpc('is_org_admin', { org: club.org_id }),
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_club_logins', p_club_id: club.id }),
   ]);
 
-  if (!canImpersonate && !canViewAudit && !canManageAccountStatus && !canManageListing) notFound();
+  if (!canImpersonate && !canViewAudit && !canManageAccountStatus && !canManageListing && !canManageLogins) notFound();
+
+  const { data: loginRows } = canManageLogins
+    ? await supabase.from('provisioned_logins').select('user_id, email, name, last_issued_at, temp_expires_at, activated_at, expired_at')
+        .eq('scope_type', 'club').eq('scope_id', club.id).order('last_issued_at', { ascending: false })
+    : { data: null };
 
   const { data: directoryRows } = await supabase.rpc('it_club_directory', { p_club_id: club.id });
   const { data: activeRows } = await supabase.rpc('my_active_impersonation');
@@ -125,7 +133,14 @@ export default async function ItAdminPage({ params }: { params: Promise<{ clubSl
           />
         )}
 
-        <div className="section-label">View as a member</div>
+        {canManageLogins && (
+          <>
+            <div className="section-label">Create a login</div>
+            <ProvisionLoginPanel scope="club" scopeId={club.id} logins={loginRows ?? []} />
+          </>
+        )}
+
+        <div className="section-label" style={{ marginTop: 28 }}>View as a member</div>
         <ViewAsPanel
           clubId={club.id}
           directory={directory}

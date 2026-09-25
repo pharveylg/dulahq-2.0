@@ -2991,3 +2991,137 @@ describe('public listing: owner opt-in, platform block (phase13a)', () => {
     for (const id of [paId, titId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Logins an IT admin creates (phase14a). Email is parked, so setup is: the club IT
+ * admin, tournament IT admin or a platform admin creates a login with a random
+ * temporary password, the person must change it on first sign-in, and it stops
+ * working after 72 hours if they never do. The app creates the auth user with the
+ * service role; these functions decide WHO may, and record it.
+ */
+describe('IT-issued logins (phase14a)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const paEmail = `rls-login-pa-${tag}@rls-test.local`;
+  const titEmail = `rls-login-tit-${tag}@rls-test.local`;
+  const newEmail = `rls-login-new-${tag}@rls-test.local`;
+  const newEmail2 = `rls-login-new2-${tag}@rls-test.local`;
+  let paId: string;
+  let titId: string;
+  let newId: string;
+  let newId2: string;
+  let tId: string;
+  let paClient: ReturnType<typeof createClient>;
+  let titClient: ReturnType<typeof createClient>;
+  const rec = (c: ReturnType<typeof createClient>, uid: string, email: string, kind: string, scope: string | null, hours = 72) =>
+    c.rpc('record_provisioned_login', { p_user_id: uid, p_email: email, p_name: 'Test Person', p_scope_type: kind, p_scope_id: scope, p_hours: hours });
+  const row = async (uid: string) => (await adminClient.from('provisioned_logins').select('*').eq('user_id', uid).maybeSingle()).data as any;
+
+  it('sets up a platform admin, a tournament IT admin, a tournament and two new accounts', async () => {
+    paId = (await createTestUser(paEmail, 'platform_admin')).publicUser.id;
+    must(await adminClient.from('platform_admins').insert({ email: paEmail }).select().single(), 'platform admin');
+    paClient = await signInAs(paEmail);
+    titId = (await createTestUser(titEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Login Cup', org_id: orgA.id, slug: `rls-login-${tag}` }).select().single(), 'tournament').id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: titId, role: 'tournament_it_admin', org_id: orgA.id }).select().single(), 'tit');
+    titClient = await signInAs(titEmail);
+    newId = (await createTestUser(newEmail, 'audience')).publicUser.id;
+    newId2 = (await createTestUser(newEmail2, 'audience')).publicUser.id;
+  });
+
+  it('who may create logins: the IT roles for their own scope and a platform admin; nobody else', async () => {
+    const can = async (c: ReturnType<typeof createClient>, kind: string, scope: string | null) =>
+      (await c.rpc('can_provision_login', { p_scope_type: kind, p_scope_id: scope })).data;
+    expect(await can(itAdminAClient, 'club', clubA.id)).toBe(true);
+    expect(await can(titClient, 'tournament', tId)).toBe(true);
+    expect(await can(paClient, 'platform', null)).toBe(true);
+    expect(await can(paClient, 'club', clubA.id)).toBe(true);
+    for (const [who, c] of [['club manager', clubAdminAClient], ['coach', coachA1Client], ['org admin', orgAdminAClient], ['guardian', guardianOfA1Client]] as const) {
+      expect(await can(c, 'club', clubA.id), who).toBe(false);
+    }
+    expect(await can(itAdminAClient, 'club', clubB.id)).toBe(false); // another club
+    expect(await can(itAdminAClient, 'platform', null)).toBe(false);
+    expect(await can(titClient, 'club', clubA.id)).toBe(false);
+  });
+
+  it('recording a login is refused for anyone who may not create one, and writes nothing', async () => {
+    for (const c of [clubAdminAClient, coachA1Client, guardianOfA1Client, clubStaffBClient]) {
+      expect((await rec(c, newId, newEmail, 'club', clubA.id)).error).not.toBeNull();
+    }
+    expect((await rec(itAdminAClient, newId, newEmail, 'platform', null)).error).not.toBeNull();
+    expect(await row(newId)).toBeNull();
+  });
+
+  it('the club IT admin records one: expiry set, audited, readable by them and not by the club manager', async () => {
+    const before = Date.now();
+    expect((await rec(itAdminAClient, newId, newEmail, 'club', clubA.id)).error).toBeNull();
+    const r = await row(newId);
+    expect(r).toMatchObject({ scope_type: 'club', scope_id: clubA.id, email: newEmail, activated_at: null, expired_at: null });
+    const hrs = (new Date(r.temp_expires_at).getTime() - before) / 3_600_000;
+    expect(hrs).toBeGreaterThan(71.9); expect(hrs).toBeLessThan(72.1);
+    expect(((await itAdminAClient.from('provisioned_logins').select('user_id').eq('user_id', newId)).data ?? [])).toHaveLength(1);
+    for (const c of [clubAdminAClient, coachA1Client, clubStaffBClient]) {
+      expect(((await c.from('provisioned_logins').select('user_id').eq('user_id', newId)).data ?? [])).toHaveLength(0);
+    }
+    const { data } = await adminClient.from('audit_log').select('action').eq('entity_id', newId).eq('action', 'login.provisioned');
+    expect(data).toHaveLength(1);
+  });
+
+  it('a validity window outside 1 hour to 7 days is refused', async () => {
+    expect((await rec(itAdminAClient, newId2, newEmail2, 'club', clubA.id, 0)).error).not.toBeNull();
+    expect((await rec(itAdminAClient, newId2, newEmail2, 'club', clubA.id, 24 * 8)).error).not.toBeNull();
+  });
+
+  it('the tournament IT admin records one for their tournament', async () => {
+    expect((await rec(titClient, newId2, newEmail2, 'tournament', tId)).error).toBeNull();
+    expect(await row(newId2)).toMatchObject({ scope_type: 'tournament', scope_id: tId });
+  });
+
+  it('reissue: only for a login this same scope issued -- never someone else\'s account', async () => {
+    const coachId = (await adminClient.from('club_staff').select('user_id').eq('club_id', clubA.id).eq('role', 'coach').limit(1).single()).data!.user_id as string;
+    const can = async (c: ReturnType<typeof createClient>, uid: string, kind: string, scope: string | null) =>
+      (await c.rpc('can_reissue_login', { p_target: uid, p_scope_type: kind, p_scope_id: scope })).data;
+    expect(await can(itAdminAClient, newId, 'club', clubA.id)).toBe(true);
+    // not issued by this scope: the tournament's login, a staff member, the platform admin, the club manager
+    expect(await can(itAdminAClient, newId2, 'club', clubA.id)).toBe(false);
+    expect(await can(itAdminAClient, coachId, 'club', clubA.id)).toBe(false);
+    expect(await can(itAdminAClient, paId, 'club', clubA.id)).toBe(false);
+    expect(await can(clubAdminAClient, newId, 'club', clubA.id)).toBe(false);
+    // a platform admin can reissue any ordinary account, but never another platform admin
+    expect(await can(paClient, coachId, 'platform', null)).toBe(true);
+    expect(await can(paClient, paId, 'platform', null)).toBe(false);
+  });
+
+  it('mark_login_reissued restarts the clock, clears activation and expiry, and is audited', async () => {
+    await adminClient.from('provisioned_logins').update({ activated_at: new Date().toISOString(), expired_at: new Date().toISOString(), temp_expires_at: new Date(Date.now() - 1000).toISOString() }).eq('user_id', newId);
+    expect((await itAdminAClient.rpc('mark_login_reissued', { p_target: newId, p_scope_type: 'club', p_scope_id: clubA.id, p_hours: 72 })).error).toBeNull();
+    const r = await row(newId);
+    expect(r.activated_at).toBeNull(); expect(r.expired_at).toBeNull();
+    expect(new Date(r.temp_expires_at).getTime()).toBeGreaterThan(Date.now() + 71 * 3_600_000);
+    expect((await clubAdminAClient.rpc('mark_login_reissued', { p_target: newId, p_scope_type: 'club', p_scope_id: clubA.id, p_hours: 72 })).error).not.toBeNull();
+  });
+
+  it('the expiry sweep bans logins never activated past their window, and only those', async () => {
+    const past = new Date(Date.now() - 3600_000).toISOString();
+    await adminClient.from('provisioned_logins').update({ temp_expires_at: past }).eq('user_id', newId);           // never activated, expired
+    await adminClient.from('provisioned_logins').update({ temp_expires_at: past, activated_at: new Date().toISOString() }).eq('user_id', newId2); // activated: safe
+    expect((await itAdminAClient.rpc('expire_temp_logins')).error).not.toBeNull(); // not callable by a signed-in user
+    const { data, error } = await adminClient.rpc('expire_temp_logins');
+    expect(error).toBeNull();
+    expect(Number(data)).toBeGreaterThanOrEqual(1);
+    const banned = (await adminClient.auth.admin.getUserById(newId)).data.user as any;
+    expect(banned.banned_until && new Date(banned.banned_until).getTime() > Date.now()).toBe(true);
+    const fine = (await adminClient.auth.admin.getUserById(newId2)).data.user as any;
+    expect(fine.banned_until ?? null).toBeNull();
+    expect((await row(newId)).expired_at).not.toBeNull();
+    expect((await row(newId2)).expired_at).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('audit_log').delete().in('entity_id', [newId, newId2].filter(Boolean)).like('action', 'login.%');
+    await adminClient.from('provisioned_logins').delete().in('user_id', [newId, newId2]);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    await adminClient.from('platform_admins').delete().eq('email', paEmail);
+    for (const id of [paId, titId, newId, newId2]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

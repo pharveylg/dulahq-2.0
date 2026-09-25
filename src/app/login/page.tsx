@@ -23,7 +23,11 @@ function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword({ email: signInEmail, password: signInPassword });
 
     if (error) {
-      setError(error.message);
+      setError(
+        /banned/i.test(error.message)
+          ? 'This temporary password has expired. Ask your IT admin to issue a new one.'
+          : error.message,
+      );
       setLoading(false);
       return;
     }

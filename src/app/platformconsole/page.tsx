@@ -7,6 +7,7 @@ import SupportQueue from './SupportQueue';
 import BillingConsole from './BillingConsole';
 import Troubleshoot from './Troubleshoot';
 import Listings, { type ListingRow } from './Listings';
+import ProvisionLoginPanel from '@/components/ProvisionLoginPanel';
 
 export default async function PlatformConsolePage({
   searchParams,
@@ -31,7 +32,7 @@ export default async function PlatformConsolePage({
   }
 
   const { tab } = await searchParams;
-  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : tab === 'troubleshoot' ? 'troubleshoot' : tab === 'listings' ? 'listings' : 'directory';
+  const activeTab = tab === 'provision' ? 'provision' : tab === 'support' ? 'support' : tab === 'billing' ? 'billing' : tab === 'troubleshoot' ? 'troubleshoot' : tab === 'listings' ? 'listings' : tab === 'logins' ? 'logins' : 'directory';
 
   const { count: openSupportCount } = await supabase
     .from('support_requests')
@@ -115,6 +116,14 @@ export default async function PlatformConsolePage({
   let billingUsageEvents: any[] = [];
   let billingSubscriptions: any[] = [];
   let listingRows: ListingRow[] = [];
+  let loginRows: any[] = [];
+  if (activeTab === 'logins') {
+    const { data } = await supabase.from('provisioned_logins')
+      .select('user_id, email, name, last_issued_at, temp_expires_at, activated_at, expired_at')
+      .eq('scope_type', 'platform').order('last_issued_at', { ascending: false });
+    loginRows = data ?? [];
+  }
+
   if (activeTab === 'listings') {
     const [{ data: clubRows }, { data: tournamentRows }] = await Promise.all([
       supabase.from('clubs').select('id, name, publicly_listed, listing_blocked, listing_block_reason, organizations(name)').order('name'),
@@ -181,6 +190,9 @@ export default async function PlatformConsolePage({
           <Link href="/platformconsole?tab=listings" className={activeTab === 'listings' ? 'btn btn-primary' : 'btn'}>
             Listings
           </Link>
+          <Link href="/platformconsole?tab=logins" className={activeTab === 'logins' ? 'btn btn-primary' : 'btn'}>
+            Logins
+          </Link>
         </div>
 
         {activeTab === 'directory' && <Directory orgs={orgs} />}
@@ -188,6 +200,7 @@ export default async function PlatformConsolePage({
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
         {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} />}
         {activeTab === 'listings' && <Listings rows={listingRows} />}
+        {activeTab === 'logins' && <ProvisionLoginPanel scope="platform" scopeId={null} logins={loginRows} allowReissueByEmail />}
         {activeTab === 'troubleshoot' && <Troubleshoot orgs={orgs} activeSession={activeSession} />}
       </div>
     </main>

@@ -25,6 +25,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 
 | Permission | What it allows | Reach |
 |---|---|---|
+| **Create logins** | Create a login for a person and issue a temporary password | Whole club |
 | **Manage public listing** | Show the club in, or remove it from, the public directory | Whole club |
 | **Submit support request** | Escalate an issue to the Dula HQ platform team on behalf of the organization | Whole club |
 | **Suspend/reactivate account** | Temporarily suspend or reactivate a staff member's access without removing them from the club | Whole club |
@@ -82,6 +83,14 @@ reason, and marks any still live.
 | "I can see everything, is that right?" | **Role** says **club-wide**: a club manager sees every team |
 | "A coach can see the wrong team" | **Assigned teams** lists what they're on |
 
+## Create a login for someone
+
+If a person has no Dulà HQ login yet, open **IT administration** and use **Create a login**, enter their **name** and **email**, and choose **Create login**. You get a **temporary password** shown once (the dashes are for reading aloud; type it without them). Hand it over yourself, directly, not in a group chat. No email is sent.
+
+The person signs in with it and is asked to **choose their own password** before anything else. If they never do, the temporary password **stops working after 72 hours**, and the login shows *expired*. **Reissue** next to a login gives a new temporary password and restores it. You can only reissue logins created from here; you can't take over an account someone else owns. Creating, reissuing, first sign-in and expiry are all in the audit trail.
+
+After that, the club manager adds them by email as usual.
+
 ## Pause or restore someone's access (Accounts)
 
 **Accounts** lists the club's active and suspended staff, each with their email and
@@ -137,7 +146,8 @@ it, and the platform team's replies appear in the same place.
 
 ## Not available yet
 
-- Creating logins, inviting people by email, or resetting passwords and multi-factor
-  authentication. These need email delivery, which isn't set up.
+- Inviting people by email, "forgot password" emails and multi-factor reset. These need
+  email delivery, which isn't set up. If someone forgets the password they chose, reissue
+  the login you created for them.
 - Signing someone out of their open sessions.
 - Changing a person's role or permissions.

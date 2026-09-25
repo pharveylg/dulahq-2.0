@@ -134,6 +134,10 @@ choose **Block** next to it. A reason is required, and the owner sees it. A bloc
 disappears from the public directory even if its owner has it switched on; their setting is
 kept, and **Unblock** brings it straight back. Blocks and unblocks are audited.
 
+## Create a login, or reset one (Logins)
+
+On **Logins**, enter a name and email and choose **Create login** to make an account with a temporary password, shown once. The person must choose their own password on first sign-in; unused, it stops working after 72 hours. To help someone locked out, type their email under **Reset any account's password** and confirm. You can reissue any ordinary account this way, but never another platform admin's. Everything is audited. No email is sent, so pass the password on yourself.
+
 ## Answer support requests
 
 **Support** lists what organizations have sent you. Each request shows the
@@ -182,7 +186,7 @@ The page also shows each organization's subscriptions and recent usage events.
 
 - A screen for the platform audit log. The records exist and are kept, but there is
   no page in the console to read them.
-- Creating logins, inviting people by email, or resetting passwords from the app.
+- Inviting people by email and "forgot password" emails (email delivery isn't set up).
 - Trials or grace periods for products. A product is simply on or off.
 - Uploading a payment QR image from the Billing tab.
 - Deleting an organization.

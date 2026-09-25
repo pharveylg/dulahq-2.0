@@ -108,8 +108,8 @@ Open **Staff**. Each person is listed with their email and role.
 2. Choose the button to add them.
 
 The person **must already have a Dulà HQ login**. If they don't, the form says
-*"No existing Dula HQ account found… This app can't create new accounts."* Logins
-are created outside the app today. Add them once they exist.
+*"No existing Dula HQ account found… This app can't create new accounts."* Ask the club's
+**IT admin** to create one (IT administration → Create a login), then add them here.
 
 ### Choose the right role
 

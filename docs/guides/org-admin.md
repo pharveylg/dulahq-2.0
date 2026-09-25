@@ -72,8 +72,8 @@ and you can do that yourself.
    choose **Add**.
 
 The person must **already have a Dulà HQ login**. If they don't, the form says *"No
-existing Dula HQ account found… This app can't create new accounts"*, because logins
-are created outside the app today.
+existing Dula HQ account found… This app can't create new accounts"*, because you can't
+create logins. The club's IT admin (or the platform team) does that first.
 
 You'll notice that on a club you don't staff you still see a **No access here** badge
 and "My teams (0 of 3)" with every team marked **Not assigned**. That's expected: an

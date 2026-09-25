@@ -92,6 +92,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Submit support request** | Escalate an issue to the Dula HQ platform team on behalf of the organization | This tournament |
 | **Suspend/reactivate account** | Temporarily suspend or reactivate a staff member's access without removing them from the club | This tournament |
 | **View audit log** | Review administrative and security activity for the club | This tournament |
+| **Create logins** | Create a login for a person and issue a temporary password | This tournament |
 | **Manage public listing** | Show the tournament in, or remove it from, the public directory | This tournament |
 <!-- END permissions -->
 
@@ -100,6 +101,7 @@ On the **Staff** tab you can:
 - **Suspend** a staff member to cut their access at once, and **Reactivate** them to
   restore it. They keep their record.
 - Read the **Audit trail** of what's happened in this tournament.
+- **Create a login** for someone who has none, and **Reissue** a temporary password for a login you created. At the top of the tab, enter their name and email; you get a temporary password shown once. They must choose their own on first sign-in; unused, it stops working after 72 hours. No email is sent, so hand it over yourself.
 
 You can also list the tournament in the public directory: on the **Public listing** tab,
 choose **List publicly**. It first shows exactly what people will see (name, organizer,

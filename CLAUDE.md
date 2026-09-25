@@ -2648,6 +2648,48 @@ it is the sole sign-up page and is written for invited guardians.
 
 ---
 
+## 0t. IT-issued logins with a temporary password (2026-09-25)
+
+`phase14a`. Email is parked (§8), so "invite by email" can't be how people get an
+account. Instead the **club IT admin, tournament IT admin or a platform admin creates
+the login** and hands over a **random temporary password**, shown once. (Rejected: a
+predictable default like `Dulhq_<email name>` — anyone who knows a colleague's email
+would know their password until they changed it.)
+
+- **Flow:** create → temp password (12 chars, no look-alikes, `node:crypto` randomness,
+  never stored) → first sign-in is redirected by `middleware.ts` to `/change-password`
+  while `app_metadata.must_change_password` is true (not user-editable, unlike
+  `user_metadata`) → the chosen password clears the flag and stamps `activated_at`.
+- **72-hour expiry, enforced at the auth layer:** hourly `expire_temp_logins()` (pg_cron)
+  sets `auth.users.banned_until` for never-activated expired logins, so holding the
+  temp password and calling the auth API directly doesn't work either. Reissue lifts the
+  ban. The login page turns GoTrue's "User is banned" into "temporary password expired".
+- **Who may, and on whom:** `manage_club_logins` (club_it_admin) / `manage_tournament_logins`
+  (tournament_it_admin) / platform admin, via `can_provision_login`. **Reissue is limited to
+  logins that same scope issued** (`provisioned_logins`), because one person can be a
+  guardian at one club and staff at another: reissuing an arbitrary email would be a
+  cross-tenant account takeover. A platform admin may reissue any ordinary account, never
+  another platform admin's.
+- **The service role is now used by the app** — `src/lib/admin-auth.ts`, server actions
+  only, and always after the database function has authorized the caller.
+  **`SUPABASE_SERVICE_ROLE_KEY` must be added to Vercel's production env vars** (it is in
+  `.env.local`). Without it the screens report that logins aren't set up.
+- **UI:** "Create a login" on the club IT page, on the tournament console's Staff tab (raw
+  permission — an org admin does not create a tournament's logins), and a platform console
+  "Logins" tab with reissue-by-email. This also closes the "add staff needs an existing
+  account" dead end: IT creates the login, the manager adds it by email.
+- **Known limits:** forced change is enforced in our middleware; the tournament engine
+  (`/t/...`, outside the matcher) doesn't check it, and a temp-password holder could call the
+  auth API to change their own password without our checks (the 72h ban bounds this). A
+  failed create says the email already has an account, which tells an IT admin that. A
+  person who forgets a password they chose needs an IT reissue until email exists.
+  Google sign-in was discussed as a later addition, not built.
+- **Verified:** RLS suite 246 → 256; unit 58 → 69; driven live (create → forced redirect
+  from `/clubs` → weak password rejected → change → activated + audited → a banned account
+  shows the expiry message). Test account removed afterwards.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

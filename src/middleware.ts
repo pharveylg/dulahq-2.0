@@ -65,6 +65,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // A login an IT admin created starts with a temporary password. Until the person
+  // has chosen their own, the only page they can use is the change-password page.
+  // (app_metadata can't be edited by the user, unlike user_metadata.)
+  if (
+    user?.app_metadata?.must_change_password === true &&
+    !request.nextUrl.pathname.startsWith('/change-password') &&
+    !request.nextUrl.pathname.startsWith('/login')
+  ) {
+    return NextResponse.redirect(new URL('/change-password', request.url));
+  }
+
   return response;
 }
 

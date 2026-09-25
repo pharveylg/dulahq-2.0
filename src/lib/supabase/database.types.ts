@@ -3071,6 +3071,51 @@ export type Database = {
         }
         Relationships: []
       }
+      provisioned_logins: {
+        Row: {
+          activated_at: string | null
+          created_at: string
+          created_by: string | null
+          email: string
+          expired_at: string | null
+          last_issued_at: string
+          name: string | null
+          owner_org_id: string | null
+          scope_id: string | null
+          scope_type: string
+          temp_expires_at: string
+          user_id: string
+        }
+        Insert: {
+          activated_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          email: string
+          expired_at?: string | null
+          last_issued_at?: string
+          name?: string | null
+          owner_org_id?: string | null
+          scope_id?: string | null
+          scope_type: string
+          temp_expires_at: string
+          user_id: string
+        }
+        Update: {
+          activated_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          expired_at?: string | null
+          last_issued_at?: string
+          name?: string | null
+          owner_org_id?: string | null
+          scope_id?: string | null
+          scope_type?: string
+          temp_expires_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       push_subscriptions: {
         Row: {
           auth_key: string
@@ -4954,6 +4999,45 @@ export type Database = {
       }
       set_public_listing: {
         Args: { p_id: string; p_kind: string; p_listed: boolean }
+        Returns: undefined
+      }
+      can_provision_login: {
+        Args: { p_scope_id: string | null; p_scope_type: string }
+        Returns: boolean
+      }
+      can_reissue_login: {
+        Args: { p_scope_id: string | null; p_scope_type: string; p_target: string }
+        Returns: boolean
+      }
+      expire_temp_logins: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      is_platform_admin_user: {
+        Args: { p_user: string }
+        Returns: boolean
+      }
+      login_scope_org: {
+        Args: { p_scope_id: string | null; p_scope_type: string }
+        Returns: string
+      }
+      mark_login_activated: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      mark_login_reissued: {
+        Args: { p_hours: number; p_scope_id: string | null; p_scope_type: string; p_target: string }
+        Returns: undefined
+      }
+      record_provisioned_login: {
+        Args: {
+          p_email: string
+          p_hours: number
+          p_name: string
+          p_scope_id: string | null
+          p_scope_type: string
+          p_user_id: string
+        }
         Returns: undefined
       }
       write_audit_system: {
