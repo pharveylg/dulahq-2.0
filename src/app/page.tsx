@@ -199,6 +199,32 @@ type ManagedTournament = {
  * belong to no organization, so they see the public directory here, and get this
  * strip above it.
  */
+type EntrantEntry = { entry_id: string; team_name: string; status: string; tournament_name: string; host_org_name: string; contact_role: string };
+
+/** Entries a team contact can open: their team's status and fees at someone else's tournament. */
+function EntrantEntries({ items, narrow }: { items: EntrantEntry[]; narrow: boolean }) {
+  if (items.length === 0) return null;
+  return (
+    <Reveal index={1}>
+      <section style={{ maxWidth: narrow ? 1000 : undefined, margin: '0 auto 36px' }}>
+        <h2 style={{ fontSize: 20, marginBottom: 4 }}>Your team entries</h2>
+        <p className="subtitle" style={{ marginBottom: 14 }}>See where your entry stands and pay the entry fee.</p>
+        <div className="card">
+          {items.map((e) => (
+            <Link key={e.entry_id} href={`/entry/${e.entry_id}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div className="list-row-main">
+                <div className="list-row-title">{e.team_name}</div>
+                <div className="list-row-meta">{e.tournament_name} · {e.host_org_name}</div>
+              </div>
+              <span className="chip">{e.status}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </Reveal>
+  );
+}
+
 function ManagedTournaments({ items, narrow }: { items: ManagedTournament[]; narrow: boolean }) {
   if (items.length === 0) return null;
   return (
@@ -245,6 +271,10 @@ export default async function Home() {
     ? (((await supabase.rpc('my_manageable_tournaments')).data ?? []) as ManagedTournament[])
     : [];
 
+  const entries: EntrantEntry[] = user
+    ? (((await (supabase as any).rpc('my_entrant_entries')).data ?? []) as EntrantEntry[])
+    : [];
+
   // A guardian or player with no organization used to land here, on the public
   // directory, with no link to the page written for them. Send them to it. Anyone
   // in an organization, or running a tournament, keeps this page (see
@@ -267,6 +297,7 @@ export default async function Home() {
           </div>
         </Reveal>
 
+        <EntrantEntries items={entries} narrow={hasOrg} />
         <ManagedTournaments items={managed} narrow={hasOrg} />
 
         {hasOrg && access ? <OrgHome access={access} /> : <PublicDirectory />}

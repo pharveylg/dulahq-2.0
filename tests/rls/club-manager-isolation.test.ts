@@ -3125,3 +3125,124 @@ describe('IT-issued logins (phase14a)', () => {
     for (const id of [paId, titId, newId, newId2]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Entrant portal (phase15a). A team contact from outside any organization has an
+ * account but, until now, no screen: they could not read their entry, its invoice, or
+ * pay. The portal reads and the payment write go through definer functions keyed to
+ * is_tournament_entry_contact, so nothing about the tables' own policies widens.
+ */
+describe('entrant portal (phase15a)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const mgrEmail = `rls-ent-mgr-${tag}@rls-test.local`;
+  const coachEmail = `rls-ent-coach-${tag}@rls-test.local`;
+  const otherEmail = `rls-ent-other-${tag}@rls-test.local`;
+  const pendEmail = `rls-ent-pend-${tag}@rls-test.local`;
+  let mgrId: string; let coachId: string; let otherId: string; let pendId: string;
+  let mgr: ReturnType<typeof createClient>; let coach: ReturnType<typeof createClient>;
+  let other: ReturnType<typeof createClient>; let pend: ReturnType<typeof createClient>;
+  let tId: string; let entryId: string; let otherEntryId: string; let pendEntryId: string;
+  let invoiceId: string; let otherInvoiceId: string;
+  const contact = (entry: string, email: string, role: string, user: string | null, status: string) =>
+    adminClient.from('tournament_entry_contacts').insert({ entry_id: entry, org_id: orgA.id, name: 'Contact', email, role, account_status: status, user_id: user }).select().single();
+
+  it('sets up two accepted entries (one invoiced each), one pending entry, and their contacts', async () => {
+    mgrId = (await createTestUser(mgrEmail, 'audience')).publicUser.id;
+    coachId = (await createTestUser(coachEmail, 'audience')).publicUser.id;
+    otherId = (await createTestUser(otherEmail, 'audience')).publicUser.id;
+    pendId = (await createTestUser(pendEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Entrant Cup', org_id: orgA.id, slug: `rls-ent-${tag}` }).select().single(), 'tournament').id;
+    const mkEntry = async (team: string, status: string) =>
+      must(await adminClient.from('tournament_entries').insert({ tournament_id: tId, host_org_id: orgA.id, entrant_org_id: orgA.id, team_name: team, status }).select().single(), 'entry').id;
+    entryId = await mkEntry('Visitors FC', 'accepted');
+    otherEntryId = await mkEntry('Other FC', 'accepted');
+    pendEntryId = await mkEntry('Pending FC', 'pending');
+    must(await contact(entryId, mgrEmail, 'team_manager', mgrId, 'active'), 'mgr');
+    must(await contact(entryId, coachEmail, 'coach', coachId, 'active'), 'coach');
+    must(await contact(otherEntryId, otherEmail, 'team_manager', otherId, 'active'), 'other');
+    must(await contact(pendEntryId, pendEmail, 'team_manager', null, 'pending'), 'pend');
+    mgr = await signInAs(mgrEmail); coach = await signInAs(coachEmail); other = await signInAs(otherEmail); pend = await signInAs(pendEmail);
+    const acct = must(await adminClient.from('billing_accounts').select('id').eq('tournament_id', tId).eq('context_type', 'tournament').single(), 'account').id;
+    await orgAdminAClient.rpc('update_billing_account_instructions', { p_account_id: acct, p_payment_instructions: 'GCash 0917 000 0000', p_qr_storage_key: null });
+    const mk = async (entry: string, amount: number) => {
+      const { data, error } = await orgAdminAClient.rpc('create_billing_invoice', {
+        p_org_id: orgA.id, p_billing_account_id: acct, p_context_type: 'tournament', p_payer_type: 'team', p_payer_label: 'Team',
+        p_source_type: 'tournament_entry', p_source_id: entry, p_lines: [{ description: 'entry fee', unit_amount: amount }],
+      });
+      expect(error).toBeNull();
+      return data as unknown as string;
+    };
+    invoiceId = await mk(entryId, 500);
+    otherInvoiceId = await mk(otherEntryId, 300);
+  });
+
+  it('my_entrant_entries lists only the callers active entries', async () => {
+    const rows = async (c: ReturnType<typeof createClient>) => ((await c.rpc('my_entrant_entries')).data ?? []) as any[];
+    expect((await rows(mgr)).map((r) => r.entry_id)).toEqual([entryId]);
+    expect((await rows(coach)).map((r) => r.entry_id)).toEqual([entryId]);
+    expect((await rows(other)).map((r) => r.entry_id)).toEqual([otherEntryId]);
+    expect(await rows(pend)).toHaveLength(0); // an unclaimed, pending contact has no portal yet
+    expect(await rows(coachA1Client)).toHaveLength(0);
+  });
+
+  it('the portal shows the entry, its invoice and the payment instructions to its contacts only', async () => {
+    for (const c of [mgr, coach]) {
+      const { data, error } = await c.rpc('entrant_entry_portal', { p_entry_id: entryId });
+      expect(error).toBeNull();
+      const p = data as any;
+      expect(p.entry.team_name).toBe('Visitors FC');
+      expect(p.invoices.map((i: any) => i.id)).toEqual([invoiceId]);
+      expect(p.instructions).toBe('GCash 0917 000 0000');
+    }
+    for (const c of [other, pend, coachA1Client, itAdminAClient]) {
+      expect((await c.rpc('entrant_entry_portal', { p_entry_id: entryId })).error).not.toBeNull();
+    }
+  });
+
+  it('a contact still cannot read the billing tables directly (nothing widened)', async () => {
+    expect(((await mgr.from('billing_invoices').select('id').eq('id', invoiceId)).data ?? [])).toHaveLength(0);
+    expect(((await mgr.from('tournament_entries').select('id').eq('id', entryId)).data ?? [])).toHaveLength(0);
+  });
+
+  it('the team manager can submit a payment; the invoice moves to verification and it is audited', async () => {
+    const { data, error } = await mgr.rpc('submit_entry_payment', { p_invoice_id: invoiceId, p_amount: 200, p_method: 'qr_transfer', p_reference: 'GC-123', p_note: 'first half' });
+    expect(error).toBeNull();
+    const sub = must(await adminClient.from('billing_payment_submissions').select('status, amount, payer_user_id, reference_number').eq('id', data as string).single(), 'submission');
+    expect(sub).toMatchObject({ status: 'submitted', amount: 200, payer_user_id: mgrId, reference_number: 'GC-123' });
+    expect(must(await adminClient.from('billing_invoices').select('status').eq('id', invoiceId).single(), 'invoice').status).toBe('submitted_for_verification');
+    const { data: audit } = await adminClient.from('audit_log').select('action').eq('entity_id', invoiceId).eq('action', 'billing.payment.submitted');
+    expect(audit).toHaveLength(1);
+  });
+
+  it('refused: a coach contact, another entrys contact, over-balance, zero, bad method, a non-entry caller', async () => {
+    const pay = (c: ReturnType<typeof createClient>, inv: string, amount: number, method = 'cash') =>
+      c.rpc('submit_entry_payment', { p_invoice_id: inv, p_amount: amount, p_method: method });
+    expect((await pay(coach, invoiceId, 10)).error).not.toBeNull();          // coaches inform, they dont pay
+    expect((await pay(other, invoiceId, 10)).error).not.toBeNull();          // someone elses entry
+    expect((await pay(mgr, otherInvoiceId, 10)).error).not.toBeNull();       // someone elses invoice
+    expect((await pay(mgr, invoiceId, 400)).error).not.toBeNull();           // more than the 300 still owed
+    expect((await pay(mgr, invoiceId, 0)).error).not.toBeNull();
+    expect((await pay(mgr, invoiceId, 10, 'bitcoin')).error).not.toBeNull();
+    expect((await pay(coachA1Client, invoiceId, 10)).error).not.toBeNull();
+    expect(((await adminClient.from('billing_payment_submissions').select('id').eq('invoice_id', invoiceId)).data ?? [])).toHaveLength(1);
+  });
+
+  it('a suspended host org closes the portal', async () => {
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+    const r = await mgr.rpc('entrant_entry_portal', { p_entry_id: entryId });
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    expect(r.error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    const inv = [invoiceId, otherInvoiceId];
+    await adminClient.from('audit_log').delete().in('entity_id', inv);
+    await adminClient.from('billing_payment_allocations').delete().in('invoice_id', inv);
+    await adminClient.from('billing_payment_submissions').delete().in('invoice_id', inv);
+    await adminClient.from('billing_invoices').delete().in('id', inv);
+    await adminClient.from('tournament_entry_contacts').delete().in('entry_id', [entryId, otherEntryId, pendEntryId]);
+    await adminClient.from('tournament_entries').delete().in('id', [entryId, otherEntryId, pendEntryId]);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    for (const id of [mgrId, coachId, otherId, pendId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

@@ -215,9 +215,7 @@ A team that isn't a Dulà HQ club can still get access to its own entry.
 3. The contact signs in with that **same email** (they need a login) and their access
    to that entry is claimed automatically.
 
-Their access covers **that one entry**, not the tournament. **There's no screen for
-them yet**, so today they hold the access but have nothing to open. Nothing is
-emailed: the organizer has to tell them.
+Their access covers **that one entry**, not the tournament. On the home page they see **Your team entries**; opening one shows where the entry stands, the fees owed, the payment instructions, and (for the team manager only) a form to report a payment. A coach contact can see the entry and fees but not send money. Reported payments appear under **Payments to verify** in the Finance tab. Nothing is emailed: the organizer has to tell them, and they need a login (the club or tournament IT admin can create one).
 
 ## When something doesn't work
 

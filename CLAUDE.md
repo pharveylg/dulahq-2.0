@@ -2688,6 +2688,34 @@ would know their password until they changed it.)
   from `/clubs` → weak password rejected → change → activated + audited → a banned account
   shows the expiry message). Test account removed afterwards.
 
+### Entrant portal (2026-09-26) — `phase15a`, slice 1 of the roles/portal proposal
+
+`/entry/<entryId>` for a team contact from outside any organization: entry status, the
+entry-fee invoice(s), the host's payment instructions, and a form to report a payment.
+Home shows **Your team entries** for anyone with an active contact row. This is what
+finally feeds the finance queue (§0q): a payment the team reports lands in **Payments to
+verify**.
+
+- **Nothing widened.** Contacts belong to no org, so the tables stay closed to them (tested:
+  they still can't select `billing_invoices` or `tournament_entries`). Reads and the write go
+  through definer functions that authorize first on `is_tournament_entry_contact`:
+  `my_entrant_entries()`, `entrant_entry_portal(entry)`, `submit_entry_payment(...)`. The
+  invoice is found by `source_type='tournament_entry'`, `source_id=<entry>` — the invoice
+  has no payer user for a team that had no account when it was issued, so
+  `submit_billing_payment` (which needs a payer) could not be used.
+- **Only the `team_manager` contact pays**; a coach contact sees the entry and fees only.
+  Amount is capped at what is still owed *after* payments already awaiting verification, so
+  two submissions can't double-claim the balance. A suspended host org closes the portal.
+- **Only an active contact has a portal.** Contacts start `pending`, become `invited` when
+  the entry is accepted, and `active` on first sign-in with the matching email
+  (`claimPendingTournamentEntryInvites`). An entry that is still pending has no portal yet.
+- **Not built:** proof-of-payment upload, the QR image (the key is returned but not
+  displayed), documents/announcements for entrants, and a demo persona for it.
+- **Verified:** RLS suite 256 → 264; driven live as a throwaway team manager on Tiger Cup
+  (home strip, entry page, submitted ₱200 of ₱500, invoice moved to "waiting for
+  verification", form then offered the remaining ₱300). Fixture removed afterwards. Note the
+  live check set the demo tournament's payment instructions to a sample GCash line.
+
 ---
 
 ## 1. The two deployments

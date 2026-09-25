@@ -182,9 +182,7 @@ it, so the roster step falls to an **organization admin**. Ask yours.
 
 - Public self-service registration. Teams can't sign themselves up; you or an org
   admin add them.
-- A screen where a team sees its entry invoice and reports a payment. Until one
-  exists you record payments yourself, and **Payments to verify** will mostly stay
-  empty.
+- Payments a team reports appear under **Payments to verify** once the team manager has signed in (with the email you listed) and used **Your team entries** on the home page. Cash and transfers you receive yourself are still recorded by you.
 - Listing the tournament in the public directory. The tournament IT admin or an
   organization admin does that on the **Public listing** tab; you can take it down there.
 - Assigning referees and officials, and the "flag for review" step for team
