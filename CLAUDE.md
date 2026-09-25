@@ -2342,10 +2342,10 @@ the current behaviour honestly and points at the workaround.
    non-organizer staff can read entries but **not** the contacts (`tec_read` is
    `can_read_tournament`, organizer or org admin) — a good boundary, but the guides
    originally claimed otherwise until the policy was read.
-7. **The roster's inline player panel has five tabs and no Documents; the full profile
-   has six.** The panel's Development tab links to the full page ("Open development
-   profile →"), which is the only place Documents appears. Not a bug, but nothing tells
-   a coach that Documents exists.
+7. ~~**The roster's inline player panel has five tabs and no Documents; the full profile
+   has six.**~~ **Fixed (below).** Documents was reachable only via "Open development
+   profile →", so a secretary or staff member, whose whole role is documents, had no
+   obvious way to it.
 
 Smaller: there is no "create team" (the club page only links an unclaimed team),
 no staff sign-up page (the app links a login by email but never creates one), and
@@ -2524,6 +2524,21 @@ about club-wide posting is gone.
 
 Verified: 9 RLS tests, written first -- 6 failed against the old policy for exactly the
 reasons above, all pass after. Full RLS suite 233/233.
+
+### The roster panel gets a Documents tab (2026-09-25) — gap 7
+
+Documents was reachable only from the full profile ("Open development profile →"), which
+a secretary or staff member has no reason to open. `PlayerDetailPanel` now has a
+Documents tab (with a pending-count badge) rendering the same `Documents` component the
+full profile uses. No migration: the roster query embeds `document_uploads` and RLS
+(`docs_read`) already scopes what comes back. The page computes the same three checks
+`PlayerProfile.tsx` does -- `manage_documents`, `manage_team_documents`, `view_medical`,
+each with the team -- so the panel's controls agree with what `docs_write` accepts (a
+coach still sees and manages medical documents only).
+
+Verified live as the unassigned demo `staff` user: the tab appears with a pending badge,
+lists the document with Approve / Reject / Remove / Upload, and Approve wrote
+`status = approved`. Test document removed afterwards. `tsc` clean.
 
 ### What was and wasn't clicked through
 

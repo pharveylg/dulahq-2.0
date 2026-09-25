@@ -119,9 +119,9 @@ Under **Roster** you can add a player with a **Player name** (required), **Jerse
 **Position** and **Age**.
 
 Choose a player and a summary panel opens, with **Overview, Development, Fees,
-Membership** and **Family**. Its **Development** tab has **Open development profile →**,
-which opens the player's **full profile page**. That page has six tabs, and it's the
-only place **Documents** appears:
+Membership, Documents** and **Family**. Its **Development** tab has **Open development
+profile →**, which opens the player's **full profile page**, with the same six tabs
+and the full development tools:
 
 | Tab | What it's for |
 |---|---|

@@ -58,10 +58,18 @@ export default async function TeamRosterPage({
   // so a treasurer (not the literal 'staff' role) got no "+ Add charge" here,
   // and nobody got "+ Add period" without being individually team-assigned,
   // even though manage_finances/manage_membership are both club-scope.
-  const [{ data: manageFinancesRpc }, { data: manageMembershipRpc }] = await Promise.all([
+  const [{ data: manageFinancesRpc }, { data: manageMembershipRpc }, { data: manageDocsRpc }, { data: manageTeamDocsRpc }, { data: viewMedicalRpc }] = await Promise.all([
     supabase.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubId }),
     supabase.rpc('has_staff_permission', { p_permission_key: 'manage_membership', p_club_id: clubId }),
+    // Same three checks, with the same team, that PlayerProfile.tsx makes for the
+    // full profile's Documents tab -- the inline panel now offers that tab too, so
+    // its controls must agree with what docs_write will accept.
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_documents', p_club_id: clubId, p_team_id: teamId }),
+    supabase.rpc('has_staff_permission', { p_permission_key: 'manage_team_documents', p_club_id: clubId, p_team_id: teamId }),
+    supabase.rpc('has_staff_permission', { p_permission_key: 'view_medical', p_club_id: clubId, p_team_id: teamId }),
   ]);
+  const canManageGeneralDocs = !!manageDocsRpc || !!manageTeamDocsRpc;
+  const canManageMedicalDocs = !!viewMedicalRpc;
   const canManageFees = canManage || !!manageFinancesRpc;
   const canManageMembership = canManage || !!manageMembershipRpc;
 
@@ -71,7 +79,8 @@ export default async function TeamRosterPage({
       'id, name, jersey, position, age, user_id, users(name, email),' +
       ' player_guardians(id, relationship, is_primary_contact, guardians(id, name, contact_info, account_status)),' +
       ' fee_charges(id, fee_type, amount, currency, status, due_date, payments(id, amount, method, paid_at)),' +
-      ' memberships(id, period_start, period_end, status)'
+      ' memberships(id, period_start, period_end, status),' +
+      ' document_uploads(id, type, category, name, file_name, mime_type, status, reviewed_by, review_note, uploaded_at)'
     )
     .eq('team_id', teamId)
     .order('name');
@@ -101,6 +110,12 @@ export default async function TeamRosterPage({
       dueDate: fc.due_date,
       payments: (fc.payments ?? []).map((pay: any) => ({ ...pay, amount: Number(pay.amount) })),
     })),
+    documents: ((p.document_uploads ?? []) as any[])
+      .sort((a, b) => String(b.uploaded_at).localeCompare(String(a.uploaded_at)))
+      .map((d) => ({
+        id: d.id, type: d.type, category: d.category, name: d.name ?? d.type, fileName: d.file_name, mimeType: d.mime_type,
+        status: d.status, reviewedBy: d.reviewed_by, reviewNote: d.review_note, uploadedAt: d.uploaded_at,
+      })),
     memberships: (p.memberships ?? []).map((m: any) => ({
       id: m.id,
       periodStart: m.period_start,
@@ -179,6 +194,8 @@ export default async function TeamRosterPage({
           canManage={canManage}
           canManageFees={canManageFees}
           canManageMembership={canManageMembership}
+          canManageGeneralDocs={canManageGeneralDocs}
+          canManageMedicalDocs={canManageMedicalDocs}
         />
 
         {!canManage && (

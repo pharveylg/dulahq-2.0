@@ -6,6 +6,7 @@ import { removePlayer, addGuardian, removeGuardianLink, inviteGuardian, linkPlay
 import PlayerFees from './PlayerFees';
 import PlayerMembership from './PlayerMembership';
 import Tabs from '@/components/motion/Tabs';
+import Documents, { type DocumentRow } from '@/components/player-profile/Documents';
 
 type Guardian = {
   linkId: string;
@@ -37,6 +38,7 @@ type Player = {
   guardians: Guardian[];
   fees: FeeCharge[];
   memberships: { id: string; periodStart: string; periodEnd: string | null; status: string }[];
+  documents: DocumentRow[];
 };
 
 const TABS = [
@@ -44,6 +46,7 @@ const TABS = [
   { id: 'development', label: 'Development' },
   { id: 'fees', label: 'Fees' },
   { id: 'membership', label: 'Membership' },
+  { id: 'documents', label: 'Documents' },
   { id: 'family', label: 'Family' },
 ];
 
@@ -56,6 +59,8 @@ export default function PlayerDetailPanel({
   canManage,
   canManageFees,
   canManageMembership,
+  canManageGeneralDocs,
+  canManageMedicalDocs,
 }: {
   clubId: string;
   teamId: string;
@@ -65,6 +70,8 @@ export default function PlayerDetailPanel({
   canManage: boolean;
   canManageFees: boolean;
   canManageMembership: boolean;
+  canManageGeneralDocs: boolean;
+  canManageMedicalDocs: boolean;
 }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [pending, startTransition] = useTransition();
@@ -139,7 +146,10 @@ export default function PlayerDetailPanel({
       </div>
 
       <Tabs
-        tabs={TABS.map((t) => t.id === 'fees' ? { ...t, badge: player.fees.filter((f) => f.status !== 'paid').length } : t)}
+        tabs={TABS.map((t) =>
+          t.id === 'fees' ? { ...t, badge: player.fees.filter((f) => f.status !== 'paid').length }
+          : t.id === 'documents' ? { ...t, badge: player.documents.filter((d) => d.status === 'pending').length }
+          : t)}
         active={activeTab}
         onChange={setActiveTab}
         layoutId={`player-tabs-${player.id}`}
@@ -170,6 +180,13 @@ export default function PlayerDetailPanel({
 
       {activeTab === 'membership' && (
         <PlayerMembership clubId={clubId} teamId={teamId} playerId={player.id} memberships={player.memberships} canManage={canManageMembership} />
+      )}
+
+      {activeTab === 'documents' && (
+        <Documents
+          clubId={clubId} teamId={teamId} playerId={player.id} playerName={player.name} documents={player.documents}
+          canManageGeneral={canManageGeneralDocs} canManageMedical={canManageMedicalDocs}
+        />
       )}
 
       {activeTab === 'family' && (

@@ -30,6 +30,8 @@ export default function TeamRosterTabs({
   canManage,
   canManageFees,
   canManageMembership,
+  canManageGeneralDocs,
+  canManageMedicalDocs,
 }: {
   clubId: string;
   teamId: string;
@@ -41,6 +43,8 @@ export default function TeamRosterTabs({
   canManage: boolean;
   canManageFees: boolean;
   canManageMembership: boolean;
+  canManageGeneralDocs: boolean;
+  canManageMedicalDocs: boolean;
 }) {
   const [topTab, setTopTab] = useState('roster');
   const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '');
@@ -91,6 +95,8 @@ export default function TeamRosterTabs({
                       canManage={canManage}
                       canManageFees={canManageFees}
                       canManageMembership={canManageMembership}
+                      canManageGeneralDocs={canManageGeneralDocs}
+                      canManageMedicalDocs={canManageMedicalDocs}
                     />
                   </Reveal>
                 )}

@@ -117,14 +117,17 @@ club's **Expenses**.
 
 Open **Teams**, choose any team — you don't need to be assigned to it — and pick a
 player from the roster on the left. Their panel opens with **Overview / Development
-/ Fees / Membership / Family** tabs:
+/ Fees / Membership / Documents / Family** tabs:
 
 - **Fees** (treasurer, staff): **+ Add charge**, and payments against existing
   charges.
 - **Membership** (secretary, staff): **+ Add period**, and a status dropdown
   (pending/active/expired/transferred) on each one.
-- **Development** links out to the player's full profile — documents live there
-  too, not on this panel (see the coach guide's own note on this).
+- **Documents** (secretary, staff): the player's uploaded forms with their review
+  status, **Approve** / **Reject…** / **Remove** on each, and **+ Upload document**.
+  A pending count shows on the tab.
+- **Development** links out to the player's full profile for goals, evaluations and
+  notes.
 - **Family** (guardians, player account) stays coach/club-manager territory —
   that one genuinely does need you to be assigned to the team.
 
@@ -160,4 +163,3 @@ for you.
 ## Not available yet
 
 - A club-level way to add a fee charge without opening a player.
-- A Documents tab on this inline panel — open the player's full profile for that.

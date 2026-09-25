@@ -172,9 +172,10 @@ no such team you'll see *"No unclaimed teams available to link."*
 name**, **Jersey #**, **Position** and **Age** (the name is required).
 
 Choose a player and a summary panel opens with **Overview, Development, Fees,
-Membership** and **Family**. Fees are added and paid there. Its **Development** tab
-has **Open development profile →**, which opens the **full profile page**, the only
-place **Documents** appears. The full profile has six tabs:
+Membership, Documents** and **Family**. Fees are added and paid there, and documents
+are uploaded and reviewed on the **Documents** tab. Its **Development** tab has
+**Open development profile →**, which opens the **full profile page** with goals,
+evaluations and notes. The full profile has the same six tabs:
 
 | Tab | What it holds |
 |---|---|
