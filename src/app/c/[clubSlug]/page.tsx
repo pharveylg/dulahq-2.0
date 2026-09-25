@@ -233,6 +233,21 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     (assignments ?? []).filter((a) => a.is_primary).map((a) => a.team_id)
   );
 
+  // Teams this viewer may assign or unassign staff on. uat_insert/uat_delete
+  // authorize on is_org_admin or assign_team_staff for THAT team (a team manager
+  // holds it for their own team only), so the Staff tab used to offer controls
+  // the database then refused. Club managers and org admins reach every team.
+  const assignableTeamIds: string[] = canAdminStaff
+    ? (clubTeams ?? []).map((t) => t.id)
+    : (
+        await Promise.all(
+          (clubTeams ?? []).map(async (t) => ({
+            id: t.id,
+            ok: !!(await supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'assign_team_staff', p_club_id: clubId, p_team_id: t.id })).data,
+          }))
+        )
+      ).filter((t) => t.ok).map((t) => t.id);
+
   const { data: trips } = await supabase
     .from('trips')
     .select('id, name, purpose, starts_at, ends_at')
@@ -752,6 +767,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                       teamsWithPrimary={[...teamsWithPrimary]}
                       canManageStaff={canManage}
                       canRemoveStaff={canAdminStaff}
+                      assignableTeamIds={assignableTeamIds}
                       profile={profileByStaffId.get(s.id) ?? null}
                       isSelf={s.user_id === user.id}
                     />

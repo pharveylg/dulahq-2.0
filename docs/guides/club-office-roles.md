@@ -133,7 +133,8 @@ player from the roster on the left. Their panel opens with **Overview / Developm
 
 None of this needed an assignment. Assigning yourself to a team (ask your club
 manager — **Staff** tab → your row → **+ Assign to team**) only changes your badge on
-that team from *"not assigned here"* to *"assigned"*. Nothing about Fees, Documents,
+that team from *"club-wide access"* to *"assigned"*, and lets you add or remove
+players, run training and manage guardians there. Nothing about Fees, Documents,
 Membership or Announcements needs it.
 
 ### Announcements (secretary, staff)

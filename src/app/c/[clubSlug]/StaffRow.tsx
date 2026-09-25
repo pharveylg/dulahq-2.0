@@ -129,6 +129,7 @@ export default function StaffRow({
   teamsWithPrimary,
   canManageStaff,
   canRemoveStaff,
+  assignableTeamIds,
   profile,
   isSelf,
 }: {
@@ -141,6 +142,8 @@ export default function StaffRow({
   canManageStaff: boolean;
   /** Removing (archiving) someone: club managers and org admins (club_staff_write is can_admin_club). */
   canRemoveStaff: boolean;
+  /** Teams the viewer may assign/unassign staff on (assign_team_staff, or club manager / org admin). */
+  assignableTeamIds: string[];
   profile?: StaffProfile | null;
   isSelf?: boolean;
 }) {
@@ -152,7 +155,7 @@ export default function StaffRow({
   const assignedTeamIds = assignments.map((a) => a.teamId);
   const primaryOn = new Set(assignments.filter((a) => a.isPrimary).map((a) => a.teamId));
   const assignedTeams = clubTeams.filter((t) => assignedTeamIds.includes(t.id));
-  const unassignedClubTeams = clubTeams.filter((t) => !assignedTeamIds.includes(t.id));
+  const unassignedClubTeams = clubTeams.filter((t) => !assignedTeamIds.includes(t.id) && assignableTeamIds.includes(t.id));
 
   function handleRemoveStaff() {
     setError(null);
@@ -276,14 +279,17 @@ export default function StaffRow({
                         Step down
                       </button>
                     )}
-                    <button
-                      onClick={() => handleUnassign(t.id)}
-                      disabled={pending}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
-                      aria-label={`Unassign from ${t.name}`}
-                    >
-                      ×
-                    </button>
+                    {/* Removing the primary coach additionally needs manage_staff (uat_delete). */}
+                    {assignableTeamIds.includes(t.id) && (!isPrimary || canRemoveStaff) && (
+                      <button
+                        onClick={() => handleUnassign(t.id)}
+                        disabled={pending}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
+                        aria-label={`Unassign from ${t.name}`}
+                      >
+                        ×
+                      </button>
+                    )}
                   </span>
                 );
               })}

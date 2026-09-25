@@ -2399,8 +2399,8 @@ so, so a club manager never sees a choice the database would refuse. Verified: t
 RLS tests (an org admin can appoint one; a club manager cannot and nothing is written),
 written before the migration and watched the manager-refusal test fail first.
 
-**Known edge:** the Staff tab's "Assign to team" and "×" controls are still ungated
-in the UI (RLS decides), so a team manager can see one that would be refused.
+**Known edge (since closed, see "Two loose ends closed" below):** the Staff tab's "Assign to
+team" and "×" controls were ungated in the UI, so a team manager saw ones the database refused.
 
 Verified: unit tests for the landing rules; RLS tests for the org-admin staffing
 contract (11, including restore-on-re-add and the club-IT-admin appointment split) and
@@ -2539,6 +2539,26 @@ coach still sees and manages medical documents only).
 Verified live as the unassigned demo `staff` user: the tab appears with a pending badge,
 lists the document with Approve / Reject / Remove / Upload, and Approve wrote
 `status = approved`. Test document removed afterwards. `tsc` clean.
+
+### Two loose ends closed (2026-09-25)
+
+- **Staff tab controls now match `uat_insert`/`uat_delete`.** They authorize on
+  `is_org_admin` or `assign_team_staff` **for that team**, and only the club manager and
+  team manager hold it -- and a team manager only for their own team. The Staff tab showed
+  "+ Assign to team" and "×" to every viewer regardless, so a team manager saw controls
+  for other teams that the database then refused. The club page now computes
+  `assignableTeamIds` (every team for a club manager or org admin; otherwise one
+  `has_staff_permission('assign_team_staff', club, team)` per team) and `StaffRow` offers
+  assignment and unassignment only there. Removing the primary coach additionally needs
+  `manage_staff`, so that × is hidden unless the viewer is a club manager or org admin.
+  Verified live as the demo team manager: the only × on the page is on their own U15
+  Girls assignment; the primary coach's row has none.
+- **The roster badge and footer no longer say "not assigned" to someone with club-wide
+  access.** A treasurer/secretary/staff member viewing a team they aren't on read
+  "STAFF — NOT ASSIGNED HERE" and "ask a club admin to assign you", as if locked out,
+  when their role reaches every team (§0s.3). The badge now reads "… — club-wide access"
+  and the footer says which actions still need an assignment (adding or removing players,
+  training, guardians). Verified live as the unassigned demo staff user.
 
 ### What was and wasn't clicked through
 

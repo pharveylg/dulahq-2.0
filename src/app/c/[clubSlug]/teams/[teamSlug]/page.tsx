@@ -69,6 +69,10 @@ export default async function TeamRosterPage({
     supabase.rpc('has_staff_permission', { p_permission_key: 'view_medical', p_club_id: clubId, p_team_id: teamId }),
   ]);
   const canManageGeneralDocs = !!manageDocsRpc || !!manageTeamDocsRpc;
+  // Club-wide finance / membership / document access without being assigned here.
+  // Only used for wording: the badge and footer used to call this person "not
+  // assigned", as if they were locked out, when their role reaches every team.
+  const hasClubWideAccess = !!manageFinancesRpc || !!manageMembershipRpc || !!manageDocsRpc;
   const canManageMedicalDocs = !!viewMedicalRpc;
   const canManageFees = canManage || !!manageFinancesRpc;
   const canManageMembership = canManage || !!manageMembershipRpc;
@@ -174,6 +178,8 @@ export default async function TeamRosterPage({
                 ? 'Club admin'
                 : canManage
                   ? `${access.role?.replace('_', ' ')} — assigned`
+                  : access.role && hasClubWideAccess
+                    ? `${access.role.replace('_', ' ')} — club-wide access`
                   : access.role
                     ? `${access.role.replace('_', ' ')} — not assigned here`
                     : 'No access here'}
@@ -200,7 +206,9 @@ export default async function TeamRosterPage({
 
         {!canManage && (
           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-            {access.isStaff
+            {access.isStaff && hasClubWideAccess
+              ? 'Your role’s finance, membership and document access covers every team. Adding or removing players, training and guardians here need an assignment to this team.'
+              : access.isStaff
               ? 'You can manage teams you’re assigned to — ask a club admin to assign you to this one.'
               : 'Only club staff or a platform admin can manage this roster.'}
           </p>
