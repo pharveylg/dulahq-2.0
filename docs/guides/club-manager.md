@@ -134,9 +134,8 @@ Coaches, team managers and assistant coaches only see the teams they're assigned
 to — this genuinely matters for them, and is how you give them a team at all.
 Treasurers, secretaries and staff can be assigned too, but it's a smaller thing
 for them: their finance, document and membership permissions are club-wide
-already, so they can open any player on any team without an assignment. What
-assigning one actually adds is the ability to **post an announcement** to that
-specific team's own audience. For each of them:
+already, so they can open any player on any team, and post announcements to any
+audience, without an assignment. Assigning one is optional for them. For each of them:
 
 1. Choose **+ Assign to team** and pick the team.
 2. To remove them from a team, use the **×** next to it.
@@ -251,7 +250,7 @@ never sees it, so you aren't shown two ledgers.
   keep its **Notes** and add **Action items**.
 - **Trips.** Create a trip by name and add players as passengers. Guardians are
   notified when a player is added to or removed from a trip.
-- **Announcements.** Write a **Title** and **Message** to the club.
+- **Announcements.** Write a **Title** and **Message** and choose the audience. Secretaries and staff can post too (any audience, any team); coaches and team managers post to their own team only.
 - **Photos.** The club's albums.
 
 ## Ask the platform team for help

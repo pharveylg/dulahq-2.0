@@ -2745,3 +2745,96 @@ describe('players_read honours the same club-wide permissions fee_charges/docume
     for (const id of [staffUserId, secUserId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Announcements honour manage_communications (phase12e). ann_write was
+ * `can_admin_club OR is_assigned_to_team(team_id)` for USING, but its WITH CHECK
+ * was only `is_org_member(org_id)` -- and on an INSERT under an ALL policy only
+ * WITH CHECK is consulted, so any org member at all (a guardian included) could
+ * post to any audience. And a secretary/staff member holding manage_communications
+ * (club-scope, "Send team/club announcements") could post only to a team they were
+ * assigned to, never club-wide -- the same "permission granted, nothing honours it"
+ * shape as players_read (§0s finding 5).
+ */
+describe('announcements honour manage_communications (phase12e)', () => {
+  const tag = `rls-ann-${crypto.randomUUID().slice(0, 8)}`;
+  const secEmail = `rls-ann-sec-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  const trEmail = `rls-ann-tr-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  let secId: string;
+  let trId: string;
+  let secClient: ReturnType<typeof createClient>;
+  let trClient: ReturnType<typeof createClient>;
+  const post = (client: ReturnType<typeof createClient>, audience: string, teamId: string | null, suffix: string) =>
+    client.from('announcements').insert({
+      club_id: clubA.id, title: `${tag}-${suffix}`, body: 'x', audience, team_id: teamId,
+    });
+  const exists = async (suffix: string) =>
+    ((await adminClient.from('announcements').select('id').eq('title', `${tag}-${suffix}`)).data ?? []).length === 1;
+
+  it('sets up a secretary and a treasurer at club A, neither assigned to a team', async () => {
+    secId = (await createTestUser(secEmail, 'audience')).publicUser.id;
+    trId = (await createTestUser(trEmail, 'audience')).publicUser.id;
+    must(await adminClient.from('club_staff').insert({ club_id: clubA.id, user_id: secId, role: 'secretary' }).select().single(), 'secretary');
+    must(await adminClient.from('club_staff').insert({ club_id: clubA.id, user_id: trId, role: 'treasurer' }).select().single(), 'treasurer');
+    secClient = await signInAs(secEmail);
+    trClient = await signInAs(trEmail);
+  });
+
+  it('a guardian cannot post an announcement (the WITH CHECK hole)', async () => {
+    await post(guardianOfA1Client, 'club', null, 'guardian');
+    expect(await exists('guardian')).toBe(false);
+  });
+
+  it('the IT admin and a different club\'s manager cannot post either', async () => {
+    await post(itAdminAClient, 'club', null, 'it');
+    await post(clubStaffBClient, 'club', null, 'clubb');
+    expect(await exists('it')).toBe(false);
+    expect(await exists('clubb')).toBe(false);
+  });
+
+  it('a coach posts to their own team, and only to it', async () => {
+    expect((await post(coachA1Client, 'team', teamA1.id, 'coach-own')).error).toBeNull();
+    await post(coachA1Client, 'team', teamA2.id, 'coach-other');
+    await post(coachA1Client, 'club', null, 'coach-club');
+    expect(await exists('coach-own')).toBe(true);
+    expect(await exists('coach-other')).toBe(false);
+    expect(await exists('coach-club')).toBe(false);
+  });
+
+  it('a coach cannot dress a club-wide announcement up as a team one', async () => {
+    await post(coachA1Client, 'club', teamA1.id, 'coach-disguised');
+    expect(await exists('coach-disguised')).toBe(false);
+  });
+
+  it('a secretary (manage_communications) can post club-wide and to any team, with no assignment', async () => {
+    expect((await post(secClient, 'club', null, 'sec-club')).error).toBeNull();
+    expect((await post(secClient, 'team', teamA2.id, 'sec-team')).error).toBeNull();
+    expect(await exists('sec-club')).toBe(true);
+    expect(await exists('sec-team')).toBe(true);
+  });
+
+  it('a secretary can pin and delete an announcement', async () => {
+    await secClient.from('announcements').update({ pinned: true }).eq('title', `${tag}-sec-club`);
+    expect(((await adminClient.from('announcements').select('pinned').eq('title', `${tag}-sec-club`).single()).data as any).pinned).toBe(true);
+    await secClient.from('announcements').delete().eq('title', `${tag}-sec-team`);
+    expect(await exists('sec-team')).toBe(false);
+  });
+
+  it('a treasurer (no manage_communications) cannot post', async () => {
+    await post(trClient, 'club', null, 'treasurer');
+    await post(trClient, 'team', teamA1.id, 'treasurer-team');
+    expect(await exists('treasurer')).toBe(false);
+    expect(await exists('treasurer-team')).toBe(false);
+  });
+
+  it('a club manager still posts anything', async () => {
+    expect((await post(clubAdminAClient, 'guardians', null, 'mgr')).error).toBeNull();
+    expect(await exists('mgr')).toBe(true);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('announcements').delete().like('title', `${tag}-%`);
+    await adminClient.from('club_staff').delete().in('user_id', [secId, trId]);
+    for (const id of [secId, trId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

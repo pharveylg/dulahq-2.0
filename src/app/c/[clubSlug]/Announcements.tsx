@@ -85,7 +85,7 @@ export default function Announcements({
   announcements,
   teams,
   canManage,
-  isClubManager,
+  canPostAnywhere,
   assignedTeamIds,
 }: {
   clubId: string;
@@ -93,12 +93,12 @@ export default function Announcements({
   teams: Team[];
   /** Any club_staff role -- whether to show the post form at all. */
   canManage: boolean;
-  /** Club admins can post any audience; everyone else only 'team', to their own assigned team(s) -- matches the RLS exactly. */
-  isClubManager: boolean;
+  /** Club managers and holders of manage_communications post any audience to any team; everyone else only 'team', to their own assigned team(s) -- matches ann_write exactly. */
+  canPostAnywhere: boolean;
   assignedTeamIds: string[];
 }) {
-  const audienceOptions = isClubManager ? AUDIENCES : ['team'];
-  const teamOptions = isClubManager ? teams : teams.filter((t) => assignedTeamIds.includes(t.id));
+  const audienceOptions = canPostAnywhere ? AUDIENCES : ['team'];
+  const teamOptions = canPostAnywhere ? teams : teams.filter((t) => assignedTeamIds.includes(t.id));
 
   const [audience, setAudience] = useState(audienceOptions[0]);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
@@ -109,7 +109,7 @@ export default function Announcements({
   const sorted = [...announcements].sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   function canEdit(a: Announcement) {
-    return isClubManager || (a.audience === 'team' && !!a.teamId && assignedTeamIds.includes(a.teamId));
+    return canPostAnywhere || (a.audience === 'team' && !!a.teamId && assignedTeamIds.includes(a.teamId));
   }
 
   return (
@@ -119,7 +119,7 @@ export default function Announcements({
         <AnnouncementRow key={a.id} clubId={clubId} announcement={a} canEdit={canEdit(a)} />
       ))}
 
-      {canManage && (teamOptions.length > 0 || isClubManager) && (
+      {canManage && (teamOptions.length > 0 || canPostAnywhere) && (
         <form action={formAction} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <input name="title" placeholder="Title" required />
@@ -155,7 +155,7 @@ export default function Announcements({
           {state?.error && <span className="error-text">{state.error}</span>}
         </form>
       )}
-      {canManage && !isClubManager && teamOptions.length === 0 && (
+      {canManage && !canPostAnywhere && teamOptions.length === 0 && (
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 12 }}>
           You can post to teams you’re assigned to — ask a club admin to assign you to one first.
         </p>

@@ -2500,6 +2500,31 @@ direct query, then by reload showing it) -- cleaned up afterward. `npx tsc
 --noEmit` clean, `npm run build` clean, `npm run docs:permissions:check`
 clean (the generated tables were untouched by this pass).
 
+### Announcements honour manage_communications (2026-09-23/25) — and a hole in `ann_write`
+
+`phase12e`. The follow-up §0s.3 flagged: `ann_write` never consulted the permission
+catalog, so a secretary or staff member holding `manage_communications` ("Send
+team/club announcements", club-scope) could post only to a team they were assigned to.
+Writing the test first turned up something worse than the gap it was written for:
+**`ann_write`'s WITH CHECK was only `is_org_member(org_id)`, and an INSERT under an ALL
+policy consults WITH CHECK alone -- so any org member could post an announcement to any
+audience, on any team.** A guardian, the IT admin and a treasurer all did, in the failing
+run. UPDATE/DELETE were fenced properly by USING, which is why pin and delete looked
+fine and nothing ever surfaced it. (Same shape as `clubs_admin_write`, §0j: USING and
+WITH CHECK on one policy describing different intents.)
+
+One expression now serves both clauses: `can_admin_club`, or
+`has_staff_permission('manage_communications')` (club-scope, so any audience, any team),
+or an assigned team member posting a **team** audience for their own team. The last
+branch also requires `audience = 'team'`, so a coach can no longer attach a club-wide
+audience to their own `team_id` to slip past. UI: `Announcements.tsx` takes
+`canPostAnywhere` (club manager or manage_communications) instead of `isClubManager`, so
+secretary/staff get every audience and every team; the guides' "Not available yet" line
+about club-wide posting is gone.
+
+Verified: 9 RLS tests, written first -- 6 failed against the old policy for exactly the
+reasons above, all pass after. Full RLS suite 233/233.
+
 ### What was and wasn't clicked through
 
 Driven live: the org admin's club page and Staff tab (gap 1), the guardian's normal

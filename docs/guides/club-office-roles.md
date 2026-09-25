@@ -84,7 +84,7 @@ on what you hold:
 | **Reports** | Yes | No | Yes |
 | **Meetings** | Yes | Yes | Yes |
 | **Trips** | Yes | Yes | Yes |
-| **Announcements** | Read | Read | Read |
+| **Announcements** | Read | Read and post | Read and post |
 | **Photos** | Yes | Yes | Yes |
 
 The tabs above were observed as the demo `staff` user; the treasurer and secretary
@@ -129,11 +129,17 @@ player from the roster on the left. Their panel opens with **Overview / Developm
   that one genuinely does need you to be assigned to the team.
 
 None of this needed an assignment. Assigning yourself to a team (ask your club
-manager — **Staff** tab → your row → **+ Assign to team**) adds exactly two things
-on top: it lets you **post an announcement** to that team's own audience (the club
-never opened that up club-wide to anyone but the club manager), and it changes your
-badge from *"not assigned here"* to *"assigned"*. Nothing about Fees, Documents or
-Membership needs it.
+manager — **Staff** tab → your row → **+ Assign to team**) only changes your badge on
+that team from *"not assigned here"* to *"assigned"*. Nothing about Fees, Documents,
+Membership or Announcements needs it.
+
+### Announcements (secretary, staff)
+
+**Manage communications** lets you post to **any audience and any team**, with no
+assignment: open **Announcements**, write a **Title** and **Message**, choose the
+audience (club, a team, players, guardians, coaches or staff), and **Post**. You can
+also pin and delete announcements. A treasurer holds no communications permission and
+sees no form.
 
 ## Ask for help
 
@@ -148,11 +154,10 @@ for you.
 |---|---|
 | No **Fees**/**Membership** controls on a player | You hold no matching permission. The tables at the top list what your role has |
 | No **Finances** tab | You hold no finance permission (a secretary doesn't) |
-| No form under **Announcements** on a specific team | You need to be assigned to that team first — this one genuinely requires it |
+| No form under **Announcements** | You hold no communications permission (a treasurer doesn't). A coach or team manager can post to their own team only |
 | *You don't have permission to do that* | Your role doesn't include it |
 
 ## Not available yet
 
 - A club-level way to add a fee charge without opening a player.
-- Posting a club-wide announcement as anyone but a club manager.
 - A Documents tab on this inline panel — open the player's full profile for that.

@@ -109,6 +109,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     { data: canViewFinancesRpc },
     { data: canManageFinancesRpc },
     { data: isOrgAdminRpc },
+    { data: canCommunicateRpc },
   ] = await Promise.all([
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
@@ -116,6 +117,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_finances', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubId }),
     supabaseForPerms.rpc('is_org_admin', { org: club.org_id }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_communications', p_club_id: clubId }),
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
 
@@ -820,7 +822,9 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                 announcements={announcements}
                 teams={clubTeams ?? []}
                 canManage={canManageWide}
-                isClubManager={access.isClubManager}
+                // Club managers and anyone holding manage_communications (secretary,
+                // staff) can post any audience to any team -- what ann_write allows.
+                canPostAnywhere={access.isClubManager || !!canCommunicateRpc}
                 assignedTeamIds={myAssignedTeamIds}
               />
             </>
