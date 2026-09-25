@@ -163,10 +163,13 @@ from their own row. The edit form only appears on your own row.
 
 ## Teams and players
 
-**Link a team.** This app doesn't create teams from scratch. On **Teams**, the
-link form attaches a team that already exists in your organization and hasn't been
-claimed by a club, and asks you for a **URL slug** (for example `u12`). If there's
-no such team you'll see *"No unclaimed teams available to link."*
+**Create a team.** On **Teams**, type a **team name** (for example *U12 Boys*), choose
+**Grassroots (youth)** or **Adult**, and choose **Create team**. Its web address is made
+from the name (`u12-boys`, or `u12-boys-2` if that's taken).
+
+**Link a team.** Below that, the link form attaches a team that already exists in your
+organization and hasn't been claimed by a club, and asks you for a **URL slug**. If
+there's no such team you'll see *"No unclaimed teams available to link."*
 
 **Add a player.** Open a team. On the **Roster** tab, add a player: **Player
 name**, **Jersey #**, **Position** and **Age** (the name is required).
@@ -276,6 +279,6 @@ platform team's replies appear in the same place.
 - Emails to guardians, staff or players. Invitations, reminders and payment
   receipts are shown in the app (and as browser notifications if the person turned
   them on) but never emailed.
-- Creating teams from scratch, and creating logins or resetting passwords.
+- Creating logins or resetting passwords.
 - Changing an individual staff member's permissions.
 - Listing your club (or a tournament) in the public directory yourself.

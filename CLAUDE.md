@@ -2347,8 +2347,7 @@ the current behaviour honestly and points at the workaround.
    profile →", so a secretary or staff member, whose whole role is documents, had no
    obvious way to it.
 
-Smaller: there is no "create team" (the club page only links an unclaimed team),
-no staff sign-up page (the app links a login by email but never creates one), and
+Smaller: ~~there is no "create team"~~ (fixed, below), no staff sign-up page (the app links a login by email but never creates one), and
 no "forgot password" link. These were known; the guides now say so where a reader
 would hit them.
 
@@ -2559,6 +2558,24 @@ lists the document with Approve / Reject / Remove / Upload, and Approve wrote
   when their role reaches every team (§0s.3). The badge now reads "… — club-wide access"
   and the footer says which actions still need an assignment (adding or removing players,
   training, guardians). Verified live as the unassigned demo staff user.
+
+### Creating a team (2026-09-25)
+
+The club page could only *link* a team that already existed and was unclaimed, so a new
+club could never get its first team from the screen. The Teams tab now has **Create team**
+(name and squad type) above the link form, for club managers and org admins.
+`createTeam()` inserts into `teams` under the existing `teams_write` policy
+(`can_admin_club`, so no migration); `fill_org_id` derives the org from the club, the sport
+is copied from the club, the URL slug comes from the name with a numeric suffix when
+`(club_id, slug)` is taken (`u12-boys`, `u12-boys-2`, … up to 9), and `team.created` is
+audited. `squad_type` stays the label it always was (never gate on it, §5). Same pass:
+the Teams list said "Not assigned →" to office roles whose role reaches every team; it now
+says "Roster →" for anyone holding finance, membership or document access.
+
+Verified: 3 RLS tests pin the write side (a club manager and an org admin create; a coach,
+a guardian and another club's manager are refused; a duplicate slug is a clean 23505). Driven
+live as the demo club manager: created a team (slug, org, sport and audit row all correct),
+created a second with the same name and got the `-2` slug; test rows removed.
 
 ### What was and wasn't clicked through
 

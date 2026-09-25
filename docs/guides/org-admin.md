@@ -83,10 +83,10 @@ Once someone is a club manager, they add everyone else. See the
 
 ## Create teams
 
-This app has **no "create team" button**. A club's **Teams** tab can only **link a
-team that already exists** in your organization and isn't yet claimed by a club
-(you give it a URL slug). Club managers can then add players to it. A club with no
-linkable team therefore can't get one from this app today.
+On a club's **Teams** tab, type a **team name**, choose **Grassroots (youth)** or
+**Adult**, and choose **Create team**. You can do this as an org admin without being on
+the club's staff. The same tab can also **link** a team that already exists in your
+organization and isn't yet claimed by a club. Club managers then add players to it.
 
 ## Run a tournament
 
@@ -158,4 +158,4 @@ contact them.
   platform team sends you the payment instructions.
 - Filing a support request yourself. Club managers and club IT admins can; you can
   ask one to file it, or contact the platform team directly.
-- Creating teams from scratch, and creating logins or resetting passwords.
+- Creating logins or resetting passwords.

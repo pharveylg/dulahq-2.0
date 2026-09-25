@@ -218,6 +218,54 @@ export async function linkTeam(clubId: string, formData: FormData) {
   return { success: true };
 }
 
+function slugifyTeam(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Creates a team in this club. The app could only link a team that already
+ * existed and was unclaimed, so a new club could never get its first team from
+ * the screen. teams_write is can_admin_club (club manager / org admin);
+ * fill_org_id derives org_id from the club. The URL slug comes from the name and
+ * gets a numeric suffix if another team in the club already has it.
+ */
+export async function createTeam(clubId: string, formData: FormData) {
+  const name = (formData.get('name') as string)?.trim();
+  const squadType = (formData.get('squadType') as string) || 'grassroots';
+  if (!name) return { error: 'Team name is required.' };
+  if (!['grassroots', 'adult'].includes(squadType)) return { error: 'Choose a squad type.' };
+  const base = slugifyTeam(name);
+  if (!base) return { error: 'Team name needs at least one letter or number.' };
+
+  const supabase = await createClient();
+  const { data: club } = await supabase.from('clubs').select('sport_id').eq('id', clubId).maybeSingle();
+
+  for (let n = 1; n <= 9; n++) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const { data, error } = await supabase
+      .from('teams')
+      .insert({ club_id: clubId, name, slug, squad_type: squadType, sport_id: club?.sport_id ?? null })
+      .select('id, org_id')
+      .single();
+    if (error) {
+      if (error.code === '23505') continue; // slug taken in this club: try the next suffix
+      return { error: friendlyError(error) };
+    }
+    await supabase.rpc('write_audit', {
+      p_org_id: data.org_id,
+      p_action: 'team.created',
+      p_scope_type: 'club',
+      p_scope_id: clubId,
+      p_entity_type: 'team',
+      p_entity_id: data.id,
+      p_after: { name, slug, squad_type: squadType },
+    });
+    revalidatePath('/c/[clubSlug]', 'layout');
+    return { success: true };
+  }
+  return { error: 'Couldn’t find a free URL for that name — try a slightly different one.' };
+}
+
 /**
  * Assigns a coach/team_manager to a specific team via the EXISTING
  * user_assigned_teams table -- not a new Club-Manager-only mechanism.

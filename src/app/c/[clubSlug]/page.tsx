@@ -4,6 +4,7 @@ import { createClient, getClubAccess, getAssignedTeamIds } from '@/lib/supabase/
 import EditNameForm from './EditNameForm';
 import AddStaffForm from './AddStaffForm';
 import LinkTeamForm from './LinkTeamForm';
+import CreateTeamForm from './CreateTeamForm';
 import StaffRow from './StaffRow';
 import Trips from './Trips';
 import Announcements from './Announcements';
@@ -110,6 +111,8 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     { data: canManageFinancesRpc },
     { data: isOrgAdminRpc },
     { data: canCommunicateRpc },
+    { data: canMembershipRpc },
+    { data: canDocsRpc },
   ] = await Promise.all([
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'impersonate_user', p_club_id: clubId }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'view_audit_log', p_club_id: clubId }),
@@ -118,6 +121,8 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_finances', p_club_id: clubId }),
     supabaseForPerms.rpc('is_org_admin', { org: club.org_id }),
     supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_communications', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_membership', p_club_id: clubId }),
+    supabaseForPerms.rpc('has_staff_permission', { p_permission_key: 'manage_documents', p_club_id: clubId }),
   ]);
   const canViewItAdmin = !!canImpersonate || !!canViewAudit;
 
@@ -733,7 +738,10 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                     return Number(myAssignedTeamIds.includes(b.id)) - Number(myAssignedTeamIds.includes(a.id));
                   })
                   .map((t) => {
-                    const assigned = access.isClubManager || myAssignedTeamIds.includes(t.id);
+                    // Finance/membership/document holders reach every team's players
+                    // without an assignment (phase12d), so "Not assigned" would mislead.
+                    const clubWide = !!canViewFinancesRpc || !!canManageFinancesRpc || !!canMembershipRpc || !!canDocsRpc;
+                    const assigned = access.isClubManager || clubWide || myAssignedTeamIds.includes(t.id);
                     return (
                       <Link key={t.id} href={`/c/${club.slug}/teams/${t.slug}`} className="list-row" style={{ textDecoration: 'none', color: 'inherit' }}>
                         <span className="list-row-title">{t.name}</span>
@@ -743,6 +751,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                       </Link>
                     );
                   })}
+                {canManage && <CreateTeamForm clubId={club.id} />}
                 {canManage && <LinkTeamForm clubId={club.id} unclaimedTeams={unclaimedTeams ?? []} />}
               </div>
             </>

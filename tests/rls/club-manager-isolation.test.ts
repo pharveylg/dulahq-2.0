@@ -2838,3 +2838,44 @@ describe('announcements honour manage_communications (phase12e)', () => {
     for (const id of [secId, trId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Creating a team from the club page. The screen could only link an existing
+ * unclaimed team, so a new club could never get its first team. teams_write is
+ * can_admin_club; fill_org_id derives org_id from the club; (club_id, slug) is
+ * unique, which the action relies on to pick a free slug.
+ */
+describe('creating a team (createTeam)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const made: string[] = [];
+
+  it('a club manager can create a team, and org_id is derived from the club', async () => {
+    const { data, error } = await clubAdminAClient.from('teams')
+      .insert({ club_id: clubA.id, name: `RLS New ${tag}`, slug: `rls-new-${tag}`, squad_type: 'grassroots' })
+      .select('id, org_id, club_id').single();
+    expect(error).toBeNull();
+    expect(data!.org_id).toBe(orgA.id);
+    made.push(data!.id);
+  });
+
+  it('a second team with the same slug in the same club is refused (23505), so the action can retry with a suffix', async () => {
+    const { error } = await clubAdminAClient.from('teams')
+      .insert({ club_id: clubA.id, name: 'Dup', slug: `rls-new-${tag}`, squad_type: 'grassroots' });
+    expect(error?.code).toBe('23505');
+  });
+
+  it('an org admin can create one; a coach, a guardian and another club\'s manager cannot', async () => {
+    const ok = await orgAdminAClient.from('teams').insert({ club_id: clubA.id, name: 'OA', slug: `rls-oa-${tag}`, squad_type: 'adult' }).select('id').single();
+    expect(ok.error).toBeNull();
+    made.push(ok.data!.id);
+    for (const [who, client] of [['coach', coachA1Client], ['guardian', guardianOfA1Client], ['club B manager', clubStaffBClient]] as const) {
+      const r = await client.from('teams').insert({ club_id: clubA.id, name: who, slug: `rls-x-${who.replace(/\W/g, '')}-${tag}`, squad_type: 'grassroots' });
+      expect(r.error, who).not.toBeNull();
+    }
+    expect(((await adminClient.from('teams').select('id').like('slug', `rls-x-%-${tag}`)).data ?? [])).toHaveLength(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('teams').delete().in('id', made);
+  });
+});
