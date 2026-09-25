@@ -21,7 +21,7 @@ that use their permissions today:
 | **Organizer** | Yes, all of it |
 | **Treasurer** | Yes: the **Finance** tab |
 | **IT admin** | Yes: suspend and reactivate staff, and the audit trail, on the **Staff** tab |
-| **Team coordinator** | No screen uses their permission yet |
+| **Team coordinator** | Yes: notes and flags on the **Entries** tab |
 | **Secretary** | No |
 | **Logistics** | No |
 | **Communications** | No |
@@ -128,8 +128,9 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Review tournament entry** | Verify a registration's requirements, documents, fees, and eligibility -- does not decide it | This tournament |
 <!-- END permissions -->
 
-**There is no review screen yet.** You can read the list of entries, and that's all.
-Contact details stay with the organizer.
+On the **Entries** tab, choose **Notes** on a team to add a **note** (commentary for the organizer) or a **flag** (something the organizer must look at, such as a wrong category or missing paperwork). You can also read the team's contacts. A flag stays open, and the entry shows *1 open flag*, until the organizer resolves it; you can resolve your own. The **Flagged** filter lists every entry with an open flag.
+
+Notes and flags are internal: the team never sees them, and you can't edit or delete one after saving. You still can't accept or decline an entry.
 
 ## Secretary
 

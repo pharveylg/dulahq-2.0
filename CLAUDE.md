@@ -2716,6 +2716,27 @@ verify**.
   verification", form then offered the remaining ₱300). Fixture removed afterwards. Note the
   live check set the demo tournament's payment instructions to a sample GCash line.
 
+### Team coordinator notes and flags (2026-09-26) — `phase15b`, slice 2
+
+`review_tournament_entry` (team_coordinator and organizer) finally has a consumer.
+`tournament_entry_notes` holds notes and flags on an entry; a flag stays open until the
+organizer (`decide_tournament_entry`), an org admin, or its own author resolves it. Entries
+show "N open flags", and a **Flagged** filter joins Pending/Accepted/Declined. The
+coordinator also gained read access to the entry's **contacts** (`tec_read` got a
+`review_tournament_entry` branch) — they need to reach the team they review. **Reviewing is
+not deciding**: tested that a coordinator cannot call `decide_tournament_entry`.
+
+- Writes only through `add_entry_note` / `resolve_entry_note` (no INSERT/UPDATE/DELETE
+  policy), so a note can't be edited or deleted after saving; each is audited
+  (`tournament.entry.noted|flagged|note_resolved`). Entrants never see them.
+- The author's name is stored on the note (`author_name`, phase15b1): other staff can't read
+  `public.users`, so a join showed "someone".
+- New org_id table, so it carries the `org_not_suspended` fence itself (phase9a's guard test
+  would otherwise fail).
+- Verified: RLS 264 → 272; driven live as a throwaway coordinator on Tiger Cup (Notes button,
+  flag with author name, "1 open flag", Flagged (1), Resolve → Flagged (0); no Accept/Decline
+  offered). Fixture removed. Not clicked: the organizer resolving someone else's flag.
+
 ---
 
 ## 1. The two deployments

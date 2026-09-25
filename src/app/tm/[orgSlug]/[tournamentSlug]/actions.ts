@@ -38,6 +38,25 @@ export async function decideEntry(entryId: string, status: 'accepted' | 'decline
   return { success: true };
 }
 
+/** A coordinator's note or flag on an entry. Flags stay open until the organizer (or the author) resolves them. */
+export async function addEntryNote(entryId: string, kind: 'note' | 'flag', body: string) {
+  const text = body.trim();
+  if (!text) return { error: 'Write something first.' };
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('add_entry_note', { p_entry_id: entryId, p_kind: kind, p_body: text });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+export async function resolveEntryNote(noteId: string) {
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('resolve_entry_note', { p_note_id: noteId });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
 /**
  * Host-entered registration: the organizer records a team that registered
  * with them. Entries are always created 'pending' (RLS enforces it) -- the

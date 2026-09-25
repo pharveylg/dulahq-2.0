@@ -3246,3 +3246,96 @@ describe('entrant portal (phase15a)', () => {
     for (const id of [mgrId, coachId, otherId, pendId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Team coordinator notes and flags (phase15b). The coordinator holds
+ * review_tournament_entry and, until now, nothing consumed it. They can now annotate an
+ * entry (a note, or a flag the organizer must look at) and read the entry's contacts.
+ * They still cannot decide: acceptance stays with decide_tournament_entry.
+ */
+describe('team coordinator notes and flags (phase15b)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const coordEmail = `rls-tc-coord-${tag}@rls-test.local`;
+  const orgzEmail = `rls-tc-orgz-${tag}@rls-test.local`;
+  const trEmail = `rls-tc-tr-${tag}@rls-test.local`;
+  let coordId: string; let orgzId: string; let trId: string;
+  let coord: ReturnType<typeof createClient>; let orgz: ReturnType<typeof createClient>; let tr: ReturnType<typeof createClient>;
+  let tId: string; let entryId: string; let noteId: string; let flagId: string;
+  const add = (c: ReturnType<typeof createClient>, kind: string, body: string, entry = entryId) =>
+    c.rpc('add_entry_note', { p_entry_id: entry, p_kind: kind, p_body: body });
+  const visible = async (c: ReturnType<typeof createClient>) =>
+    ((await c.from('tournament_entry_notes').select('id').eq('entry_id', entryId)).data ?? []).map((r: any) => r.id);
+
+  it('sets up a tournament with a coordinator, an organizer and a treasurer (none in any org) and an entry with a contact', async () => {
+    coordId = (await createTestUser(coordEmail, 'audience')).publicUser.id;
+    orgzId = (await createTestUser(orgzEmail, 'audience')).publicUser.id;
+    trId = (await createTestUser(trEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Coordinator Cup', org_id: orgA.id, slug: `rls-tc-${tag}` }).select().single(), 'tournament').id;
+    for (const [uid, role] of [[coordId, 'team_coordinator'], [orgzId, 'organizer'], [trId, 'treasurer']] as const) {
+      must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: uid, role, org_id: orgA.id }).select().single(), role);
+    }
+    entryId = must(await adminClient.from('tournament_entries').insert({ tournament_id: tId, host_org_id: orgA.id, entrant_org_id: orgA.id, team_name: 'Reviewed FC', status: 'pending' }).select().single(), 'entry').id;
+    must(await adminClient.from('tournament_entry_contacts').insert({ entry_id: entryId, org_id: orgA.id, name: 'Rev Contact', email: `rev-${tag}@rls-test.local`, role: 'team_manager', account_status: 'pending' }).select().single(), 'contact');
+    coord = await signInAs(coordEmail); orgz = await signInAs(orgzEmail); tr = await signInAs(trEmail);
+  });
+
+  it('the coordinator and the organizer can add a note and a flag; each is recorded with its author and audited', async () => {
+    const n = await add(coord, 'note', 'Roster looks thin for U15');
+    expect(n.error).toBeNull(); noteId = n.data as unknown as string;
+    const f = await add(coord, 'flag', 'Category looks wrong: this is an adult squad');
+    expect(f.error).toBeNull(); flagId = f.data as unknown as string;
+    expect((await add(orgz, 'note', 'Called the manager')).error).toBeNull();
+    const row = must(await adminClient.from('tournament_entry_notes').select('kind, body, created_by, resolved_at').eq('id', flagId).single(), 'flag row');
+    expect(row).toMatchObject({ kind: 'flag', created_by: coordId, resolved_at: null });
+    const { data: audit } = await adminClient.from('audit_log').select('action').eq('entity_id', flagId);
+    expect((audit ?? []).map((a: any) => a.action)).toContain('tournament.entry.flagged');
+  });
+
+  it('refused: a treasurer, a coach, another orgs user, an empty body, an unknown kind', async () => {
+    for (const c of [tr, coachA1Client, guardianOfA1Client, itAdminAClient]) {
+      expect((await add(c, 'note', 'sneaky')).error).not.toBeNull();
+    }
+    expect((await add(coord, 'note', '   ')).error).not.toBeNull();
+    expect((await add(coord, 'comment', 'x')).error).not.toBeNull();
+  });
+
+  it('only review holders read the notes; nobody writes the table directly', async () => {
+    expect((await visible(coord)).sort()).toHaveLength(3);
+    expect((await visible(orgz)).sort()).toHaveLength(3);
+    expect(await visible(tr)).toHaveLength(0);
+    expect(await visible(coachA1Client)).toHaveLength(0);
+    expect((await coord.from('tournament_entry_notes').insert({ entry_id: entryId, tournament_id: tId, org_id: orgA.id, kind: 'note', body: 'direct', created_by: coordId })).error).not.toBeNull();
+    expect((await coord.from('tournament_entry_notes').update({ body: 'edited' }).eq('id', noteId).select()).data ?? []).toHaveLength(0);
+  });
+
+  it('the coordinator now reads the entry contacts; a treasurer still cannot', async () => {
+    expect(((await coord.from('tournament_entry_contacts').select('id').eq('entry_id', entryId)).data ?? [])).toHaveLength(1);
+    expect(((await tr.from('tournament_entry_contacts').select('id').eq('entry_id', entryId)).data ?? [])).toHaveLength(0);
+  });
+
+  it('a flag is resolved by the organizer or its author, not by another coordinator or a treasurer', async () => {
+    expect((await tr.rpc('resolve_entry_note', { p_note_id: flagId })).error).not.toBeNull();
+    expect((await coachA1Client.rpc('resolve_entry_note', { p_note_id: flagId })).error).not.toBeNull();
+    expect((await orgz.rpc('resolve_entry_note', { p_note_id: flagId })).error).toBeNull();
+    const row = must(await adminClient.from('tournament_entry_notes').select('resolved_at, resolved_by').eq('id', flagId).single(), 'resolved');
+    expect(row.resolved_by).toBe(orgzId); expect(row.resolved_at).not.toBeNull();
+    // the author can resolve their own
+    const own = await add(coord, 'flag', 'second flag');
+    expect((await coord.rpc('resolve_entry_note', { p_note_id: own.data })).error).toBeNull();
+  });
+
+  it('the coordinator still cannot decide the entry', async () => {
+    expect((await coord.rpc('decide_tournament_entry', { p_entry_id: entryId, p_status: 'accepted' })).error).not.toBeNull();
+    expect(must(await adminClient.from('tournament_entries').select('status').eq('id', entryId).single(), 'entry').status).toBe('pending');
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('audit_log').delete().eq('scope_id', tId);
+    await adminClient.from('tournament_entry_notes').delete().eq('tournament_id', tId);
+    await adminClient.from('tournament_entry_contacts').delete().eq('entry_id', entryId);
+    await adminClient.from('tournament_entries').delete().eq('id', entryId);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    for (const id of [coordId, orgzId, trId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

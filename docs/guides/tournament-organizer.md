@@ -57,9 +57,13 @@ brackets, groups and live scores.
 ## Entries
 
 The **Entries** tab lists every team that has entered, with tabs to filter:
-**Pending, Accepted, Declined** and **All**, each with a count. The tab itself shows
+**Pending, Accepted, Declined, Flagged** and **All**, each with a count. The tab itself shows
 a badge for how many are pending. When nothing is waiting it says *No entries are
 waiting for a decision.*
+
+### Notes and flags from your team coordinator
+
+A team coordinator (or you) can leave a **note** or a **flag** on an entry from **Notes**. An entry with an open flag shows *open flag* beside its status, and **Flagged** lists them all. **Resolve** closes a flag once you've dealt with it. Teams never see notes or flags.
 
 ### Accept or decline
 

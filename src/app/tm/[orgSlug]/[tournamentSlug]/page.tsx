@@ -55,6 +55,7 @@ export default async function TournamentConsolePage({
     { data: pManageFinance },
     { data: pListing },
     { data: pLogins },
+    { data: pReview },
   ] = await Promise.all([
     supabase.rpc('is_org_admin', { org: orgId }),
     supabase.rpc('is_tournament_staff', { check_tournament_id: tournamentId }),
@@ -68,6 +69,7 @@ export default async function TournamentConsolePage({
     perm('manage_tournament_finances'),
     perm('manage_tournament_listing'),
     perm('manage_tournament_logins'),
+    perm('review_tournament_entry'),
   ]);
 
   // RLS already hides the tournament from anyone else; this is the explicit
@@ -76,6 +78,7 @@ export default async function TournamentConsolePage({
 
   const can = (granted: boolean | null) => !!orgAdmin || !!granted;
   const canDecide = can(pDecide);
+  const canReview = can(pReview);
   const canAddEntries = can(pManage);
   const canManageCategories = can(pCompetition);
   const canManageStaff = can(pStaff);
@@ -110,6 +113,21 @@ export default async function TournamentConsolePage({
         .in('entry_id', entryIds)
     : { data: [] };
 
+  // Coordinator notes and flags (review_tournament_entry). RLS already limits who reads them.
+  const { data: noteRows } = canReview && entryIds.length
+    ? await (supabase as any)
+        .from('tournament_entry_notes')
+        .select('id, entry_id, kind, body, resolved_at, created_by, created_at, author_name')
+        .in('entry_id', entryIds)
+        .order('created_at', { ascending: false })
+    : { data: [] };
+  const notesByEntry = new Map<string, Entry['notes']>();
+  for (const n of (noteRows ?? []) as any[]) {
+    const list = notesByEntry.get(n.entry_id) ?? [];
+    list.push({ id: n.id, kind: n.kind, body: n.body, resolved: !!n.resolved_at, mine: n.created_by === user.id, author: n.author_name ?? null, createdAt: n.created_at });
+    notesByEntry.set(n.entry_id, list);
+  }
+
   const contactsByEntry = new Map<string, Entry['contacts']>();
   for (const c of contactRows ?? []) {
     const list = contactsByEntry.get(c.entry_id) ?? [];
@@ -125,6 +143,7 @@ export default async function TournamentConsolePage({
     clubBacked: !!e.club_id,
     createdAt: e.created_at,
     contacts: contactsByEntry.get(e.id) ?? [],
+    notes: notesByEntry.get(e.id) ?? [],
   }));
 
   // Pending and accepted entries hold a place; declined and withdrawn don't.
@@ -259,6 +278,7 @@ export default async function TournamentConsolePage({
               categories={categoryOptions}
               canDecide={canDecide}
               canAdd={canAddEntries}
+              canReview={canReview}
             />
           }
           categoriesSlot={<Categories tournamentId={tournamentId} categories={categories} canManage={canManageCategories} />}

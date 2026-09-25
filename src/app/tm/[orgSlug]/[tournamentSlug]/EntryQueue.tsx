@@ -1,10 +1,11 @@
 'use client';
 
 import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
-import { addEntry, decideEntry } from './actions';
+import { addEntry, decideEntry, addEntryNote, resolveEntryNote } from './actions';
 import { formatMoney } from '@/lib/currency';
 
 export type EntryContact = { name: string; email: string; role: string; accountStatus: string };
+export type EntryNote = { id: string; kind: 'note' | 'flag'; body: string; resolved: boolean; mine: boolean; author: string | null; createdAt: string };
 export type Entry = {
   id: string;
   teamName: string;
@@ -13,11 +14,13 @@ export type Entry = {
   clubBacked: boolean;
   createdAt: string;
   contacts: EntryContact[];
+  notes: EntryNote[];
 };
 export type CategoryOption = { id: string; name: string; entryFee: number | null; capacity: number | null; taken: number };
 
 type FormState = { error?: string; success?: boolean; warnings?: string[] };
-const STATUS_FILTERS = ['pending', 'accepted', 'declined', 'all'] as const;
+const STATUS_FILTERS = ['pending', 'accepted', 'declined', 'flagged', 'all'] as const;
+const openFlags = (e: Entry) => e.notes.filter((n) => n.kind === 'flag' && !n.resolved).length;
 
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
   accepted: { color: 'var(--accent)', background: 'var(--accent-soft)', borderColor: 'var(--accent-soft-border)' },
@@ -25,9 +28,56 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
   pending: { color: 'var(--warn)', background: 'var(--warn-soft)', borderColor: 'var(--warn-soft-border)' },
 };
 
-function EntryRow({ entry, canDecide }: { entry: Entry; canDecide: boolean }) {
+function NotesPanel({ entry, canDecide }: { entry: Entry; canDecide: boolean }) {
+  const [body, setBody] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function add(kind: 'note' | 'flag') {
+    setError(null);
+    startTransition(async () => {
+      const r = await addEntryNote(entry.id, kind, body);
+      if (r?.error) setError(r.error); else setBody('');
+    });
+  }
+  function resolve(id: string) {
+    setError(null);
+    startTransition(async () => {
+      const r = await resolveEntryNote(id);
+      if (r?.error) setError(r.error);
+    });
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'grid', gap: 6 }}>
+      {entry.notes.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>No notes yet.</div>}
+      {entry.notes.map((n) => (
+        <div key={n.id} style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', opacity: n.resolved ? 0.6 : 1 }}>
+          <span className="chip" style={n.kind === 'flag' && !n.resolved ? STATUS_STYLE.pending : undefined}>
+            {n.kind === 'flag' ? (n.resolved ? 'flag resolved' : 'flag') : 'note'}
+          </span>
+          <span>{n.body}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{n.author ?? 'someone'} · {new Date(n.createdAt).toLocaleDateString()}</span>
+          {n.kind === 'flag' && !n.resolved && (canDecide || n.mine) && (
+            <button className="btn" style={{ fontSize: 11.5 }} disabled={pending} onClick={() => resolve(n.id)}>Resolve</button>
+          )}
+        </div>
+      ))}
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} placeholder="Add a note for the organizer, or flag a problem" aria-label={`Note on ${entry.teamName}`} />
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn" style={{ fontSize: 12 }} disabled={pending} onClick={() => add('note')}>Add note</button>
+        <button className="btn" style={{ fontSize: 12 }} disabled={pending} onClick={() => add('flag')}>Flag for the organizer</button>
+      </div>
+      {error && <p className="error-text" style={{ margin: 0 }}>{error}</p>}
+    </div>
+  );
+}
+
+function EntryRow({ entry, canDecide, canReview }: { entry: Entry; canDecide: boolean; canReview: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
+  const flags = openFlags(entry);
 
   function decide(status: 'accepted' | 'declined') {
     if (status === 'declined' && !window.confirm(`Decline ${entry.teamName}?`)) return;
@@ -45,12 +95,18 @@ function EntryRow({ entry, canDecide }: { entry: Entry; canDecide: boolean }) {
           <div className="list-row-title">
             {entry.teamName}{' '}
             <span className="chip" style={STATUS_STYLE[entry.status]}>{entry.status}</span>
+            {flags > 0 && <span className="chip" style={STATUS_STYLE.pending}>{flags} open {flags === 1 ? 'flag' : 'flags'}</span>}
           </div>
           <div className="list-row-meta">
             {entry.categoryName ?? 'No category'} · {entry.clubBacked ? 'Dula HQ club' : 'External team'} ·{' '}
             {new Date(entry.createdAt).toLocaleDateString()}
           </div>
         </div>
+        {canReview && (
+          <button className="btn" style={{ fontSize: 12 }} onClick={() => setShowNotes((v) => !v)}>
+            Notes{entry.notes.length ? ` (${entry.notes.length})` : ''}
+          </button>
+        )}
         {canDecide && entry.status === 'pending' && (
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn btn-primary" style={{ fontSize: 12 }} disabled={pending} onClick={() => decide('accepted')}>Accept</button>
@@ -67,6 +123,7 @@ function EntryRow({ entry, canDecide }: { entry: Entry; canDecide: boolean }) {
           ))}
         </div>
       )}
+      {canReview && (showNotes || flags > 0) && <NotesPanel entry={entry} canDecide={canDecide} />}
       {error && <p className="error-text" style={{ margin: 0 }}>{error}</p>}
     </div>
   );
@@ -155,24 +212,26 @@ export default function EntryQueue({
   categories,
   canDecide,
   canAdd,
+  canReview,
 }: {
   tournamentId: string;
   entries: Entry[];
   categories: CategoryOption[];
   canDecide: boolean;
   canAdd: boolean;
+  canReview: boolean;
 }) {
   const [filter, setFilter] = useState<(typeof STATUS_FILTERS)[number]>('pending');
   const [showForm, setShowForm] = useState(false);
   const count = (s: string) => entries.filter((e) => e.status === s).length;
-  const visible = filter === 'all' ? entries : entries.filter((e) => e.status === filter);
+  const visible = filter === 'all' ? entries : filter === 'flagged' ? entries.filter((e) => openFlags(e) > 0) : entries.filter((e) => e.status === filter);
 
   return (
     <>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         {STATUS_FILTERS.map((s) => (
           <button key={s} className={filter === s ? 'btn btn-primary' : 'btn'} style={{ fontSize: 12 }} onClick={() => setFilter(s)}>
-            {s[0].toUpperCase() + s.slice(1)} ({s === 'all' ? entries.length : count(s)})
+            {s[0].toUpperCase() + s.slice(1)} ({s === 'all' ? entries.length : s === 'flagged' ? entries.filter((e) => openFlags(e) > 0).length : count(s)})
           </button>
         ))}
         {canAdd && (
@@ -190,7 +249,7 @@ export default function EntryQueue({
             {filter === 'pending' ? 'No entries are waiting for a decision.' : `No ${filter === 'all' ? '' : filter + ' '}entries.`}
           </p>
         )}
-        {visible.map((entry) => <EntryRow key={entry.id} entry={entry} canDecide={canDecide} />)}
+        {visible.map((entry) => <EntryRow key={entry.id} entry={entry} canDecide={canDecide} canReview={canReview} />)}
       </div>
     </>
   );
