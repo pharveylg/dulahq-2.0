@@ -2737,6 +2737,28 @@ not deciding**: tested that a coordinator cannot call `decide_tournament_entry`.
   flag with author name, "1 open flag", Flagged (1), Resolve → Flagged (0); no Accept/Decline
   offered). Fixture removed. Not clicked: the organizer resolving someone else's flag.
 
+### Tournament announcements (2026-09-26) — `phase15c`, slice 3
+
+`manage_tournament_communications` (communications role, organizer) finally has a consumer: an
+**Announcements** tab in the organizer console posts to the teams entered in the tournament.
+A post shows on the entrant portal (`entrant_entry_portal` now returns `announcements`) and drops
+one in-app notification per person into their bell, linking to `/entry/<id>`.
+
+- Audience `all` = pending + accepted entrants; `accepted` = accepted only. Declined/withdrawn
+  teams are never addressed. Contacts must be **active** (signed in), the same rule as the portal.
+- Writes only through `post_tournament_announcement` / `retract_tournament_announcement`; the table
+  has no write policies, so a post can't be edited (retract and repost). Staff read the table;
+  entrants read only through the portal function. Audited as
+  `tournament.announcement.posted|retracted`.
+- **In-app only.** No push (the send is a definer function, and push delivery lives in
+  `notify.ts`) and no email (§8). Retracting hides it from entry pages but the bell row already
+  sent stays.
+- **Not built:** posting to officials or to the public tournament page (the proposal mentioned
+  both), and scheduling.
+- Verified: RLS 272 → 281 (written first; 5 of 9 failed before the migration); driven live as
+  the Tiger Cup organizer (posted) then a throwaway entrant (announcement on the entry page,
+  bell badge 1). Fixture removed.
+
 ---
 
 ## 1. The two deployments

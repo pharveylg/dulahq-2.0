@@ -3339,3 +3339,124 @@ describe('team coordinator notes and flags (phase15b)', () => {
     for (const id of [coordId, orgzId, trId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Tournament announcements (phase15c). manage_tournament_communications (communications
+ * role and organizer) had no consumer. A post reaches the entry contacts of that
+ * tournament: it shows on their portal page and lands in their notification bell.
+ */
+describe('tournament announcements (phase15c)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const commsEmail = `rls-an-comms-${tag}@rls-test.local`;
+  const trEmail = `rls-an-tr-${tag}@rls-test.local`;
+  const acceptedEmail = `rls-an-acc-${tag}@rls-test.local`;
+  const pendingEmail = `rls-an-pen-${tag}@rls-test.local`;
+  const declinedEmail = `rls-an-dec-${tag}@rls-test.local`;
+  const otherTEmail = `rls-an-oth-${tag}@rls-test.local`;
+  let commsId: string; let trId: string; let accId: string; let penId: string; let decId: string; let othId: string;
+  let comms: ReturnType<typeof createClient>; let tr: ReturnType<typeof createClient>;
+  let acc: ReturnType<typeof createClient>; let pen: ReturnType<typeof createClient>;
+  let dec: ReturnType<typeof createClient>; let oth: ReturnType<typeof createClient>;
+  let tId: string; let otherTId: string; let accEntry: string; let penEntry: string; let decEntry: string; let othEntry: string;
+  let annAll: string; let annAccepted: string;
+  const post = (c: ReturnType<typeof createClient>, title: string, body: string, audience = 'all', t = tId) =>
+    c.rpc('post_tournament_announcement', { p_tournament_id: t, p_title: title, p_body: body, p_audience: audience });
+  const portal = async (c: ReturnType<typeof createClient>, entry: string) =>
+    ((await c.rpc('entrant_entry_portal', { p_entry_id: entry })).data as any)?.announcements?.map((a: any) => a.title) ?? [];
+  const bell = async (userId: string) =>
+    ((await adminClient.from('notifications').select('template, link_path').eq('recipient_user_id', userId).like('template', 'tournament.announcement%')).data ?? []) as any[];
+
+  it('sets up two tournaments: one with accepted, pending and declined entrants; another with one entrant', async () => {
+    commsId = (await createTestUser(commsEmail, 'audience')).publicUser.id;
+    trId = (await createTestUser(trEmail, 'audience')).publicUser.id;
+    accId = (await createTestUser(acceptedEmail, 'audience')).publicUser.id;
+    penId = (await createTestUser(pendingEmail, 'audience')).publicUser.id;
+    decId = (await createTestUser(declinedEmail, 'audience')).publicUser.id;
+    othId = (await createTestUser(otherTEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Announce Cup', org_id: orgA.id, slug: `rls-an-${tag}` }).select().single(), 't').id;
+    otherTId = must(await adminClient.from('tournaments').insert({ name: 'RLS Other Cup', org_id: orgA.id, slug: `rls-an2-${tag}` }).select().single(), 't2').id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: commsId, role: 'communications', org_id: orgA.id }).select().single(), 'comms');
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: trId, role: 'treasurer', org_id: orgA.id }).select().single(), 'tr');
+    const mk = async (t: string, team: string, status: string, email: string, uid: string) => {
+      const e = must(await adminClient.from('tournament_entries').insert({ tournament_id: t, host_org_id: orgA.id, entrant_org_id: orgA.id, team_name: team, status }).select().single(), team).id;
+      must(await adminClient.from('tournament_entry_contacts').insert({ entry_id: e, org_id: orgA.id, name: team, email, role: 'team_manager', account_status: 'active', user_id: uid }).select().single(), 'contact');
+      return e as string;
+    };
+    accEntry = await mk(tId, 'Accepted FC', 'accepted', acceptedEmail, accId);
+    penEntry = await mk(tId, 'Pending FC', 'pending', pendingEmail, penId);
+    decEntry = await mk(tId, 'Declined FC', 'declined', declinedEmail, decId);
+    othEntry = await mk(otherTId, 'Elsewhere FC', 'accepted', otherTEmail, othId);
+    comms = await signInAs(commsEmail); tr = await signInAs(trEmail);
+    acc = await signInAs(acceptedEmail); pen = await signInAs(pendingEmail); dec = await signInAs(declinedEmail); oth = await signInAs(otherTEmail);
+  });
+
+  it('a communications holder posts; entrants of that tournament get it in the portal and the bell (declined ones do not)', async () => {
+    const r = await post(comms, 'Kickoff moved', 'Opening match now 9am', 'all');
+    expect(r.error).toBeNull(); annAll = r.data as unknown as string;
+    expect(await portal(acc, accEntry)).toEqual(['Kickoff moved']);
+    expect(await portal(pen, penEntry)).toEqual(['Kickoff moved']);
+    expect(await portal(dec, decEntry)).toEqual([]);           // declined teams are not addressed
+    expect(await portal(oth, othEntry)).toEqual([]);           // another tournament
+    expect(await bell(accId)).toHaveLength(1);
+    expect((await bell(accId))[0].link_path).toBe(`/entry/${accEntry}`);
+    expect(await bell(penId)).toHaveLength(1);
+    expect(await bell(decId)).toHaveLength(0);
+    expect(await bell(othId)).toHaveLength(0);
+  });
+
+  it('an accepted-only post skips pending entrants', async () => {
+    const r = await post(comms, 'Bring two kits', 'Accepted teams only', 'accepted');
+    expect(r.error).toBeNull(); annAccepted = r.data as unknown as string;
+    expect((await portal(acc, accEntry)).sort()).toEqual(['Bring two kits', 'Kickoff moved']);
+    expect(await portal(pen, penEntry)).toEqual(['Kickoff moved']);
+    expect(await bell(penId)).toHaveLength(1);
+  });
+
+  it('refused: a treasurer, a coach, a guardian, an entrant, bad audience, empty title or body', async () => {
+    for (const c of [tr, coachA1Client, guardianOfA1Client, acc]) expect((await post(c, 'x', 'y')).error).not.toBeNull();
+    expect((await post(comms, 'x', 'y', 'everyone')).error).not.toBeNull();
+    expect((await post(comms, '  ', 'body')).error).not.toBeNull();
+    expect((await post(comms, 'title', '  ')).error).not.toBeNull();
+    expect((await post(comms, 'wrong tournament', 'y', 'all', otherTId)).error).not.toBeNull(); // no role there
+  });
+
+  it('staff read the posts; entrants and outsiders cannot read the table; nobody writes it directly', async () => {
+    const ids = async (c: ReturnType<typeof createClient>) => ((await c.from('tournament_announcements').select('id').eq('tournament_id', tId)).data ?? []).length;
+    expect(await ids(comms)).toBe(2);
+    expect(await ids(tr)).toBe(2);
+    expect(await ids(acc)).toBe(0);
+    expect(await ids(coachA1Client)).toBe(0);
+    expect((await comms.from('tournament_announcements').insert({ tournament_id: tId, org_id: orgA.id, title: 'd', body: 'd', audience: 'all' })).error).not.toBeNull();
+  });
+
+  it('retracting removes it from the portal; only a communications holder can retract', async () => {
+    expect((await tr.rpc('retract_tournament_announcement', { p_id: annAll })).error).not.toBeNull();
+    expect((await acc.rpc('retract_tournament_announcement', { p_id: annAll })).error).not.toBeNull();
+    expect((await comms.rpc('retract_tournament_announcement', { p_id: annAll })).error).toBeNull();
+    expect(await portal(acc, accEntry)).toEqual(['Bring two kits']);
+  });
+
+  it('posting is audited to the poster', async () => {
+    const { data } = await adminClient.from('audit_log').select('action, actor_email').eq('entity_id', annAll);
+    expect((data ?? []).map((a: any) => a.action).sort()).toEqual(['tournament.announcement.posted', 'tournament.announcement.retracted']);
+    expect((data ?? [])[0].actor_email).toBe(commsEmail);
+  });
+
+  it('a suspended host org closes the portal announcements too', async () => {
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+    const r = await acc.rpc('entrant_entry_portal', { p_entry_id: accEntry });
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    expect(r.error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('audit_log').delete().in('entity_id', [annAll, annAccepted].filter(Boolean));
+    await adminClient.from('notifications').delete().in('recipient_user_id', [accId, penId, decId, othId]);
+    await adminClient.from('tournament_announcements').delete().in('tournament_id', [tId, otherTId]);
+    await adminClient.from('tournament_entry_contacts').delete().in('entry_id', [accEntry, penEntry, decEntry, othEntry]);
+    await adminClient.from('tournament_entries').delete().in('id', [accEntry, penEntry, decEntry, othEntry]);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().in('id', [tId, otherTId]);
+    for (const id of [commsId, trId, accId, penId, decId, othId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});

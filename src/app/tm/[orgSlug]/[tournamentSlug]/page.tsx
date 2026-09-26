@@ -6,6 +6,7 @@ import EntryQueue, { type Entry, type CategoryOption } from './EntryQueue';
 import Categories, { type Category } from './Categories';
 import StaffPanel, { type StaffMember, type AuditRow } from './StaffPanel';
 import Finance, { type FinanceInvoice, type PendingPayment } from './Finance';
+import Announcements, { type AnnouncementRow } from './Announcements';
 import PublicListingCard from '@/components/PublicListingCard';
 import ProvisionLoginPanel from '@/components/ProvisionLoginPanel';
 
@@ -56,6 +57,7 @@ export default async function TournamentConsolePage({
     { data: pListing },
     { data: pLogins },
     { data: pReview },
+    { data: pComms },
   ] = await Promise.all([
     supabase.rpc('is_org_admin', { org: orgId }),
     supabase.rpc('is_tournament_staff', { check_tournament_id: tournamentId }),
@@ -70,6 +72,7 @@ export default async function TournamentConsolePage({
     perm('manage_tournament_listing'),
     perm('manage_tournament_logins'),
     perm('review_tournament_entry'),
+    perm('manage_tournament_communications'),
   ]);
 
   // RLS already hides the tournament from anyone else; this is the explicit
@@ -79,6 +82,7 @@ export default async function TournamentConsolePage({
   const can = (granted: boolean | null) => !!orgAdmin || !!granted;
   const canDecide = can(pDecide);
   const canReview = can(pReview);
+  const canPostAnnouncements = can(pComms);
   const canAddEntries = can(pManage);
   const canManageCategories = can(pCompetition);
   const canManageStaff = can(pStaff);
@@ -168,6 +172,19 @@ export default async function TournamentConsolePage({
 
   // Logins: the raw permission, NOT can() -- an org admin doesn't create logins for a tournament's people; that is the tournament IT admin's job.
   const canLogins = !!pLogins;
+  // Announcements: whoever can post also sees the history.
+  const { data: announcementRows } = canPostAnnouncements
+    ? await (supabase as any)
+        .from('tournament_announcements')
+        .select('id, title, body, audience, author_name, created_at, retracted_at')
+        .eq('tournament_id', tournamentId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+    : { data: null };
+  const announcements: AnnouncementRow[] = ((announcementRows ?? []) as any[]).map((a) => ({
+    id: a.id, title: a.title, body: a.body, audience: a.audience, authorName: a.author_name, createdAt: a.created_at, retracted: !!a.retracted_at,
+  }));
+
   const showStaffTab = canManageStaff || canAccountStatus || canViewAudit || canLogins;
   const { data: loginRows } = canLogins
     ? await supabase.from('provisioned_logins').select('user_id, email, name, last_issued_at, temp_expires_at, activated_at, expired_at')
@@ -293,6 +310,7 @@ export default async function TournamentConsolePage({
               />
             ) : null
           }
+          announcementsSlot={canPostAnnouncements ? <Announcements tournamentId={tournamentId} rows={announcements} canPost /> : null}
           staffSlot={
             showStaffTab ? (
               <>

@@ -24,7 +24,7 @@ that use their permissions today:
 | **Team coordinator** | Yes: notes and flags on the **Entries** tab |
 | **Secretary** | No |
 | **Logistics** | No |
-| **Communications** | No |
+| **Communications** | Yes: the **Announcements** tab |
 | **Volunteer coordinator** | No |
 | **Referee coordinator** | No |
 
@@ -172,8 +172,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Manage tournament communications** | Tournament-wide announcements and notices | This tournament |
 <!-- END permissions -->
 
-**No tournament announcements screen exists yet.** Read-only Entries and Categories
-only.
+On the **Announcements** tab, write a **title** and a **message**, choose who gets it (**every team not declined**, or **accepted teams only**) and choose **Post announcement**. It appears on each team's entry page and in their notification bell. Teams whose entry was declined or withdrawn are never addressed, and a team with several contacts gets one notification per person. A post can't be edited: **Retract** hides it from the entry pages (the bell notification already sent stays) and you can post a corrected one. Posting and retracting are audited. A team only sees announcements once its team manager has signed in, so the organizer still has to tell each team to log in.
 
 ## Volunteer coordinator
 

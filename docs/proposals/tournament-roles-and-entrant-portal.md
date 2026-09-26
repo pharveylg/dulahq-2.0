@@ -1,6 +1,6 @@
 # Tournament roles with no screen, and the entrant portal
 
-_Written 2026-09-25. Status: **slice 1 (entrant portal) built 2026-09-26** (`/entry/<id>`, phase15a: entry status, invoices, payment instructions, payment submission by the team manager). Slice 2 (team coordinator notes and flags) built 2026-09-26, phase15b. Slices 3 to 6 not started._
+_Written 2026-09-25. Status: **slice 1 (entrant portal) built 2026-09-26** (`/entry/<id>`, phase15a: entry status, invoices, payment instructions, payment submission by the team manager). Slice 2 (team coordinator notes and flags) built 2026-09-26, phase15b. Slice 3 (announcements to entrants) built 2026-09-26, phase15c. Slices 4 to 6 not started._
 
 ## State when this was written
 

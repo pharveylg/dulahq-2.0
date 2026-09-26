@@ -10,6 +10,7 @@ type Portal = {
   entry: { id: string; team_name: string; status: string; tournament_name: string; host_org_name: string; category_name: string | null };
   my_role: string;
   instructions: string | null;
+  announcements: { id: string; title: string; body: string; author_name: string | null; created_at: string }[];
   invoices: Invoice[];
 };
 
@@ -65,6 +66,19 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
           </div>
           <span className="chip">{STATUS_LABEL[portal.entry.status] ?? portal.entry.status}</span>
         </div>
+
+        {portal.announcements.length > 0 && (
+          <>
+            <div className="section-label">Announcements</div>
+            {portal.announcements.map((a) => (
+              <div key={a.id} className="card" style={{ marginBottom: 12 }}>
+                <div className="list-row-title">{a.title}</div>
+                <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', margin: '4px 0' }}>{a.body}</div>
+                <div className="list-row-meta">{a.author_name ?? portal.entry.host_org_name} · {new Date(a.created_at).toLocaleString()}</div>
+              </div>
+            ))}
+          </>
+        )}
 
         <div className="section-label">Fees</div>
         {portal.invoices.length === 0 && (

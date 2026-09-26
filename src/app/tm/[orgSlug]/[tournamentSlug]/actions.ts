@@ -38,6 +38,26 @@ export async function decideEntry(entryId: string, status: 'accepted' | 'decline
   return { success: true };
 }
 
+/** Post to the teams entered in this tournament (entry page + notification bell). */
+export async function postAnnouncement(tournamentId: string, title: string, body: string, audience: 'all' | 'accepted') {
+  if (!title.trim() || !body.trim()) return { error: 'Add a title and a message.' };
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('post_tournament_announcement', {
+    p_tournament_id: tournamentId, p_title: title, p_body: body, p_audience: audience,
+  });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+export async function retractAnnouncement(id: string) {
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('retract_tournament_announcement', { p_id: id });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
 /** A coordinator's note or flag on an entry. Flags stay open until the organizer (or the author) resolves them. */
 export async function addEntryNote(entryId: string, kind: 'note' | 'flag', body: string) {
   const text = body.trim();

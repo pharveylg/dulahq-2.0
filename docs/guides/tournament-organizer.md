@@ -111,6 +111,10 @@ group**, a **Format** (for example *7-a-side*), an **Entry fee (PHP)** and a
 **Edit** changes any of it. **Delete** asks you to confirm, and is refused if teams
 have entered that category.
 
+## Announcements
+
+The **Announcements** tab posts a message to the teams entered in your tournament: it shows on their entry page and in their notification bell. Choose **Every team not declined** or **Accepted teams only**. You can **Retract** a post but not edit it. Your communications role holder can post here too. Teams only see it after their team manager has signed in.
+
 ## Finance
 
 The **Finance** tab shows up if you hold a finance permission, which an organizer does.
