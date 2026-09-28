@@ -168,6 +168,10 @@ can do are in the [tournament staff guide](tournament-staff.md).
 Below the list is the **Audit trail** of what's happened in this tournament, with
 who did it and when.
 
+## Documents
+
+On the **Documents** tab, teams' entered contacts submit waivers, insurance proof and roster forms through their own entry page; you or your secretary review them there — Approve, Reject (with a reason), or Remove. You can also add a document a team sent you some other way. A team only sees the tab once its team manager or coach has signed in.
+
 ## Rosters
 
 You don't build a team's roster. A team's own coach does, as described in the

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { uploadFile, deleteFile } from '../../../../../shared/files/lib/r2';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501') return "You don't have permission to do that.";
@@ -54,6 +55,51 @@ export async function retractAnnouncement(id: string) {
   const supabase = await createClient();
   const { error } = await (supabase as any).rpc('retract_tournament_announcement', { p_id: id });
   if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+const DOC_TYPES = ['waiver', 'insurance', 'roster_form', 'other'];
+const MAX_DOC_BYTES = 8 * 1024 * 1024;
+
+/** Secretary/organizer recording a document a team sent some other way. */
+export async function staffUploadEntryDocument(entryId: string, formData: FormData) {
+  if (!entryId) return { error: 'Choose a team.' };
+  const type = formData.get('type') as string;
+  const name = (formData.get('name') as string)?.trim();
+  const file = formData.get('file') as File | null;
+  if (!DOC_TYPES.includes(type)) return { error: 'Choose a document type.' };
+  if (!name) return { error: 'Give the document a name.' };
+  if (!file || file.size === 0) return { error: 'Choose a file to upload.' };
+  if (file.size > MAX_DOC_BYTES) return { error: 'File is too large (8MB max).' };
+
+  const { key } = await uploadFile({
+    tenantId: entryId, category: 'documents', fileName: file.name,
+    body: Buffer.from(await file.arrayBuffer()), contentType: file.type || 'application/octet-stream',
+  });
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('staff_upload_entry_document', {
+    p_entry_id: entryId, p_type: type, p_name: name, p_storage_key: key, p_file_name: file.name, p_mime_type: file.type || null,
+  });
+  if (error) { await deleteFile(key).catch(() => {}); return { error: friendlyError(error) }; }
+  refresh();
+  return { success: true };
+}
+
+export async function reviewEntryDocument(documentId: string, status: 'approved' | 'rejected', note = '') {
+  if (status === 'rejected' && !note.trim()) return { error: 'Say why it was rejected so the team knows what to fix.' };
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('review_entry_document', { p_document_id: documentId, p_status: status, p_note: note });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+export async function deleteEntryDocument(documentId: string) {
+  const supabase = await createClient();
+  const { data: key, error } = await (supabase as any).rpc('delete_entry_document', { p_document_id: documentId });
+  if (error) return { error: friendlyError(error) };
+  if (key) await deleteFile(key).catch(() => {});
   refresh();
   return { success: true };
 }

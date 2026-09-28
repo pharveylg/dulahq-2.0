@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { formatMoney } from '@/lib/billing';
 import EntryPaymentForm from './EntryPaymentForm';
+import EntryDocuments, { type PortalDocument } from './EntryDocuments';
 
 type Submission = { id: string; amount: number; status: string; method: string; reference_number: string | null; reviewer_note: string | null; submitted_at: string };
 type Invoice = { id: string; invoice_number: string; status: string; currency: string; total: number; amount_paid: number; due_at: string | null; pending_amount: number; submissions: Submission[] };
@@ -11,6 +12,7 @@ type Portal = {
   my_role: string;
   instructions: string | null;
   announcements: { id: string; title: string; body: string; author_name: string | null; created_at: string }[];
+  documents: PortalDocument[];
   invoices: Invoice[];
 };
 
@@ -51,6 +53,7 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
   if (error || !data) notFound();
   const portal = data as Portal;
   const canPay = portal.my_role === 'team_manager';
+  const canUpload = portal.my_role === 'team_manager' || portal.my_role === 'coach';
 
   return (
     <main className="page">
@@ -133,6 +136,8 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
             </div>
           );
         })}
+
+        <EntryDocuments entryId={entryId} documents={portal.documents} canUpload={canUpload} />
       </div>
     </main>
   );

@@ -7,6 +7,7 @@ import Categories, { type Category } from './Categories';
 import StaffPanel, { type StaffMember, type AuditRow } from './StaffPanel';
 import Finance, { type FinanceInvoice, type PendingPayment } from './Finance';
 import Announcements, { type AnnouncementRow } from './Announcements';
+import Documents, { type ConsoleDocument, type EntryOption } from './Documents';
 import PublicListingCard from '@/components/PublicListingCard';
 import ProvisionLoginPanel from '@/components/ProvisionLoginPanel';
 
@@ -58,6 +59,7 @@ export default async function TournamentConsolePage({
     { data: pLogins },
     { data: pReview },
     { data: pComms },
+    { data: pDocs },
   ] = await Promise.all([
     supabase.rpc('is_org_admin', { org: orgId }),
     supabase.rpc('is_tournament_staff', { check_tournament_id: tournamentId }),
@@ -73,6 +75,7 @@ export default async function TournamentConsolePage({
     perm('manage_tournament_logins'),
     perm('review_tournament_entry'),
     perm('manage_tournament_communications'),
+    perm('manage_tournament_documents'),
   ]);
 
   // RLS already hides the tournament from anyone else; this is the explicit
@@ -83,6 +86,7 @@ export default async function TournamentConsolePage({
   const canDecide = can(pDecide);
   const canReview = can(pReview);
   const canPostAnnouncements = can(pComms);
+  const canReviewDocuments = can(pDocs);
   const canAddEntries = can(pManage);
   const canManageCategories = can(pCompetition);
   const canManageStaff = can(pStaff);
@@ -184,6 +188,21 @@ export default async function TournamentConsolePage({
   const announcements: AnnouncementRow[] = ((announcementRows ?? []) as any[]).map((a) => ({
     id: a.id, title: a.title, body: a.body, audience: a.audience, authorName: a.author_name, createdAt: a.created_at, retracted: !!a.retracted_at,
   }));
+
+  const { data: documentRows } = canReviewDocuments
+    ? await (supabase as any)
+        .from('tournament_entry_documents')
+        .select('id, entry_id, type, name, status, review_note, uploaded_by_role, created_at, tournament_entries(team_name)')
+        .eq('tournament_id', tournamentId)
+        .order('created_at', { ascending: false })
+    : { data: null };
+  const consoleDocuments: ConsoleDocument[] = ((documentRows ?? []) as any[]).map((d) => ({
+    id: d.id, entryId: d.entry_id, teamName: d.tournament_entries?.team_name ?? 'Unknown team', type: d.type, name: d.name,
+    status: d.status, reviewNote: d.review_note, uploadedByRole: d.uploaded_by_role, createdAt: d.created_at,
+  }));
+  const documentEntryOptions: EntryOption[] = entries
+    .filter((e) => e.status === 'accepted' || e.status === 'pending')
+    .map((e) => ({ id: e.id, teamName: e.teamName }));
 
   const showStaffTab = canManageStaff || canAccountStatus || canViewAudit || canLogins;
   const { data: loginRows } = canLogins
@@ -311,6 +330,7 @@ export default async function TournamentConsolePage({
             ) : null
           }
           announcementsSlot={canPostAnnouncements ? <Announcements tournamentId={tournamentId} rows={announcements} canPost /> : null}
+          documentsSlot={canReviewDocuments ? <Documents documents={consoleDocuments} entries={documentEntryOptions} canReview /> : null}
           staffSlot={
             showStaffTab ? (
               <>

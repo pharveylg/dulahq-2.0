@@ -22,7 +22,7 @@ that use their permissions today:
 | **Treasurer** | Yes: the **Finance** tab |
 | **IT admin** | Yes: suspend and reactivate staff, and the audit trail, on the **Staff** tab |
 | **Team coordinator** | Yes: notes and flags on the **Entries** tab |
-| **Secretary** | No |
+| **Secretary** | Yes: the **Documents** tab |
 | **Logistics** | No |
 | **Communications** | Yes: the **Announcements** tab |
 | **Volunteer coordinator** | No |
@@ -144,7 +144,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Manage tournament documents** | Tournament documentation, records, and official correspondence | This tournament |
 <!-- END permissions -->
 
-**No documents screen exists yet.** You have the read-only Entries and Categories.
+On the **Documents** tab, filter by Pending/Approved/Rejected/All. **Approve** or **Reject** (a reason is required) a team's waiver, insurance proof or roster form; **Remove** takes one down entirely. **Add a document on a team's behalf** records paperwork a team sent you some other way (email, in person) — it still needs a review, by anyone with the permission, not necessarily you. Approving or rejecting notifies the team's contact who uploaded it; documents you add on their behalf don't notify anyone (there's no one new to tell).
 
 ## Logistics
 

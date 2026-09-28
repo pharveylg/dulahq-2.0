@@ -2759,6 +2759,46 @@ one in-app notification per person into their bell, linking to `/entry/<id>`.
   the Tiger Cup organizer (posted) then a throwaway entrant (announcement on the entry page,
   bell badge 1). Fixture removed.
 
+### Tournament entry documents (2026-09-27) — `phase15d`, slice 4
+
+`manage_tournament_documents` (secretary, organizer) finally has a consumer: a **Documents**
+tab in the organizer console, and a Documents section on the entrant portal
+(`/entry/<id>`) for uploading. Files go through R2's `documents` category (declared in
+`shared/files/lib/r2.ts` since phase5d, never used until now — club documents are still
+inline base64; this is the first R2-backed document store).
+
+- **Two upload paths, both start `pending`:** `submit_entry_document` (any active entry
+  contact — team manager or coach) and `staff_upload_entry_document` (secretary/organizer/org
+  admin, for paperwork that arrived some other way). Review is separate from upload:
+  reviewing your own team's document is never possible for a contact, since only a
+  `manage_tournament_documents` holder or org admin can call `review_entry_document`.
+  Rejecting requires a reason, checked server-side (not just the client's `required`
+  attribute, unlike the club-side Documents component).
+- **Deleting:** the uploader may remove their own upload while it is still `pending`
+  (a mistake fix); once reviewed, only staff can remove it.
+- **A real bug, caught by the tests, not by inspection:** the first `review_entry_document`
+  called `create_notification()`, which checks `is_org_member()` on the **caller** —
+  written for a client-side caller acting on their own org membership. Tournament staff
+  aren't org members (`is_org_member` has no `tournament_staff` branch), so a secretary
+  approving a team-uploaded document raised "not a member of this organization" and rolled
+  back the whole review, including the status update already in the same statement. Same
+  trap class as phase5c's RETURNING-triggers-a-read-check bug. Fixed (`phase15d1`) by
+  inserting into `notifications` directly, matching `post_tournament_announcement`'s own
+  pattern: a function that has already authorized the caller doesn't need a second,
+  differently-scoped check on the way out.
+- Staff read the table directly; entrants read only through `entrant_entry_portal`'s new
+  `documents` field. Nobody writes the table directly.
+- **Not built:** downloading/viewing the uploaded file (no signed-URL endpoint yet — the
+  review screen shows only the name and status), and a document-request workflow (asking a
+  specific team for a specific document).
+- **Verified:** RLS 281 → 290 (written first; 6 of 9 failed before the migration, the other
+  2 failures after the first fix pinned the real bug above). Driven live: seeded a
+  submission via RPC as a throwaway entrant (**the sandboxed browser can't drive a native
+  file picker**, the same limitation recorded for club document/logo uploads) — portal showed
+  it pending; the Tiger Cup organizer's Documents tab listed it, Approve moved it to
+  Approved (took a couple of seconds for the Server Action's revalidation to land, same as
+  entry accept/decline). Fixture removed afterward.
+
 ---
 
 ## 1. The two deployments

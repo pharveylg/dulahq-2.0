@@ -3460,3 +3460,133 @@ describe('tournament announcements (phase15c)', () => {
     for (const id of [commsId, trId, accId, penId, decId, othId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Tournament entry documents (phase15d). Secretary's manage_tournament_documents
+ * (with no consumer since phase8) now backs waivers/insurance/roster forms per entry.
+ * Team contacts upload through the portal; secretary/organizer/org admin review. A
+ * contact can never review their own team's upload -- only a manage_tournament_documents
+ * holder or org admin can approve/reject.
+ */
+describe('tournament entry documents (phase15d)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const secEmail = `rls-doc-sec-${tag}@rls-test.local`;
+  const orgzEmail = `rls-doc-orgz-${tag}@rls-test.local`;
+  const trEmail = `rls-doc-tr-${tag}@rls-test.local`;
+  const mgrEmail = `rls-doc-mgr-${tag}@rls-test.local`;
+  const coachEmail = `rls-doc-coach-${tag}@rls-test.local`;
+  const otherEmail = `rls-doc-oth-${tag}@rls-test.local`;
+  let secId: string; let orgzId: string; let trId: string; let mgrId: string; let coachId: string; let othId: string;
+  let sec: ReturnType<typeof createClient>; let orgz: ReturnType<typeof createClient>; let tr: ReturnType<typeof createClient>;
+  let mgr: ReturnType<typeof createClient>; let coach: ReturnType<typeof createClient>; let oth: ReturnType<typeof createClient>;
+  let tId: string; let entryId: string; let otherEntryId: string;
+  let waiverId: string; let insuranceId: string; let rosterId: string;
+
+  const submit = (c: ReturnType<typeof createClient>, entry: string, type: string, name: string) =>
+    c.rpc('submit_entry_document', { p_entry_id: entry, p_type: type, p_name: name, p_storage_key: `tenants/x/documents/${crypto.randomUUID()}`, p_file_name: 'file.pdf', p_mime_type: 'application/pdf' });
+  const staffUpload = (c: ReturnType<typeof createClient>, entry: string, type: string, name: string) =>
+    c.rpc('staff_upload_entry_document', { p_entry_id: entry, p_type: type, p_name: name, p_storage_key: `tenants/x/documents/${crypto.randomUUID()}`, p_file_name: 'file.pdf', p_mime_type: 'application/pdf' });
+  const review = (c: ReturnType<typeof createClient>, id: string, status: string, note = '') =>
+    c.rpc('review_entry_document', { p_document_id: id, p_status: status, p_note: note });
+  const del = (c: ReturnType<typeof createClient>, id: string) => c.rpc('delete_entry_document', { p_document_id: id });
+  const portalDocs = async (c: ReturnType<typeof createClient>, entry: string) =>
+    ((await c.rpc('entrant_entry_portal', { p_entry_id: entry })).data as any)?.documents ?? [];
+
+  it('sets up a tournament with secretary/organizer/treasurer and one entry with a manager and coach contact, plus another entry', async () => {
+    secId = (await createTestUser(secEmail, 'audience')).publicUser.id;
+    orgzId = (await createTestUser(orgzEmail, 'audience')).publicUser.id;
+    trId = (await createTestUser(trEmail, 'audience')).publicUser.id;
+    mgrId = (await createTestUser(mgrEmail, 'audience')).publicUser.id;
+    coachId = (await createTestUser(coachEmail, 'audience')).publicUser.id;
+    othId = (await createTestUser(otherEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Docs Cup', org_id: orgA.id, slug: `rls-doc-${tag}` }).select().single(), 't').id;
+    for (const [uid, role] of [[secId, 'secretary'], [orgzId, 'organizer'], [trId, 'treasurer']] as const) {
+      must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: uid, role, org_id: orgA.id }).select().single(), role);
+    }
+    entryId = must(await adminClient.from('tournament_entries').insert({ tournament_id: tId, host_org_id: orgA.id, entrant_org_id: orgA.id, team_name: 'Docs FC', status: 'accepted' }).select().single(), 'entry').id;
+    otherEntryId = must(await adminClient.from('tournament_entries').insert({ tournament_id: tId, host_org_id: orgA.id, entrant_org_id: orgA.id, team_name: 'Other Docs FC', status: 'accepted' }).select().single(), 'entry2').id;
+    must(await adminClient.from('tournament_entry_contacts').insert({ entry_id: entryId, org_id: orgA.id, name: 'Manager', email: mgrEmail, role: 'team_manager', account_status: 'active', user_id: mgrId }).select().single(), 'mgr');
+    must(await adminClient.from('tournament_entry_contacts').insert({ entry_id: entryId, org_id: orgA.id, name: 'Coach', email: coachEmail, role: 'coach', account_status: 'active', user_id: coachId }).select().single(), 'coach');
+    must(await adminClient.from('tournament_entry_contacts').insert({ entry_id: otherEntryId, org_id: orgA.id, name: 'Other', email: otherEmail, role: 'team_manager', account_status: 'active', user_id: othId }).select().single(), 'other');
+    sec = await signInAs(secEmail); orgz = await signInAs(orgzEmail); tr = await signInAs(trEmail);
+    mgr = await signInAs(mgrEmail); coach = await signInAs(coachEmail); oth = await signInAs(otherEmail);
+  });
+
+  it('the team manager and the coach contact can each upload; another entry\'s contact and a non-contact cannot', async () => {
+    const r1 = await submit(mgr, entryId, 'waiver', 'Signed waiver'); expect(r1.error).toBeNull(); waiverId = r1.data as unknown as string;
+    const r2 = await submit(coach, entryId, 'roster_form', 'Roster form'); expect(r2.error).toBeNull(); rosterId = r2.data as unknown as string;
+    for (const c of [oth, coachA1Client, guardianOfA1Client, tr]) {
+      expect((await submit(c, entryId, 'waiver', 'sneaky')).error).not.toBeNull();
+    }
+    const row = must(await adminClient.from('tournament_entry_documents').select('status, uploaded_by, uploaded_by_role').eq('id', waiverId).single(), 'row');
+    expect(row).toMatchObject({ status: 'pending', uploaded_by: mgrId, uploaded_by_role: 'team_manager' });
+    const { data: audit } = await adminClient.from('audit_log').select('action').eq('entity_id', waiverId);
+    expect((audit ?? []).map((a: any) => a.action)).toContain('tournament.document.uploaded');
+  });
+
+  it('the secretary can upload on a team\'s behalf; a treasurer cannot', async () => {
+    const r = await staffUpload(sec, entryId, 'insurance', 'Insurance proof');
+    expect(r.error).toBeNull(); insuranceId = r.data as unknown as string;
+    expect((await staffUpload(tr, entryId, 'other', 'sneaky')).error).not.toBeNull();
+  });
+
+  it('the portal lists exactly this entry\'s documents to its contacts, with status; not another entry\'s', async () => {
+    const mine = (await portalDocs(mgr, entryId)).map((d: any) => d.name).sort();
+    expect(mine).toEqual(['Insurance proof', 'Roster form', 'Signed waiver']);
+    expect(await portalDocs(coach, entryId)).toHaveLength(3);
+    expect(await portalDocs(oth, otherEntryId)).toHaveLength(0);
+  });
+
+  it('a contact still cannot select the table directly; review holders can', async () => {
+    expect(((await mgr.from('tournament_entry_documents').select('id').eq('entry_id', entryId)).data ?? [])).toHaveLength(0);
+    expect(((await sec.from('tournament_entry_documents').select('id').eq('entry_id', entryId)).data ?? [])).toHaveLength(3);
+    expect(((await orgz.from('tournament_entry_documents').select('id').eq('entry_id', entryId)).data ?? [])).toHaveLength(3);
+    expect(((await tr.from('tournament_entry_documents').select('id').eq('entry_id', entryId)).data ?? [])).toHaveLength(0);
+  });
+
+  it('reviewing: a team manager cannot approve their own team\'s document; the secretary can; rejection needs a reason', async () => {
+    expect((await review(mgr, waiverId, 'approved')).error).not.toBeNull();
+    expect((await review(tr, waiverId, 'approved')).error).not.toBeNull();
+    expect((await review(sec, waiverId, 'rejected', '')).error).not.toBeNull(); // no reason
+    expect((await review(sec, waiverId, 'approved')).error).toBeNull();
+    const row = must(await adminClient.from('tournament_entry_documents').select('status, reviewed_by').eq('id', waiverId).single(), 'reviewed');
+    expect(row).toMatchObject({ status: 'approved', reviewed_by: secId });
+    expect((await review(orgz, rosterId, 'rejected', 'wrong squad listed')).error).toBeNull();
+    const notif = await adminClient.from('notifications').select('template, link_path').eq('recipient_user_id', coachId).eq('template', 'tournament.document.reviewed');
+    expect((notif.data ?? [])).toHaveLength(1);
+    expect((notif.data ?? [])[0].link_path).toBe(`/entry/${entryId}`);
+  });
+
+  it('deleting: the uploader can remove their own still-pending upload; not once reviewed; staff can delete either', async () => {
+    const r = await staffUpload(sec, entryId, 'other', 'Mistake');
+    const mistakeId = r.data as unknown as string;
+    expect((await del(oth, mistakeId)).error).not.toBeNull();      // not this entry's contact
+    expect((await del(mgr, mistakeId)).error).not.toBeNull();      // not the uploader
+    expect((await del(sec, mistakeId)).error).toBeNull();          // staff can remove any
+    expect((await del(mgr, waiverId)).error).not.toBeNull();       // already reviewed (approved)
+    const r2 = await submit(mgr, entryId, 'waiver', 'second try');
+    expect((await del(mgr, r2.data as string)).error).toBeNull();  // own, still pending
+  });
+
+  it('a suspended host org closes upload, review and the portal\'s document list', async () => {
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+    const s = await submit(mgr, entryId, 'waiver', 'x');
+    const r = await review(sec, insuranceId, 'approved');
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    expect(s.error).not.toBeNull();
+    expect(r.error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    const { data: docs } = await adminClient.from('tournament_entry_documents').select('id').eq('tournament_id', tId);
+    const ids = (docs ?? []).map((d: any) => d.id);
+    if (ids.length) await adminClient.from('audit_log').delete().in('entity_id', ids);
+    await adminClient.from('notifications').delete().in('recipient_user_id', [mgrId, coachId]);
+    await adminClient.from('tournament_entry_documents').delete().eq('tournament_id', tId);
+    await adminClient.from('tournament_entry_contacts').delete().in('entry_id', [entryId, otherEntryId]);
+    await adminClient.from('tournament_entries').delete().in('id', [entryId, otherEntryId]);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    for (const id of [secId, orgzId, trId, mgrId, coachId, othId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});
