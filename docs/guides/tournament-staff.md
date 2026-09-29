@@ -7,7 +7,7 @@ the people from outside teams who get access to their own entry.
 If you're the organizer, read the [tournament organizer guide](tournament-organizer.md)
 instead.
 
-_Last checked: 2026-09-28 · There are no demo accounts for these roles. The demo
+_Last checked: 2026-09-29 · There are no demo accounts for these roles. The demo
 organizer (Dennis Manalo, `/demo`) can add someone to try one._
 
 ## Read this first: what the roles can do and what the app shows
@@ -207,7 +207,11 @@ Their access covers **that one entry**, not the tournament. On the home page the
 
 ## Not available yet
 
-- Screens for the team coordinator, secretary, logistics, communications, volunteer
-  coordinator and referee coordinator roles.
-- A screen for outside team contacts.
-- Any email or message telling someone they've been added.
+- Any email or message telling someone they've been added, or that anything
+  happened on an entry, document, or roster they care about. Everything above
+  is in-app only (the notification bell, or the entry/tournament screens
+  themselves) — nobody is emailed.
+- Uploading or requesting a specific document from a specific team (the
+  Documents tab reviews what a team submits; it doesn't ask for one).
+- Downloading or previewing a submitted document's actual file from the
+  Documents tab — only its name and status show.

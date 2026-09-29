@@ -12,18 +12,6 @@ function friendlyError(error: { code?: string; message: string }) {
   return error.message;
 }
 
-export async function updateClubName(clubId: string, formData: FormData) {
-  const name = (formData.get('name') as string)?.trim();
-  if (!name) return { error: 'Club name is required.' };
-
-  const supabase = await createClient();
-  const { error } = await supabase.from('clubs').update({ name }).eq('id', clubId);
-
-  if (error) return { error: friendlyError(error) };
-  revalidatePath('/c/[clubSlug]', 'layout');
-  return { success: true };
-}
-
 /**
  * Gap analysis P0-6: the club's entire settings surface was a one-field
  * rename form. `about`/`location` columns and the `branding` jsonb bag

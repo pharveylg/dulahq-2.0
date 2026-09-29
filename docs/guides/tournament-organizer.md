@@ -5,7 +5,7 @@ divisions, collecting fees, and choosing who helps. You're appointed to one
 tournament by the organization's admin, and your access covers that tournament and
 nothing else.
 
-_Last checked: 2026-09-21 · Try it: sign in at `/demo` as **Tournament organizer**
+_Last checked: 2026-09-29 · Try it: sign in at `/demo` as **Tournament organizer**
 (Dennis Manalo, organizer of Tiger Cup at Davao Unity Sports). It opens the
 tournament console._
 
@@ -204,8 +204,6 @@ it, so the roster step falls to an **organization admin**. Ask yours.
 - Payments a team reports appear under **Payments to verify** once the team manager has signed in (with the email you listed) and used **Your team entries** on the home page. Cash and transfers you receive yourself are still recorded by you.
 - Listing the tournament in the public directory. The tournament IT admin or an
   organization admin does that on the **Public listing** tab; you can take it down there.
-- Assigning referees and officials, and the "flag for review" step for team
-  coordinators.
 - Brackets, schedules and live scores in the console. They're in the tournament
   engine.
 - Sending the platform team a support request. *Submit support request* is in the

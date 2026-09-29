@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { formatMoney } from '@/lib/currency';
+import { computeAttendancePct } from '@/lib/attendance-stats';
 import SlotTabs from '@/components/motion/SlotTabs';
 import Overview from './Overview';
 import Family from './Family';
@@ -176,7 +177,7 @@ export default async function PlayerProfile({
     : { data: [] as any[] };
   const eligible = (attendanceRows ?? []).filter((a) => !['injured', 'suspended'].includes(a.status));
   const attended = eligible.filter((a) => a.status === 'present' || a.status === 'late').length;
-  const attendancePct = eligible.length ? Math.round((attended / eligible.length) * 100) : null;
+  const attendancePct = computeAttendancePct(attendanceRows ?? []);
 
   const { data: upcomingSessions } = teamId
     ? await supabase

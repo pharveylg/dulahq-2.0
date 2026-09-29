@@ -46,11 +46,3 @@ export async function updateSessionStatus(clubId: string, teamId: string, sessio
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
-
-export async function deleteSession(clubId: string, teamId: string, sessionId: string) {
-  const supabase = await createClient();
-  const { error } = await supabase.from('training_sessions').delete().eq('id', sessionId);
-  if (error) return { error: friendlyError(error) };
-  revalidatePath('/c/[clubSlug]', 'layout');
-  return { success: true };
-}

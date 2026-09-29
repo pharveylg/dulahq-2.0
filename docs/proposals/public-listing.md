@@ -1,6 +1,6 @@
 # Public listing of clubs and tournaments
 
-_Written 2026-09-25. Status: **decided, being built.**_
+_Written 2026-09-25. Status: **built** (phase13a/phase13a1, same day) — see CLAUDE.md §0s "Public listing: owner opt-in"._
 
 ## State when this was written
 

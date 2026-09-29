@@ -6,9 +6,8 @@ decided.
 
 | Proposal | Status |
 |---|---|
-| [Public listing](public-listing.md) | **Decided and being built**: owner opt-in, held by the club IT admin and tournament IT admin |
-| [Tournament roles and the entrant portal](tournament-roles-and-entrant-portal.md) | Proposed, not started |
+| [Public listing](public-listing.md) | **Built** (2026-09-25): owner opt-in, held by the club IT admin and tournament IT admin |
+| [Tournament roles and the entrant portal](tournament-roles-and-entrant-portal.md) | **Built** (2026-09-26 through 2026-09-29) — all six slices shipped |
 | [Email and invitations](email-and-invitations.md) | Proposed, not started. Needs DNS for `dulahq.app` first |
 
-Suggested order: public listing, then DNS and email (unblocks the most), then the
-entrant portal and the first tournament roles.
+Only email and invitations remains open, still blocked on DNS.
