@@ -3131,6 +3131,63 @@ build` both clean.
 
 ---
 
+## 0z. `/login`'s destination context, and a false alarm on `dula-hq.vercel.app`
+
+Two things the user flagged after §0y, checked the same day.
+
+### `/login` vs `/login?redirectTo=...` looked identical
+
+Fair complaint against §0x's own work: the poster/accent background only renders for the
+two shapes it explicitly handles (`/tm/<org>/<tournament>`, `/entry/<id>`), so being
+redirected to sign in before `/platformconsole` (or `/guardian`, `/player`, `/clubs/new`,
+any `/c/<slug>/...` page) looked exactly like typing `/login` cold — no indication of why
+the person was stopped or where they'd land. `resolveBackground()` (`src/app/login/
+page.tsx`) is now `resolveContext()`, returning a `destination` string alongside the
+background: the `/tm`/`/entry` branches now also select the tournament's `name` (already
+an anon-safe read, `public_tournaments`/`entry_login_background` both already return it)
+and phrase it as "Tiger Cup's tournament console" / "your team's entry for Tiger Cup";
+everything else middleware.ts can redirect from gets a hardcoded phrase
+(`/platformconsole`, `/guardian`, `/player`, `/clubs/new`, `/c/`) with a generic "where you
+left off" fallback for anything unmatched. `destination` renders as a subtitle under "Sign
+in" (`LoginForm.tsx`/`LoginFields`) only when non-null, so the bare `/login` page (no
+`redirectTo`) is untouched. Verified live: bare `/login` unchanged, `?redirectTo=
+%2Fplatformconsole` reads "to continue to the platform console", and
+`?redirectTo=%2Ftm%2Fdavao-unity-sports%2Ftiger-cup` correctly resolved the real name,
+"to continue to Tiger Cup's tournament console". No migration, no RLS change — same two
+already-public reads, just also selecting `name`. `npx tsc --noEmit` and `npm run build`
+both clean.
+
+### The "Find your tournament" gallery at `dula-hq.vercel.app` is not live data
+
+The user saw a "Find your tournament" page listing 7 tournaments each tagged **DEMO**
+(*Copa Gali Futbol 2026, Copa Davao 2026, Manila Summer Invitational 2026, Cebu Volley
+Classic 2026, Cebu Women's Volley Cup, Davao Hoops League S2, Davao 3x3 Showdown*) at
+`dula-hq.vercel.app/#` and expected it gone. Checked directly rather than guessed:
+
+- **It is hardcoded client-side content in the sibling `DulaHQ` (Vite) repo's
+  `index.html`** — a `DEMO_ORGS` array and a `gallery-screen`/`renderGalleryGrid_()`
+  renderer, entirely `localStorage`-backed. It is not a query against the shared
+  Supabase project at all, so §0's 2026-09-07 data wipe could never have touched it —
+  confirmed live too: reloading the root shows a *different* randomly-generated demo
+  tournament each time (team names drawn from a fixed `DEMO_TEAM_NAMES` pool), which a
+  real database row would not do.
+- **The user's memory that this "was retired/removed" is corroborated by the code's own
+  comment**, not just recalled: the file has a note at the seed-data block saying "the
+  original version of this section was deleted in an earlier revision and its exact
+  source wasn't preserved" and was reconstructed from a spec. §0m already recorded that
+  an external tool ("arenaai") landed commits directly against this repo/origin between
+  sessions and had deleted unrelated content (§0l and its RLS tests) without anyone here
+  asking for it — this demo gallery being re-added is the same shape of unrequested
+  external change, just discovered later.
+- **Not fixed here.** `DulaHQ` is the frozen Tournament Manager app (§8: "Keep the
+  tournament engine unrewritten... proxied, never ported"), and this specific gallery is
+  landing-page/marketing scaffolding rather than the bracket/scoring engine itself — but
+  removing it is still a product call on a codebase this project has committed not to
+  touch without being asked, not a bug fix in `dula-hq-2.0`. Flagged to the user rather
+  than silently edited.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

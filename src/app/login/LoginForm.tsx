@@ -8,7 +8,7 @@ import Reveal from '@/components/motion/Reveal';
 import Spotlight from '@/components/motion/Spotlight';
 import PosterWatermark from '@/components/PosterWatermark';
 
-function LoginFields({ posterUrl }: { posterUrl: string | null }) {
+function LoginFields({ posterUrl, destination }: { posterUrl: string | null; destination: string | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +56,11 @@ function LoginFields({ posterUrl }: { posterUrl: string | null }) {
         <Reveal>
           <div className="page-header" style={{ marginBottom: 24 }}>
             <h1>Sign in</h1>
+            {destination && (
+              <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                to continue to {destination}
+              </p>
+            )}
           </div>
         </Reveal>
         <Reveal index={1}>
@@ -102,12 +107,19 @@ function LoginFields({ posterUrl }: { posterUrl: string | null }) {
 /**
  * useSearchParams() needs a Suspense boundary; the parent server component (page.tsx)
  * already resolved which tournament (if any) this sign-in is for and passes its poster
- * down as a plain prop, so that lookup itself doesn't need to happen client-side.
+ * and a plain-English destination label down as props, so that lookup itself doesn't
+ * need to happen client-side.
  */
-export default function LoginForm({ posterUrl }: { posterUrl: string | null }) {
+export default function LoginForm({
+  posterUrl,
+  destination,
+}: {
+  posterUrl: string | null;
+  destination: string | null;
+}) {
   return (
     <Suspense fallback={null}>
-      <LoginFields posterUrl={posterUrl} />
+      <LoginFields posterUrl={posterUrl} destination={destination} />
     </Suspense>
   );
 }
