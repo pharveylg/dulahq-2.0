@@ -3751,3 +3751,30 @@ which is what `/t/dulahq-rbac-demo/dulahq-demo-cup` currently shows. If a
 populated bracket is ever wanted for the demo, build it by driving the real
 UI as the org admin persona (`is_org_admin` + the `tournament` entitlement
 already let that account manage it), not by writing to `data` directly.
+
+**Note: this section describes the original setup and is stale on specifics**
+(`seed-rbac-demo.mjs`/`dulahq-rbac-demo` predate the four-org showcase dataset
+`scripts/seed-showcase-demo.mjs` now seeds, which `/demo` actually points at —
+see `docs/demo-data-showcase.md` for the current accounts). Not rewritten here,
+out of scope for the change below; flagged so it isn't trusted at face value.
+
+**2026-09-29: `/demo` reorganized, platform admin removed from it.** The page
+is unauthenticated (`middleware.ts`'s `PUBLIC_PATHS`) and might get shown to a
+prospect — a one-click button granting full platform-admin access on a public
+page was a real exposure, not just untidy. Removed outright, not just hidden:
+platform admin still signs in the normal way (`/login` with a real account) and
+opens `/platformconsole` directly: nothing about that path needs a demo
+shortcut, since the console itself already gates on `is_platform_admin()`.
+The remaining 8 personas (`DemoPersonas.tsx`) are now grouped into **Club
+Roles** and **Tournament Roles**, each `Persona` carrying a `products: Product[]`
+field rather than being implicitly one or the other. Only **Org admin** is
+genuinely shared — an org admin's authority spans whatever entitlements their
+org holds (Usna Gali has both), not one product's own staff table — and its
+card renders in **both** sections with a "Shared access — club + tournament"
+chip, rather than a separate third bucket, so the note appears exactly where
+someone would look for that role. No other current persona's role string is
+actually shared between the club_staff and tournament_staff catalogs (that's
+`secretary`/`treasurer`, per §0l — no demo account exists for either yet).
+Verified live: platform admin button gone, both sections render with the
+right personas, the shared chip appears on both Org admin cards. `npx tsc
+--noEmit` and `npm run build` both clean.
