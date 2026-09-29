@@ -127,10 +127,11 @@ export default async function PlatformConsolePage({
   if (activeTab === 'listings') {
     const [{ data: clubRows }, { data: tournamentRows }] = await Promise.all([
       supabase.from('clubs').select('id, name, publicly_listed, listing_blocked, listing_block_reason, organizations(name)').order('name'),
-      supabase.from('tournaments').select('id, name, publicly_listed, listing_blocked, listing_block_reason, organizations(name)').order('name'),
+      supabase.from('tournaments').select('id, slug, name, poster_url, publicly_listed, listing_blocked, listing_block_reason, organizations(slug, name)').order('name'),
     ]);
     const map = (kind: 'club' | 'tournament') => (r: any): ListingRow => ({
       kind, id: r.id, name: r.name, org: r.organizations?.name ?? '', listed: r.publicly_listed, blocked: r.listing_blocked, reason: r.listing_block_reason,
+      orgSlug: r.organizations?.slug, slug: r.slug, posterUrl: r.poster_url,
     });
     listingRows = [...(clubRows ?? []).map(map('club')), ...(tournamentRows ?? []).map(map('tournament'))];
   }

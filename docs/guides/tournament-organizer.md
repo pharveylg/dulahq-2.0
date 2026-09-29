@@ -32,9 +32,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Manage tournament communications** | Tournament-wide announcements and notices | This tournament |
 | **Manage tournament documents** | Tournament documentation, records, and official correspondence | This tournament |
 | **Manage tournament finances** | Registration fees, payments, refunds, and expenses | This tournament |
-| **Manage tournament logistics** | Venues, fields, equipment, transportation, and match-day operations | This tournament |
 | **Manage tournament staff** | Add or remove tournament staff | This tournament |
-| **Manage volunteers** | Volunteer recruitment, assignments, shifts, and availability | This tournament |
 | **Review tournament entry** | Verify a registration's requirements, documents, fees, and eligibility -- does not decide it | This tournament |
 | **View tournament finances** | View tournament fee and financial records | This tournament |
 <!-- END permissions -->

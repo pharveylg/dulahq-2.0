@@ -5001,6 +5001,10 @@ export type Database = {
         Args: { p_id: string; p_kind: string; p_listed: boolean }
         Returns: undefined
       }
+      set_tournament_poster: {
+        Args: { p_poster_url: string | null; p_tournament_id: string }
+        Returns: undefined
+      }
       can_provision_login: {
         Args: { p_scope_id: string | null; p_scope_type: string }
         Returns: boolean

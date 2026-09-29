@@ -10,6 +10,7 @@ import Announcements, { type AnnouncementRow } from './Announcements';
 import Documents, { type ConsoleDocument, type EntryOption } from './Documents';
 import PublicListingCard from '@/components/PublicListingCard';
 import ProvisionLoginPanel from '@/components/ProvisionLoginPanel';
+import TournamentPosterUpload from '@/components/TournamentPosterUpload';
 
 /**
  * The native organizer workspace for one tournament
@@ -287,24 +288,35 @@ export default async function TournamentConsolePage({
           financeBadge={pendingPayments.length}
           listingSlot={
             showListingTab ? (
-              <PublicListingCard
-                kind="tournament"
-                id={tournamentId}
-                listed={tournament.publicly_listed}
-                blocked={tournament.listing_blocked}
-                blockReason={tournament.listing_block_reason}
-                canList={canList}
-                canUnlist
-                preview={{
-                  fields: [
-                    { label: 'Name', value: tournament.name },
-                    { label: 'Organizer', value: org.name },
-                    { label: 'Date', value: tournament.event_date ? new Date(tournament.event_date).toLocaleDateString() : null },
-                    { label: 'Venue', value: tournament.venue },
-                    { label: 'Poster', value: tournament.poster_url ? 'uploaded' : null },
-                  ],
-                }}
-              />
+              <>
+                {/* manage_tournament -- the Organizer's own "configure tournament identity" permission (phase8b) */}
+                <TournamentPosterUpload
+                  tournamentId={tournamentId}
+                  orgSlug={org.slug}
+                  tournamentSlug={tournamentSlug}
+                  posterUrl={tournament.poster_url}
+                  canManage={canAddEntries}
+                />
+                <div style={{ height: 16 }} />
+                <PublicListingCard
+                  kind="tournament"
+                  id={tournamentId}
+                  listed={tournament.publicly_listed}
+                  blocked={tournament.listing_blocked}
+                  blockReason={tournament.listing_block_reason}
+                  canList={canList}
+                  canUnlist
+                  preview={{
+                    fields: [
+                      { label: 'Name', value: tournament.name },
+                      { label: 'Organizer', value: org.name },
+                      { label: 'Date', value: tournament.event_date ? new Date(tournament.event_date).toLocaleDateString() : null },
+                      { label: 'Venue', value: tournament.venue },
+                      { label: 'Poster', value: tournament.poster_url ? 'uploaded' : null },
+                    ],
+                  }}
+                />
+              </>
             ) : null
           }
           entriesSlot={

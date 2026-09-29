@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { setListingBlock } from '@/app/listing-actions';
+import TournamentPosterUpload from '@/components/TournamentPosterUpload';
 
 export type ListingRow = {
   kind: 'club' | 'tournament';
@@ -11,6 +12,10 @@ export type ListingRow = {
   listed: boolean;
   blocked: boolean;
   reason: string | null;
+  /** tournament rows only -- needed to build the poster's storage path. */
+  orgSlug?: string;
+  slug?: string;
+  posterUrl?: string | null;
 };
 
 /**
@@ -58,22 +63,33 @@ export default function Listings({ rows }: { rows: ListingRow[] }) {
       <div className="card">
         {shown.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Nothing here.</p>}
         {shown.map((r) => (
-          <div key={`${r.kind}-${r.id}`} className="list-row">
-            <div className="list-row-main">
-              <div className="list-row-title">{r.name}</div>
-              <div className="list-row-meta">
-                {r.kind} · {r.org}
-                {r.blocked && r.reason ? ` · blocked: ${r.reason}` : ''}
+          <div key={`${r.kind}-${r.id}`} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="list-row-main">
+                <div className="list-row-title">{r.name}</div>
+                <div className="list-row-meta">
+                  {r.kind} · {r.org}
+                  {r.blocked && r.reason ? ` · blocked: ${r.reason}` : ''}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span className="chip">{r.blocked ? 'blocked' : r.listed ? 'listed' : 'private'}</span>
+                {r.blocked ? (
+                  <button className="btn" disabled={pending} onClick={() => unblock(r)}>Unblock</button>
+                ) : (
+                  <button className="btn" disabled={pending} onClick={() => block(r)}>Block</button>
+                )}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span className="chip">{r.blocked ? 'blocked' : r.listed ? 'listed' : 'private'}</span>
-              {r.blocked ? (
-                <button className="btn" disabled={pending} onClick={() => unblock(r)}>Unblock</button>
-              ) : (
-                <button className="btn" disabled={pending} onClick={() => block(r)}>Block</button>
-              )}
-            </div>
+            {r.kind === 'tournament' && r.orgSlug && r.slug && (
+              <TournamentPosterUpload
+                tournamentId={r.id}
+                orgSlug={r.orgSlug}
+                tournamentSlug={r.slug}
+                posterUrl={r.posterUrl ?? null}
+                canManage
+              />
+            )}
           </div>
         ))}
       </div>
