@@ -8,6 +8,7 @@ import StaffPanel, { type StaffMember, type AuditRow } from './StaffPanel';
 import Finance, { type FinanceInvoice, type PendingPayment } from './Finance';
 import Announcements, { type AnnouncementRow } from './Announcements';
 import Documents, { type ConsoleDocument, type EntryOption } from './Documents';
+import Officials, { type OrgOfficial, type OfficialAssignment } from './Officials';
 import PublicListingCard from '@/components/PublicListingCard';
 import ProvisionLoginPanel from '@/components/ProvisionLoginPanel';
 import TournamentPosterUpload from '@/components/TournamentPosterUpload';
@@ -61,6 +62,7 @@ export default async function TournamentConsolePage({
     { data: pReview },
     { data: pComms },
     { data: pDocs },
+    { data: pOfficiating },
   ] = await Promise.all([
     supabase.rpc('is_org_admin', { org: orgId }),
     supabase.rpc('is_tournament_staff', { check_tournament_id: tournamentId }),
@@ -77,6 +79,7 @@ export default async function TournamentConsolePage({
     perm('review_tournament_entry'),
     perm('manage_tournament_communications'),
     perm('manage_tournament_documents'),
+    perm('manage_officiating'),
   ]);
 
   // RLS already hides the tournament from anyone else; this is the explicit
@@ -88,6 +91,11 @@ export default async function TournamentConsolePage({
   const canReview = can(pReview);
   const canPostAnnouncements = can(pComms);
   const canReviewDocuments = can(pDocs);
+  const canAssignOfficials = can(pOfficiating);
+  // org_officials write stays org_admin-only on purpose (§0l) -- can() would fold the
+  // referee coordinator's own manage_officiating in too, which is exactly the org-wide
+  // write that decision refused.
+  const canManageOfficialsPool = !!orgAdmin;
   const canAddEntries = can(pManage);
   const canManageCategories = can(pCompetition);
   const canManageStaff = can(pStaff);
@@ -201,6 +209,20 @@ export default async function TournamentConsolePage({
     id: d.id, entryId: d.entry_id, teamName: d.tournament_entries?.team_name ?? 'Unknown team', type: d.type, name: d.name,
     status: d.status, reviewNote: d.review_note, uploadedByRole: d.uploaded_by_role, createdAt: d.created_at,
   }));
+  const showOfficialsTab = canAssignOfficials || canManageOfficialsPool;
+  const [{ data: poolRows }, { data: assignmentRows }] = showOfficialsTab
+    ? await Promise.all([
+        supabase.from('org_officials').select('id, full_name, grade, designation, phone, email, active').eq('org_id', orgId).order('full_name'),
+        (supabase as any).from('tournament_officials').select('id, official_id, role, org_officials(full_name)').eq('tournament_id', tournamentId),
+      ])
+    : [{ data: null }, { data: null }];
+  const officialsPool: OrgOfficial[] = (poolRows ?? []).map((o: any) => ({
+    id: o.id, fullName: o.full_name, grade: o.grade, designation: o.designation, phone: o.phone, email: o.email, active: o.active,
+  }));
+  const officialAssignments: OfficialAssignment[] = (assignmentRows ?? []).map((a: any) => ({
+    id: a.id, officialId: a.official_id, officialName: a.org_officials?.full_name ?? 'Unknown', role: a.role,
+  }));
+
   const documentEntryOptions: EntryOption[] = entries
     .filter((e) => e.status === 'accepted' || e.status === 'pending')
     .map((e) => ({ id: e.id, teamName: e.teamName }));
@@ -343,6 +365,16 @@ export default async function TournamentConsolePage({
           }
           announcementsSlot={canPostAnnouncements ? <Announcements tournamentId={tournamentId} rows={announcements} canPost /> : null}
           documentsSlot={canReviewDocuments ? <Documents documents={consoleDocuments} entries={documentEntryOptions} canReview /> : null}
+          officialsSlot={showOfficialsTab ? (
+            <Officials
+              tournamentId={tournamentId}
+              orgId={orgId}
+              pool={officialsPool}
+              assignments={officialAssignments}
+              canAssign={canAssignOfficials}
+              canManagePool={canManageOfficialsPool}
+            />
+          ) : null}
           staffSlot={
             showStaffTab ? (
               <>

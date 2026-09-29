@@ -13,7 +13,8 @@ organizer (Dennis Manalo, `/demo`) can add someone to try one._
 ## Read this first: what the roles can do and what the app shows
 
 The permission catalog defines seven tournament roles (logistics and volunteer
-coordinator were retired 2026-09-28 — see below). Only one of them has no screen yet:
+coordinator were retired 2026-09-28 — see below). Every one of them has a working
+screen:
 
 | Role | Has a working screen? |
 |---|---|
@@ -23,12 +24,10 @@ coordinator were retired 2026-09-28 — see below). Only one of them has no scre
 | **Team coordinator** | Yes: notes and flags on the **Entries** tab |
 | **Secretary** | Yes: the **Documents** tab |
 | **Communications** | Yes: the **Announcements** tab |
-| **Referee coordinator** | No |
+| **Referee coordinator** | Yes: the **Officials** tab |
 
-Every role in the table can open the tournament console and **read** its **Entries**
-and **Categories**. For Referee coordinator, that read-only view is everything the app
-offers today — the permission is real and recorded, ready for when an Officials screen
-is built, but there is nothing to click.
+Every role in the table can also open the tournament console and **read** its
+**Entries** and **Categories**.
 
 **Logistics and volunteer coordinator no longer exist.** Neither role ever had a
 screen, a holder, or backing data beyond `venues` — they were retired from the
@@ -175,9 +174,12 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Manage officiating** | Referee/official assignments and officiating schedules for this tournament | This tournament |
 <!-- END permissions -->
 
-**No officiating screen exists yet.** Read-only Entries and Categories only. (An
-organization keeps its pool of officials at the organization level, and only an org
-admin edits that pool.)
+On the **Officials** tab, **Assign** someone from the organization's officials pool to
+this tournament, with a role (referee, assistant referee, fourth official, commissioner,
+or table official), and **Remove** one you no longer need. You can see the whole pool —
+who's on file, their grade, designation and contact details — but not add, edit, or
+deactivate anyone in it: the pool spans every tournament the organization runs, so only
+an organization admin manages it. Ask yours to add someone if they're not listed yet.
 
 ## People from outside teams
 

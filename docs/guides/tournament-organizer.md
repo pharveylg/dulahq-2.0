@@ -170,6 +170,15 @@ who did it and when.
 
 On the **Documents** tab, teams' entered contacts submit waivers, insurance proof and roster forms through their own entry page; you or your secretary review them there — Approve, Reject (with a reason), or Remove. You can also add a document a team sent you some other way. A team only sees the tab once its team manager or coach has signed in.
 
+## Officials
+
+On the **Officials** tab, **Assign** someone from the organization's officials pool to
+this tournament with a role (referee, assistant referee, fourth official, commissioner,
+or table official), and **Remove** one you no longer need. **Add an official** adds a
+new person to the organization's own pool — spanning every tournament it runs, not just
+this one — and **Deactivate**/**Reactivate** controls whether they show up to assign.
+Your referee coordinator sees and assigns from the same pool but can't add to or edit it.
+
 ## Rosters
 
 You don't build a team's roster. A team's own coach does, as described in the

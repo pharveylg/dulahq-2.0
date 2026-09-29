@@ -15,6 +15,7 @@ export default function TournamentTabs({
   listingSlot,
   announcementsSlot,
   documentsSlot,
+  officialsSlot,
 }: {
   pendingCount: number;
   categoryCount: number;
@@ -26,6 +27,7 @@ export default function TournamentTabs({
   listingSlot: React.ReactNode | null;
   announcementsSlot: React.ReactNode | null;
   documentsSlot: React.ReactNode | null;
+  officialsSlot: React.ReactNode | null;
 }) {
   const tabs: Tab[] = [
     { id: 'entries', label: 'Entries', badge: pendingCount },
@@ -33,6 +35,7 @@ export default function TournamentTabs({
     ...(financeSlot ? [{ id: 'finance', label: 'Finance', badge: financeBadge }] : []),
     ...(announcementsSlot ? [{ id: 'announcements', label: 'Announcements' }] : []),
     ...(documentsSlot ? [{ id: 'documents', label: 'Documents' }] : []),
+    ...(officialsSlot ? [{ id: 'officials', label: 'Officials' }] : []),
     ...(staffSlot ? [{ id: 'staff', label: 'Staff' }] : []),
     ...(listingSlot ? [{ id: 'listing', label: 'Public listing' }] : []),
   ];
@@ -47,6 +50,7 @@ export default function TournamentTabs({
         {active === 'finance' && financeSlot}
         {active === 'announcements' && announcementsSlot}
         {active === 'documents' && documentsSlot}
+        {active === 'officials' && officialsSlot}
         {active === 'staff' && staffSlot}
         {active === 'listing' && listingSlot}
       </Reveal>

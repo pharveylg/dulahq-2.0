@@ -3072,6 +3072,65 @@ rather than relying on the screenshot (see the bug above). `npx tsc --noEmit` cl
 
 ---
 
+## 0y. Officials tab — the last open slice of the roles/portal proposal (2026-09-29)
+
+`phase16c`. Slice 5 of `docs/proposals/tournament-roles-and-entrant-portal.md`, the
+last one left after logistics/volunteers were retired (§0u): a Referee Coordinator
+had `manage_officiating` and nothing to do with it.
+
+**The same read-side bug phase10a found for `tournament_entries`/`tournament_categories`,
+found again by checking rather than assuming.** `toff_write` (writes to
+`tournament_officials`) has correctly checked `has_tournament_permission
+('manage_officiating', tournament_id)` since phase8c — but `officials_read` and
+`toff_read` were both `is_org_member(org_id)`-only, and a Referee Coordinator is
+tournament_staff, not an org member. Confirmed live before building anything: signed
+in as a real referee coordinator, read zero rows from both tables. Fixed with
+`can_view_org_officials(org_id)` (org member, or holds `manage_officiating` on *some*
+tournament in that org) — only the READ side widens. `org_officials`' WRITE side
+(`officials_write`) stays exactly what §0l already decided: `is_org_admin` only, since
+it's the org's whole pool across every tournament it runs, and routing a write to it
+through one arbitrary tournament's permission has no principled answer. A coordinator
+now sees the whole pool to assign from, but only an org admin adds, edits, or
+deactivates someone in it.
+
+**UI:** a new **Officials** tab, shown to anyone holding `manage_officiating` or
+who's an org admin. Two sections: **This tournament** (assign from the pool with a
+role — referee/assistant referee/fourth official/commissioner/table official — and
+remove an assignment; open to the coordinator), and **Organization's officials
+pool** (read-only list for the coordinator; add/deactivate/reactivate for an org
+admin only — `canManageOfficialsPool` is deliberately `!!orgAdmin`, not the generic
+`can()` helper, since `can()` would have folded the coordinator's own
+`manage_officiating` into the org-wide pool write that §0l's decision specifically
+refused).
+
+**A test-writing mistake, not an app bug, caught before it was trusted:** the first
+version of the "cannot write the org-wide pool" test expected an `update()` call to
+return an error, and it didn't — because RLS filters an update that matches no
+visible/writable row rather than raising (the same "RLS filters a DELETE rather than
+raising it" lesson §0i already recorded for team unassignment). Fixed by asserting
+the row was actually unchanged afterward, the real proof. A second test named
+"unrelated org" but used a same-org fixture (a coach, who counts as an org member via
+`is_org_member`'s own `club_staff` branch) — swapped for a genuinely different org's
+fixture once caught.
+
+**Verified:** RLS suite 310 → 316 (six tests: coordinator reads both tables and a
+treasurer can't; coordinator assigns and removes and a treasurer can't; coordinator
+cannot write the pool itself while an org admin can; a genuinely different org reads
+neither table). Driven live against real showcase data — Tiger Cup already had 4
+officials and 3 assignments from outside this session (source not identified,
+pre-existing): as the Davao Unity Sports organizer, assigned the fourth (unassigned)
+official, confirmed it appeared, removed it again, back to the original 3. As the
+Usna Gali org admin on Copa Gali, added no new official (the pool already had one to
+test with) but deactivated one and reactivated it, watching the badge and button
+label flip both times. Showcase data confirmed unchanged afterward in both cases.
+Also hit, and worked around, a corrupted dev-server webpack cache from this
+session's very long uptime (`Cannot find module './873.js'`) — clearing `.next` and
+restarting fixed it; noted here in case it recurs, since it looked at first like a
+broken sign-in rather than stale build output. `npx tsc --noEmit` and `npm run
+build` both clean.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

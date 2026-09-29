@@ -1,6 +1,6 @@
 # Tournament roles with no screen, and the entrant portal
 
-_Written 2026-09-25. Status: **slice 1 (entrant portal) built 2026-09-26** (`/entry/<id>`, phase15a: entry status, invoices, payment instructions, payment submission by the team manager). Slice 2 (team coordinator notes and flags) built 2026-09-26, phase15b. Slice 3 (announcements to entrants) built 2026-09-26, phase15c. Slice 4 (entry documents) built 2026-09-27, phase15d. **Decision made and applied 2026-09-28 (phase15e): logistics and volunteer coordinator retired from the catalog** — see slice 6 below. Slice 5 not started._
+_Written 2026-09-25. Status: **slice 1 (entrant portal) built 2026-09-26** (`/entry/<id>`, phase15a: entry status, invoices, payment instructions, payment submission by the team manager). Slice 2 (team coordinator notes and flags) built 2026-09-26, phase15b. Slice 3 (announcements to entrants) built 2026-09-26, phase15c. Slice 4 (entry documents) built 2026-09-27, phase15d. **Decision made and applied 2026-09-28 (phase15e): logistics and volunteer coordinator retired from the catalog** — see slice 6 below. Slice 5 (Officials tab) built 2026-09-29, phase16c. All slices resolved._
 
 ## State when this was written
 
@@ -40,8 +40,16 @@ applications. Build the portal first because three of the roles depend on it.
 4. **Secretary.** `tournament_documents` per entry (waivers, insurance, roster forms)
    with pending/approved/rejected, reusing the player Documents pattern and R2 storage.
    Needs the portal for uploads.
-5. **Referee coordinator.** An Officials tab over the existing tables. Match-level
-   assignment stays in the tournament engine, because matches live in its JSON blob.
+5. ~~**Referee coordinator.**~~ **Built (phase16c, 2026-09-29).** An Officials tab over
+   the existing tables. Match-level assignment stays in the tournament engine, because
+   matches live in its JSON blob. Building it surfaced the same read-side bug phase10a
+   found for entries/categories: `officials_read`/`toff_read` were both
+   `is_org_member`-only, so a Referee Coordinator (tournament_staff, not an org member)
+   could not read the pool or their own tournament's assignments at all, though the
+   write side (`toff_write`) had checked `has_tournament_permission('manage_officiating',
+   ...)` correctly since phase8c. Fixed the reads; `org_officials`' write side stays
+   org_admin-only exactly as decided in §0l — a coordinator sees the whole pool to assign
+   from, but only an org admin adds, edits, or deactivates someone in it.
 6. ~~**Logistics and volunteers.**~~ **Decided and done (phase15e, 2026-09-28): retired,
    not built.** New tables with no existing backing (venues and per-team arrival/
    accommodation notes; volunteer shifts for people who may not have accounts) would

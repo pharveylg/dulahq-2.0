@@ -18,6 +18,62 @@ function refresh() {
   revalidatePath('/tm/[orgSlug]/[tournamentSlug]', 'page');
 }
 
+const OFFICIAL_ROLES = ['referee', 'assistant_referee', 'fourth_official', 'commissioner', 'table_official'];
+
+/** The org's whole pool of officials -- adding one is org_admin only (§0l), unchanged. */
+export async function addOrgOfficial(orgId: string, formData: FormData) {
+  const fullName = (formData.get('fullName') as string)?.trim();
+  if (!fullName) return { error: 'Enter a name.' };
+  const supabase = await createClient();
+  const { error } = await supabase.from('org_officials').insert({
+    org_id: orgId,
+    full_name: fullName,
+    grade: (formData.get('grade') as string)?.trim() || null,
+    designation: (formData.get('designation') as string)?.trim() || null,
+    phone: (formData.get('phone') as string)?.trim() || null,
+    email: (formData.get('email') as string)?.trim() || null,
+  });
+  if (error) return { error: friendlyError(error) };
+  refresh();
+  return { success: true };
+}
+
+export async function setOrgOfficialActive(officialId: string, active: boolean) {
+  const supabase = await createClient();
+  const { error, count } = await supabase.from('org_officials').update({ active }, { count: 'exact' } as any).eq('id', officialId);
+  if (error) return { error: friendlyError(error) };
+  // RLS filters a write that matches no visible/writable row rather than raising (§0i) --
+  // a 0 count from an org_admin-only table is the only signal that it was refused.
+  if (!count) return { error: "You don't have permission to do that." };
+  refresh();
+  return { success: true };
+}
+
+/** manage_officiating (organizer, referee coordinator, or org admin) assigns from the pool. */
+export async function assignOfficial(tournamentId: string, orgId: string, formData: FormData) {
+  const officialId = formData.get('officialId') as string;
+  const role = formData.get('role') as string;
+  if (!officialId) return { error: 'Choose an official.' };
+  if (!OFFICIAL_ROLES.includes(role)) return { error: 'Choose a role.' };
+  const supabase = await createClient();
+  const { error } = await supabase.from('tournament_officials').insert({ org_id: orgId, tournament_id: tournamentId, official_id: officialId, role });
+  if (error) {
+    if (error.code === '23505') return { error: 'Already assigned to that role.' };
+    return { error: friendlyError(error) };
+  }
+  refresh();
+  return { success: true };
+}
+
+export async function removeOfficialAssignment(assignmentId: string) {
+  const supabase = await createClient();
+  const { error, count } = await supabase.from('tournament_officials').delete({ count: 'exact' }).eq('id', assignmentId);
+  if (error) return { error: friendlyError(error) };
+  if (!count) return { error: "You don't have permission to do that." };
+  refresh();
+  return { success: true };
+}
+
 const clean = (v: FormDataEntryValue | null) => (typeof v === 'string' ? v.trim() : '');
 const numberOrNull = (v: FormDataEntryValue | null) => {
   const s = clean(v);

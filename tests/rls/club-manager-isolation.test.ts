@@ -3791,3 +3791,73 @@ describe('entrant portal accent + login background lookup (phase16b)', () => {
     await adminClient.auth.admin.deleteUser(mgrId);
   });
 });
+
+/**
+ * Officials tab, slice 5 of the roles/portal proposal (phase16c). manage_officiating's
+ * WRITE side already worked (toff_write already has_tournament_permission) -- the read
+ * side never did: officials_read/toff_read are both is_org_member-only, and a Referee
+ * Coordinator is tournament_staff, not an org member -- the exact bug class phase10a
+ * fixed for entries/categories. Confirmed live before building the screen, not assumed.
+ */
+describe('officials tab reads (phase16c)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const refEmail = `rls-off-ref-${tag}@rls-test.local`;
+  const trEmail = `rls-off-tr-${tag}@rls-test.local`;
+  let refId: string; let trId: string;
+  let refClient: ReturnType<typeof createClient>; let trClient: ReturnType<typeof createClient>;
+  let tId: string; let officialId: string; let assignmentId: string;
+
+  it('sets up a tournament with a referee coordinator and a treasurer, one org official, and one assignment', async () => {
+    refId = (await createTestUser(refEmail, 'audience')).publicUser.id;
+    trId = (await createTestUser(trEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Officials Cup', org_id: orgA.id, slug: `rls-off-${tag}` }).select().single(), 't').id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: refId, role: 'referee_coordinator', org_id: orgA.id }).select().single(), 'ref');
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: trId, role: 'treasurer', org_id: orgA.id }).select().single(), 'tr');
+    officialId = must(await adminClient.from('org_officials').insert({ org_id: orgA.id, full_name: 'Rey Ilustre', grade: 'National', active: true }).select().single(), 'official').id;
+    assignmentId = must(await adminClient.from('tournament_officials').insert({ org_id: orgA.id, tournament_id: tId, official_id: officialId, role: 'referee' }).select().single(), 'assignment').id;
+    refClient = await signInAs(refEmail);
+    trClient = await signInAs(trEmail);
+  });
+
+  it('the referee coordinator can read the org\'s officials pool and this tournament\'s assignments; a treasurer cannot', async () => {
+    expect(((await refClient.from('org_officials').select('id').eq('id', officialId)).data ?? [])).toHaveLength(1);
+    expect(((await refClient.from('tournament_officials').select('id').eq('id', assignmentId)).data ?? [])).toHaveLength(1);
+    expect(((await trClient.from('org_officials').select('id').eq('id', officialId)).data ?? [])).toHaveLength(0);
+    expect(((await trClient.from('tournament_officials').select('id').eq('id', assignmentId)).data ?? [])).toHaveLength(0);
+  });
+
+  it('the referee coordinator can assign an official to a role and remove one; a treasurer cannot', async () => {
+    const other = must(await adminClient.from('org_officials').insert({ org_id: orgA.id, full_name: 'Marissa Ledesma', grade: 'Regional', active: true }).select().single(), 'other official');
+    const insert = await refClient.from('tournament_officials').insert({ org_id: orgA.id, tournament_id: tId, official_id: other.id, role: 'assistant_referee' }).select().single();
+    expect(insert.error).toBeNull();
+    expect((await trClient.from('tournament_officials').insert({ org_id: orgA.id, tournament_id: tId, official_id: other.id, role: 'fourth_official' })).error).not.toBeNull();
+    const del = await refClient.from('tournament_officials').delete({ count: 'exact' }).eq('id', insert.data!.id);
+    expect(del.count).toBe(1);
+    await adminClient.from('org_officials').delete().eq('id', other.id);
+  });
+
+  it('the referee coordinator cannot write the org-wide officials pool -- that stays org_admin\'s call', async () => {
+    // RLS filters rather than errors on a write that matches no visible row (§0i) --
+    // an insert IS rejected outright (WITH CHECK), but an update just silently matches
+    // zero rows, so the real proof is that the row itself never changed.
+    expect((await refClient.from('org_officials').insert({ org_id: orgA.id, full_name: 'Sneaky', active: true })).error).not.toBeNull();
+    await refClient.from('org_officials').update({ active: false }).eq('id', officialId);
+    expect(must(await adminClient.from('org_officials').select('active').eq('id', officialId).single(), 'unchanged').active).toBe(true);
+    const org_admin_insert = await orgAdminAClient.from('org_officials').insert({ org_id: orgA.id, full_name: 'Org Admin Added', active: true }).select().single();
+    expect(org_admin_insert.error).toBeNull();
+    await adminClient.from('org_officials').delete().eq('id', org_admin_insert.data!.id);
+  });
+
+  it('a genuinely different org cannot read either table for this one', async () => {
+    expect(((await clubStaffBClient.from('org_officials').select('id').eq('id', officialId)).data ?? [])).toHaveLength(0);
+    expect(((await clubStaffBClient.from('tournament_officials').select('id').eq('id', assignmentId)).data ?? [])).toHaveLength(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_officials').delete().eq('tournament_id', tId);
+    await adminClient.from('org_officials').delete().eq('id', officialId);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    for (const id of [refId, trId]) await adminClient.auth.admin.deleteUser(id);
+  });
+});
