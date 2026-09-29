@@ -115,6 +115,7 @@ export default async function PlatformConsolePage({
   let billingAccounts: any[] = [];
   let billingUsageEvents: any[] = [];
   let billingSubscriptions: any[] = [];
+  let billingUtilization: any[] = [];
   let listingRows: ListingRow[] = [];
   let loginRows: any[] = [];
   if (activeTab === 'logins') {
@@ -138,12 +139,19 @@ export default async function PlatformConsolePage({
 
   if (activeTab === 'billing') {
     const db = supabase as any;
-    const [{ data: invoiceRows }, { data: paymentRows }, { data: billingAccountRows }, { data: usageRows }, { data: subscriptionRows }] = await Promise.all([
+    const [{ data: invoiceRows }, { data: paymentRows }, { data: billingAccountRows }, { data: usageRows }, { data: subscriptionRows }, { data: meterRows }, { data: periodRows }, { data: planMeterRows }] = await Promise.all([
       db.from('billing_invoices').select('id, invoice_number, org_id, total, amount_paid, status, due_at, created_at, organizations(name)').eq('context_type', 'platform').order('created_at', { ascending: false }).limit(100),
       db.from('billing_payment_submissions').select('id, invoice_id, amount, method, reference_number, status, submitted_at, billing_invoices(invoice_number, organizations(name))').order('submitted_at', { ascending: false }).limit(100),
       db.from('billing_accounts').select('id, org_id, context_type, payment_instructions, qr_storage_key').eq('context_type', 'platform'),
       db.from('billing_usage_events').select('id, org_id, meter_key, quantity, context_type, source_type, occurred_at, organizations(name)').order('occurred_at', { ascending: false }).limit(100),
-      db.from('billing_subscriptions').select('id, org_id, product, status, starts_at, renews_at, billing_plans(name), organizations(name)').order('created_at', { ascending: false }).limit(200),
+      db.from('billing_subscriptions').select('id, org_id, product, status, starts_at, renews_at, plan_id, billing_plans(name), organizations(name)').order('created_at', { ascending: false }).limit(200),
+      db.from('billing_usage_meters').select('key, label, unit, product').eq('active', true).order('key'),
+      // Utilization view (phase16e): the most recent snapshotted period per
+      // org/meter, regardless of calendar month -- an org just past a
+      // month boundary before the cron re-runs still shows its last real
+      // numbers instead of going blank.
+      db.from('billing_usage_periods').select('org_id, meter_key, quantity, period_start, period_end, organizations(name)').order('period_start', { ascending: false }),
+      db.from('billing_plan_meters').select('plan_id, meter_key, included_quantity'),
     ]);
     const accountByOrg = new Map((billingAccountRows ?? []).map((row: any) => [row.org_id, row.id]));
     billingOrgs = (orgRows ?? []).map((org: any) => ({ id: org.id, name: org.name, billingAccountId: accountByOrg.get(org.id) ?? null }));
@@ -152,6 +160,52 @@ export default async function PlatformConsolePage({
     billingPayments = (paymentRows ?? []).map((row: any) => ({ id: row.id, invoiceNumber: row.billing_invoices?.invoice_number ?? 'Unknown invoice', orgName: row.billing_invoices?.organizations?.name ?? 'Unknown organization', amount: row.amount, method: row.method, reference: row.reference_number, status: row.status, submittedAt: row.submitted_at }));
     billingUsageEvents = (usageRows ?? []).map((row: any) => ({ id: String(row.id), orgName: row.organizations?.name ?? 'Unknown organization', meterKey: row.meter_key, quantity: Number(row.quantity), contextType: row.context_type, occurredAt: row.occurred_at, sourceType: row.source_type }));
     billingSubscriptions = (subscriptionRows ?? []).map((row: any) => ({ id: row.id, orgName: row.organizations?.name ?? 'Unknown organization', product: row.product, planName: row.billing_plans?.name ?? 'Unknown plan', status: row.status, startsAt: row.starts_at, renewsAt: row.renews_at }));
+
+    // Utilization (phase16e): the latest snapshotted period per org/meter,
+    // paired with that org's plan quota so "42 of 100 included" reads at a
+    // glance -- this is the view that actually informs pricing, more so
+    // than the raw event log below it. A meter tagged "shared" (staff
+    // seats, teams) checks whichever product's plan the org holds, club
+    // first; a club-only/tournament-only meter checks only its own.
+    const orgPlanByProduct = new Map<string, Map<string, string>>();
+    for (const sub of subscriptionRows ?? []) {
+      if (!orgPlanByProduct.has(sub.org_id)) orgPlanByProduct.set(sub.org_id, new Map());
+      if (sub.plan_id) orgPlanByProduct.get(sub.org_id)!.set(sub.product, sub.plan_id);
+    }
+    const includedByPlanMeter = new Map<string, number>();
+    for (const pm of planMeterRows ?? []) includedByPlanMeter.set(`${pm.plan_id}:${pm.meter_key}`, Number(pm.included_quantity));
+    const meterInfo = new Map<string, { label: string; unit: string; product: string }>(
+      (meterRows ?? []).map((m: any) => [m.key, { label: m.label, unit: m.unit, product: m.product }])
+    );
+
+    const seenOrgMeter = new Set<string>(); // periodRows is ordered by period_start desc, so first hit per org+meter is the latest
+    billingUtilization = [];
+    for (const row of periodRows ?? []) {
+      const dedupeKey = `${row.org_id}:${row.meter_key}`;
+      if (seenOrgMeter.has(dedupeKey)) continue;
+      seenOrgMeter.add(dedupeKey);
+      const info = meterInfo.get(row.meter_key);
+      if (!info) continue;
+      const productsToCheck = info.product === 'shared' ? ['club', 'tournament'] : [info.product];
+      let includedQuantity: number | null = null;
+      for (const p of productsToCheck) {
+        const planId = orgPlanByProduct.get(row.org_id)?.get(p);
+        const inc = planId ? includedByPlanMeter.get(`${planId}:${row.meter_key}`) : undefined;
+        if (inc != null) { includedQuantity = inc; break; }
+      }
+      billingUtilization.push({
+        orgId: row.org_id,
+        orgName: row.organizations?.name ?? 'Unknown organization',
+        meterKey: row.meter_key,
+        meterLabel: info.label,
+        unit: info.unit,
+        quantity: Number(row.quantity),
+        includedQuantity,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+      });
+    }
+    billingUtilization.sort((a, b) => a.orgName.localeCompare(b.orgName) || a.meterLabel.localeCompare(b.meterLabel));
   }
 
   let activeSession = null;
@@ -199,7 +253,7 @@ export default async function PlatformConsolePage({
         {activeTab === 'directory' && <Directory orgs={orgs} />}
         {activeTab === 'provision' && <ProvisionForm />}
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
-        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} />}
+        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} utilization={billingUtilization} />}
         {activeTab === 'listings' && <Listings rows={listingRows} />}
         {activeTab === 'logins' && <ProvisionLoginPanel scope="platform" scopeId={null} logins={loginRows} allowReissueByEmail />}
         {activeTab === 'troubleshoot' && <Troubleshoot orgs={orgs} activeSession={activeSession} />}

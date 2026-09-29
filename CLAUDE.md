@@ -3206,12 +3206,138 @@ Classic 2026, Cebu Women's Volley Cup, Davao Hoops League S2, Davao 3x3 Showdown
   sessions and had deleted unrelated content (§0l and its RLS tests) without anyone here
   asking for it — this demo gallery being re-added is the same shape of unrequested
   external change, just discovered later.
-- **Not fixed here.** `DulaHQ` is the frozen Tournament Manager app (§8: "Keep the
-  tournament engine unrewritten... proxied, never ported"), and this specific gallery is
-  landing-page/marketing scaffolding rather than the bracket/scoring engine itself — but
-  removing it is still a product call on a codebase this project has committed not to
-  touch without being asked, not a bug fix in `dula-hq-2.0`. Flagged to the user rather
-  than silently edited.
+- **Flagged, then removed on request.** `DulaHQ` is the frozen Tournament Manager app
+  (§8: "Keep the tournament engine unrewritten... proxied, never ported"), so this was
+  flagged rather than silently edited — the user confirmed, and the gallery-rendering
+  functions were removed from `DulaHQ/index.html` (its own repo, own commit history) the
+  same day, replacing the root's `#signin-wrap` with the plain sign-in shell. `DEMO_ORGS`,
+  the `/t/{slug}` demo-tenant preview boot, and the Superadmin Console's Tenant Directory
+  were left alone — a different, deliberate feature, not what was reported.
+
+---
+
+## 0za. Metered usage billing: wiring up an unused scaffold (2026-09-29)
+
+The application-flow audit (§0a's addendum, `docs/LEGACY_CANDIDATES.md`) had flagged
+three orphaned SQL functions as a "step 7" nobody could responsibly decide alone:
+`record_billing_usage_event()`, `snapshot_billing_usage_period()`,
+`project_billing_amount()` — real, correctly-authored, granted, and completely unused.
+Checking further turned up more than three orphaned functions: a whole **metered-billing
+catalog** the external "arenaai" billing sync (§0m) had seeded and nobody ever
+populated — `billing_usage_meters` (7 meters: active clubs/players/staff seats/teams/
+tournaments, storage GB, tournament entries) and `billing_plan_meters` (real included
+quotas already assigned per plan — e.g. the base club plan includes 200 players, 30
+staff seats). `billing_plan_meters.overage_unit_amount` is `0` everywhere — nobody's
+priced overages, matching the user's own framing exactly: "gives me data on
+utilization so I can factor it into pricing... in the future" — visibility first,
+pricing later, not touched here.
+
+### Two meter shapes, two recording strategies (`phase16e`)
+
+- **6 "gauge" meters** (active clubs/players/teams/staff seats, storage) — a monthly
+  value. `run_monthly_usage_snapshot()` (new, `pg_cron`-scheduled for 01:00 on the 1st,
+  mirroring `expire_stale_approvals`/`expire_temp_logins`) computes each per org and
+  records it with an idempotency key of `org:meter:YYYY-MM` — record once a month,
+  and `snapshot_billing_usage_period()`'s pre-existing SUM aggregation stays correct
+  as-is, summing exactly one row, with zero changes needed to that function's actual
+  arithmetic.
+- **1 "counter" meter** (`tournament_entries_monthly`) — a genuine discrete event,
+  recorded in real time from the existing `addEntry` action
+  (`src/app/tm/[orgSlug]/[tournamentSlug]/actions.ts`), right after its `write_audit`
+  call, keyed by the entry's own id so it can never double-count.
+
+### Storage: track going forward, R2 uploads only (user's own choice, asked directly)
+
+Nothing in this app ever stored a file's byte size — only its R2 key. Three options
+were put to the user (defer the meter / track new uploads going forward / query R2
+live each month); **"track going forward"** was chosen. `org_storage_events` (new
+table, append-only, upload events only — deletions aren't subtracted in this first
+pass, so the figure is "cumulative uploaded" not "currently stored", a known,
+documented simplification) is written by `shared/files/lib/r2.ts`'s `uploadFile()`
+whenever a caller passes the now-optional `orgId` param, via the new
+`record_storage_event()` RPC — best-effort, wrapped in try/catch so a metering hiccup
+can never fail the actual upload it's riding alongside. Wired into the five call sites
+that actually resolve an org: club logo (`c/[clubSlug]/actions.ts`), club media
+(`media-actions.ts`), staff profile photos (`staff-profile-actions.ts`), and both
+tournament-entry document upload paths (`entry/[entryId]/documents-actions.ts`,
+`tm/.../actions.ts`). **Tournament posters are deliberately excluded** — they go
+through a *different* backend (Supabase Storage, not R2, per
+`tournament_posters_storage_bucket`), are upsert-in-place per tournament, capped at
+5MB, and don't accumulate the way documents and photos do.
+
+### Two real bugs, both caught by actually running it before trusting it
+
+1. **`record_billing_usage_event()`/`snapshot_billing_usage_period()` both required
+   `auth.uid()`**, so `run_monthly_usage_snapshot()` — service_role/cron-only, no JWT
+   in that context — couldn't call either. First attempted fix mirrored `write_audit`'s
+   own service-role JWT allowance (`phase16f`/`phase16g`) — wrong, because pg_cron's
+   real scheduled execution carries no JWT at all either, unlike a genuine
+   service-role *API call*. The actual, established fix (same as `write_audit`/
+   `write_audit_system`, §0p): unchecked `_system` twins
+   (`record_billing_usage_event_system`, `snapshot_billing_usage_period_system`,
+   `phase16h`) that `run_monthly_usage_snapshot()` calls directly, since it's already
+   the trusted gate (`EXECUTE` locked to `service_role`) and re-authorizing a second
+   time through the checked wrapper in a context with no `auth.uid()` was never going
+   to work. The checked originals are untouched in spirit — still exactly right for
+   their real direct callers (e.g. `addEntry` calling `record_billing_usage_event` as
+   the signed-in organizer).
+2. **`billing_usage_events.context_type` has a CHECK constraint** (`platform` / `club`
+   / `tournament` / `shared` — the same vocabulary as `billing_usage_meters.product`),
+   not `'organization'` as first guessed — caught on the very next manual run
+   (`phase16i`).
+3. **`org_storage_events` had no suspension fence.** §0n's own guard test
+   (`org_tables_missing_suspension_fence()`) caught it on the first full RLS
+   run after this landed — every `org_id`-carrying table needs the
+   `org_not_suspended` RESTRICTIVE policy or the guard flags it by name.
+   Added (`phase16j`), matching every other table's exact policy shape
+   (`as restrictive for all to authenticated using (org_access_allowed(org_id))`).
+   This is exactly the "the test is the guard" pattern §0g/§0n both already
+   established — a real gap caught by a pre-existing regression test, not
+   found by inspection.
+
+### UI: utilization vs. quota, not a raw event log
+
+The Platform Console's Billing tab had a "Recent usage events" list since the
+external sync, always empty (zero rows ever recorded) — kept, but a new **"Usage &
+utilization"** section above it (`BillingConsole.tsx`) is the one that actually
+answers the question asked: per org, per meter, the latest recorded month's quantity
+against that org's plan quota (`billing_plan_meters.included_quantity`, resolved by
+matching the meter's own `product` to whichever of the org's subscriptions covers
+it — club first for a `shared` meter), with a thin progress bar and the row itself
+turning red once `quantity > includedQuantity`. Verified live: Usna Gali and CDO both
+run 2 clubs against a 1-club-included base plan, and both rows render red — the "am I
+over my own plan's limits" question this whole feature exists to answer, answered
+correctly on the first real data. A real timezone bug was caught the same pass: the
+month label used `new Date(periodStart).toLocaleDateString()` on a date-only string
+("2026-09-01"), which a US-timezone browser rolls back to "August" (date-only ISO
+strings parse as UTC midnight; local formatting can shift the calendar day) — fixed
+with an explicit `timeZone: 'UTC'`.
+
+### Verified
+
+Manually ran `run_monthly_usage_snapshot()` against the live project and got real,
+sane numbers for every real org (Usna Gali: 2 clubs/66 players/14 staff/5 teams; CDO:
+2/42/11/3; the three tournament-only orgs correctly show zero clubs/players/teams).
+Verified `record_storage_event()`'s authorization directly (an org's own admin
+succeeds, a different org's admin is refused, `anon` is refused both the RPC and the
+table read) before trusting the R2 wiring. RLS suite 316 → **323**, all green on the
+second full run (the first caught the missing suspension fence above): a new
+`describe` block covers storage-event record/read authorization, the checked
+function's real-caller authorization, the `_system` twins being service_role-only,
+and a live `run_monthly_usage_snapshot()` call producing a real current-month row.
+`npx tsc --noEmit` and `npm run build` both clean; `anon_executable_secdef_count()`
+stayed `0` throughout (`record_storage_event` is `authenticated`-only by design, same
+as every other user-facing SECURITY DEFINER function in this project).
+
+### Not built, on purpose
+
+Overage pricing (`billing_plan_meters.overage_unit_amount` stays `0` — a later,
+explicit decision, not this pass's job). Deletion-aware storage accounting (uploads
+only, for now — see above). A manual "recompute now" button on the Troubleshoot/
+Billing tab (the monthly cron is the only trigger; add one later if waiting for the
+1st becomes a real annoyance). `active_tournaments_monthly` isn't snapshotted by the
+monthly job — tournaments already have their own lifecycle elsewhere in the console;
+revisit if it turns out to matter for pricing.
 
 ---
 

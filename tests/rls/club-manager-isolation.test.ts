@@ -3861,3 +3861,77 @@ describe('officials tab reads (phase16c)', () => {
     for (const id of [refId, trId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Usage metering (phase16e-16i). The billing_usage_meters/billing_plan_meters
+ * catalog and record_billing_usage_event/snapshot_billing_usage_period/
+ * project_billing_amount existed unused since the external billing sync
+ * (§0m) -- nothing ever called them. This wires the recording side: a
+ * storage-upload ledger (org_storage_events, fed from shared/files/lib/r2.ts
+ * on every R2 upload), a monthly gauge snapshot (run_monthly_usage_snapshot,
+ * service_role/cron-only), and a real-time counter (tournament_entries_monthly,
+ * recorded from addEntry). Two real bugs were caught live before this suite
+ * was written: record_billing_usage_event/snapshot_billing_usage_period both
+ * required auth.uid(), so the cron-triggered snapshot function couldn't call
+ * them at all (fixed with unchecked "_system" twins, same split as
+ * write_audit/write_audit_system); and the snapshot function's first version
+ * used context_type='organization', which billing_usage_events' own CHECK
+ * constraint refuses (platform/club/tournament/shared only).
+ */
+describe('usage metering: storage events + monthly snapshot (phase16e-16i)', () => {
+  it('an org member can record a storage event for their own org; a different org is refused', async () => {
+    const { error } = await orgAdminAClient.rpc('record_storage_event', {
+      p_org_id: orgA.id, p_storage_key: `tenants/rls-test-${crypto.randomUUID()}.png`, p_size_bytes: 12345,
+    });
+    expect(error).toBeNull();
+    const other = await clubStaffBClient.rpc('record_storage_event', {
+      p_org_id: orgA.id, p_storage_key: 'tenants/should-fail.png', p_size_bytes: 1,
+    });
+    expect(other.error).not.toBeNull();
+  });
+
+  it('org members can read their own org\'s storage events; a different org reads none', async () => {
+    const own = await orgAdminAClient.from('org_storage_events').select('id').eq('org_id', orgA.id);
+    expect(own.data?.length ?? 0).toBeGreaterThan(0);
+    const other = await clubStaffBClient.from('org_storage_events').select('id').eq('org_id', orgA.id);
+    expect(other.data ?? []).toHaveLength(0);
+  });
+
+  it('anon can neither record nor read storage events', async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    expect((await anon.rpc('record_storage_event', { p_org_id: orgA.id, p_storage_key: 'x', p_size_bytes: 1 })).error).not.toBeNull();
+    expect((await anon.from('org_storage_events').select('id')).data ?? []).toHaveLength(0);
+  });
+
+  it('the checked record_billing_usage_event authorizes a real org member and refuses a different org', async () => {
+    const key = `rls-test-${crypto.randomUUID()}`;
+    const { error } = await orgAdminAClient.rpc('record_billing_usage_event', {
+      p_org_id: orgA.id, p_meter_key: 'tournament_entries_monthly', p_context_type: 'tournament', p_quantity: 1, p_idempotency_key: key,
+    });
+    expect(error).toBeNull();
+    const other = await clubStaffBClient.rpc('record_billing_usage_event', {
+      p_org_id: orgA.id, p_meter_key: 'tournament_entries_monthly', p_context_type: 'tournament', p_quantity: 1, p_idempotency_key: `${key}-2`,
+    });
+    expect(other.error).not.toBeNull();
+    await adminClient.from('billing_usage_events').delete().eq('idempotency_key', key);
+  });
+
+  it('the unchecked _system variants and the monthly snapshot job are service_role-only', async () => {
+    expect((await orgAdminAClient.rpc('record_billing_usage_event_system', { p_org_id: orgA.id, p_meter_key: 'active_clubs_monthly', p_context_type: 'club', p_quantity: 1, p_idempotency_key: crypto.randomUUID() })).error).not.toBeNull();
+    expect((await orgAdminAClient.rpc('snapshot_billing_usage_period_system', { p_org_id: orgA.id, p_meter_key: 'active_clubs_monthly', p_period_start: '2026-01-01', p_period_end: '2026-01-31' })).error).not.toBeNull();
+    expect((await orgAdminAClient.rpc('run_monthly_usage_snapshot')).error).not.toBeNull();
+  });
+
+  it('run_monthly_usage_snapshot (service_role) produces a real snapshot for the current month', async () => {
+    const { error } = await adminClient.rpc('run_monthly_usage_snapshot');
+    expect(error).toBeNull();
+    const periodStart = new Date().toISOString().slice(0, 8) + '01';
+    const { data } = await adminClient.from('billing_usage_periods').select('quantity').eq('org_id', orgA.id).eq('meter_key', 'active_clubs_monthly').eq('period_start', periodStart).maybeSingle();
+    expect(data).not.toBeNull();
+    expect(Number(data!.quantity)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('org_storage_events').delete().eq('org_id', orgA.id);
+  });
+});

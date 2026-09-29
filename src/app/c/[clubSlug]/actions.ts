@@ -36,7 +36,7 @@ export async function updateClubProfile(clubId: string, formData: FormData) {
 
   const supabase = await createClient();
 
-  const { data: club } = await supabase.from('clubs').select('branding').eq('id', clubId).maybeSingle();
+  const { data: club } = await supabase.from('clubs').select('branding, org_id').eq('id', clubId).maybeSingle();
   const currentBranding = parseClubBranding(club?.branding);
   let nextBranding = currentBranding;
   let newKey: string | null = null;
@@ -55,6 +55,7 @@ export async function updateClubProfile(clubId: string, formData: FormData) {
         fileName: logoFile.name,
         body: buffer,
         contentType: logoFile.type,
+        orgId: club?.org_id,
       });
       newKey = key;
       nextBranding = { ...currentBranding, logoKey: key };

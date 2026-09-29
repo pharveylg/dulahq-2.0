@@ -14,6 +14,7 @@
 
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createClient } from '@/lib/supabase/server';
 
 function getR2Client() {
   return new S3Client({
@@ -35,6 +36,13 @@ const BUCKET = process.env.R2_BUCKET_NAME!;
  * convention here (`tenants/<tenant_id>/...`) is a naming discipline,
  * not a security boundary. Never build a key from user input directly;
  * always prefix with the authenticated user's own tenant_id server-side.
+ *
+ * `orgId`, when passed, feeds the storage_gb_monthly usage meter
+ * (phase16e) via record_storage_event() -- best-effort: a metering hiccup
+ * must never fail the actual upload the caller is waiting on. Omit it for
+ * callers with no natural org (there are none today, but the param stays
+ * optional rather than required so a future caller isn't forced to invent
+ * one).
  */
 export async function uploadFile(params: {
   tenantId: string;
@@ -42,6 +50,7 @@ export async function uploadFile(params: {
   fileName: string;
   body: Buffer | Uint8Array;
   contentType: string;
+  orgId?: string;
 }) {
   const key = `tenants/${params.tenantId}/${params.category}/${crypto.randomUUID()}-${params.fileName}`;
 
@@ -54,6 +63,19 @@ export async function uploadFile(params: {
       ContentType: params.contentType,
     })
   );
+
+  if (params.orgId) {
+    try {
+      const supabase = await createClient();
+      await (supabase as any).rpc('record_storage_event', {
+        p_org_id: params.orgId,
+        p_storage_key: key,
+        p_size_bytes: params.body.length,
+      });
+    } catch {
+      // Metering is best-effort -- never let it undo or fail an upload that already succeeded.
+    }
+  }
 
   return { key };
 }

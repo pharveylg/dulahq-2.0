@@ -22,15 +22,18 @@ export async function submitEntryDocument(entryId: string, formData: FormData) {
   if (!file || file.size === 0) return { error: 'Choose a file to upload.' };
   if (file.size > MAX_FILE_BYTES) return { error: 'File is too large (8MB max).' };
 
+  const supabase = await createClient();
+  const { data: entryRow } = await supabase.from('tournament_entries').select('host_org_id').eq('id', entryId).maybeSingle();
+
   const { key } = await uploadFile({
     tenantId: entryId,
     category: 'documents',
     fileName: file.name,
     body: Buffer.from(await file.arrayBuffer()),
     contentType: file.type || 'application/octet-stream',
+    orgId: entryRow?.host_org_id,
   });
 
-  const supabase = await createClient();
   const { error } = await (supabase as any).rpc('submit_entry_document', {
     p_entry_id: entryId, p_type: type, p_name: name, p_storage_key: key, p_file_name: file.name, p_mime_type: file.type || null,
   });

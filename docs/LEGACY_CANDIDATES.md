@@ -8,9 +8,12 @@ them. Per the audit's own rule: no dependency evidence found is not the same
 as proof something is safe to delete — every item states its confidence and
 what would still need checking before acting on it.
 
-**Update, 2026-09-29: cleanup steps 1–6, 8 and 9 are done; step 7 was
-deliberately left undone, on purpose (see its entry below).** See each
-item's entry for what changed and how it was verified._
+**Update, 2026-09-29: all 9 cleanup steps are done.** Step 7 was initially
+left alone on purpose (no way to confirm with "the billing owner" of the
+externally-synced sub-system it belonged to) — the user then asked for it
+directly, resolving that uncertainty, and it shipped as a real feature
+rather than a deletion. See CLAUDE.md §0za for the full build. See each
+item's entry below for what changed and how it was verified._
 
 ---
 
@@ -36,28 +39,33 @@ audit, not a cleanup.
 | `can_create_fees(org, club)` | SQL function | CLAUDE.md §0d already states verbatim: "referenced by zero policies and stays dead; not resurrected." Re-verified independently: zero policy or app references anywhere | None | Low — already known dead, already decided not to resurrect | DEPRECATED (self-admitted in code) | HIGH |
 | ~~`approval_is_granted(p_subject_type, p_subject_id)`~~ | SQL function | Defined with its own doc comment; explicitly named by `phase6s` as one of "three minors-data oracles" needing anon-lockdown — implying it was believed live. Zero call sites found anywhere (no policy, no SQL function, no app code, no test). `src/lib/roster-state.ts` derives the same fact by reading `approval_requests.status` directly instead. | None | Resolved by git archaeology (below) — superseded, not orphaned-by-accident | **DROPPED 2026-09-29** (`phase16d`) — `git log` shows `roster-state.ts`'s inline check was introduced 2026-09-08 19:06, a full hour *before* `phase6s`'s 20:21 anon-lockdown of this same function the same day. The lockdown was a blanket security sweep, not evidence anything still called it. Re-confirmed zero policy/function/app/test references immediately before dropping. | HIGH |
 | ~~`platform_audit_log(org_id?, limit?)`~~ | SQL function | CLAUDE.md §0m claims this closed Platform Admin's audit-read gap. Real, granted to `authenticated`. No `.rpc('platform_audit_log', ...)` anywhere in `src/`; `/platformconsole`'s Troubleshoot tab (the only plausible caller) doesn't reference it. | None | Resolved — wired up, not removed | **WIRED UP 2026-09-29** — added a "Platform audit log" section to the Troubleshoot tab (`getPlatformAuditLog()` in `troubleshoot-actions.ts`, rendered in `Troubleshoot.tsx`), filterable by the tab's existing org picker. This was the better call than deleting: the function was correctly authored, correctly granted, and matched documented intent — it just never got its UI. Verified live against real showcase audit history, including the org filter narrowing correctly. | HIGH |
-| `record_billing_usage_event()` | SQL function | Part of the externally-synced "arenaai" billing domain (§0m). No cron schedule, no SQL caller, no app-code caller. | None | **Left alone, deliberately** — see "Step 7" note below | UNKNOWN — possibly planned, possibly dead weight | LOW |
-| `snapshot_billing_usage_period()` | SQL function | Same billing-usage sub-feature as above | None | Same as above | UNKNOWN | LOW |
-| `project_billing_amount()` | SQL function | Same billing-usage sub-feature as above. `src/app/platformconsole/page.tsx` reads the `billing_usage_events` **table** directly for display, but nothing ever writes to it through this trio — the display path is fed by nothing. | Table is read by `platformconsole/page.tsx`, but not through this function | Same as above | UNKNOWN | LOW |
+| ~~`record_billing_usage_event()`~~ | SQL function | Part of the externally-synced "arenaai" billing domain (§0m). No cron schedule, no SQL caller, no app-code caller. | None | Resolved — the user confirmed they want real metered-billing data; see "Step 7" note below | **WIRED UP 2026-09-29** (`phase16e`–`phase16i`) — now called from a real monthly snapshot job and from `addEntry`'s counter | HIGH |
+| ~~`snapshot_billing_usage_period()`~~ | SQL function | Same billing-usage sub-feature as above | None | Same as above | **WIRED UP 2026-09-29** — same phases | HIGH |
+| `project_billing_amount()` | SQL function | Same billing-usage sub-feature as above. `src/app/platformconsole/page.tsx` reads the `billing_usage_events` **table** directly for display, but nothing ever writes to it through this trio — the display path is fed by nothing. | Table is read by `platformconsole/page.tsx`, but not through this function | Still unwired — deliberately, see note | UNKNOWN — overage pricing is a later decision (§0za), not this pass's job | LOW |
 
-**Step 7 note:** asked to do it, but chose not to drop these three — a
-database deletion is irreversible and the audit's own risk callout for this
-group was specifically "ask the billing owner first," which nobody in this
-session can actually stand in for (this arrived from an external tool's
-billing domain this project only partially reconciled, per §0m). Leaving
-three unused functions in place costs nothing; dropping something another
-system might reach is a real, unrecoverable risk. If you want them gone,
-say so explicitly and it's a five-minute `drop function` migration — but
-that's your call to make, not a default I should apply just because it was
-next in the list.
+**Step 7 note (resolved):** initially left alone — a database deletion is
+irreversible and the audit's own risk callout was "ask the billing owner
+first," which nobody in this session could stand in for. The user then
+asked directly to build real usage metering ("gives me data on
+utilization so I can factor it into pricing... in the future"), which
+resolved the uncertainty in the opposite direction from a deletion: the
+scaffold turned out to be a real, well-designed, unused catalog (7
+meters, quotas already assigned per plan) rather than dead weight, and
+it's now wired up end to end. See CLAUDE.md §0za for the full build,
+including two real bugs caught live before trusting it.
+`project_billing_amount()` (overage pricing) stays unwired on purpose —
+`billing_plan_meters.overage_unit_amount` is `0` everywhere, and turning
+on real charges is explicitly a later decision per the user's own framing.
 
 **Recommended action for this group:** the two orphaned server actions
 (`updateClubName`, `deleteSession`) — removed. `approval_is_granted()` —
 dropped, once git history confirmed it was superseded rather than merely
 unreferenced. `platform_audit_log()` — wired up rather than removed, since
-it was unfinished wiring, not a dead end. The billing trio is entangled
-with an externally-authored sub-system nobody on this project fully owns —
-left alone, on purpose, not by default.
+it was unfinished wiring, not a dead end. The billing catalog
+(`record_billing_usage_event`/`snapshot_billing_usage_period`) — wired up
+for the same reason, once the user confirmed real utilization data was
+wanted; `project_billing_amount()` stays unwired until overage pricing is
+a real decision.
 
 ---
 
@@ -89,7 +97,7 @@ left alone, on purpose, not by default.
 |---|---|---|---|
 | ~~Whether the live database's pre-phase11a SECURITY DEFINER functions (e.g. `port_squad_to_tournament`, `transfer_player_to_team`) actually call `write_audit_system` internally, not the checked `write_audit`~~ | The phase11a/a1/a2 files only redefine the two audit functions themselves; the described mechanical rewrite of 17 internal callers isn't captured in any committed migration | **RESOLVED 2026-09-29** — queried `pg_proc.prosrc` on the live project for every function whose body mentions `write_audit`: all 36 matching functions (a superset of the original 17 — the rest are legitimately later additions) call `write_audit_system(`, and zero call the checked `write_audit(` internally. The phase11a repointing held. | **CONFIRMED CORRECT — no action needed** |
 | ~~Whether `platform_audit_log()` is meant to ship to the Troubleshoot tab and was simply missed, or was deliberately deferred~~ | Function exists, granted, matches what CLAUDE.md §0m describes as "closed" — but zero UI callers | **RESOLVED 2026-09-29** — decided in favor of finishing the wiring rather than removing a correctly-built function; see its entry above | **WIRED UP** |
-| Whether the billing usage-metering trio is planned future work or dead weight from the external sync | No producer, consumer, or scheduler for any of the three; part of a larger externally-authored domain only partially reconciled (§0m) | Ask the billing feature owner before touching; check if "arenaai"'s own roadmap doc (if any) mentions usage metering as planned | **STILL OPEN — deliberately left alone; see "Step 7 note" above** |
+| ~~Whether the billing usage-metering trio is planned future work or dead weight from the external sync~~ | No producer, consumer, or scheduler for any of the three; part of a larger externally-authored domain only partially reconciled (§0m) | **RESOLVED 2026-09-29** — the user confirmed directly: planned, wanted, and now built (CLAUDE.md §0za) | **BUILT — record_billing_usage_event/snapshot_billing_usage_period wired up; project_billing_amount stays unwired until overage pricing is a real decision** |
 | ~~Whether `approval_is_granted()` was ever actually called from a real caller before `roster-state.ts` took over the same check inline~~ | Zero current references; but it was hardened against anon access at a time (`phase6s`) that implies someone believed it mattered | **RESOLVED 2026-09-29** — `git log` timestamps show `roster-state.ts` predates the `phase6s` hardening by about an hour, the same day; see its entry above | **CONFIRMED SUPERSEDED — dropped** |
 
 ---
@@ -102,11 +110,14 @@ left alone, on purpose, not by default.
 | `updateClubName` server action | None | None | `clubs.name` column (still written by `updateClubProfile`) | None | None — dead function, no screen depends on it | **Very low** |
 | `deleteSession` server action | None | None | `training_sessions` table (rows are still soft-managed via `updateSessionStatus`) | None | None — dead function, no screen depends on it | **Very low** |
 
-Neither SQL function nor the billing trio is included in this table — their
-blast radius can't be responsibly assessed until the two open product
-questions above (is `platform_audit_log` unfinished wiring? is the billing
-trio planned?) are answered by a human, per this audit's own "no dependency
-uncertainty, no deletion" rule.
+`platform_audit_log()` and the billing catalog aren't in this table — both
+turned out to be "wire it up" rather than "remove it" once their open
+product questions were answered by the user directly, so a removal
+blast-radius was never the relevant analysis for either. See CLAUDE.md
+§0za for the billing build's own verification (live RLS authorization
+checks, a real `run_monthly_usage_snapshot()` run against the live
+project, and the Billing tab's utilization view checked against real
+showcase data).
 
 ---
 
@@ -124,14 +135,15 @@ uncertain last):
 | 4 | Fix the two stale "Not available yet" guide sections and the proposals README index | Pure documentation, no code risk | None | **DONE 2026-09-29** |
 | 5 | Confirm (via live `pg_get_functiondef`) whether the pre-phase11a functions call `write_audit_system` | Closes a real static-analysis blind spot in the audit trail's integrity story | None (read-only check) | **DONE 2026-09-29** — confirmed correct, all 36 relevant functions call `write_audit_system` |
 | 6 | Decide whether `platform_audit_log()` should be wired to the Troubleshoot tab or removed | Feature-completeness question, not a bug | Low either way once decided | **DONE 2026-09-29** — wired up |
-| 7 | Decide whether the billing usage-metering trio is planned or dead | Entangled with an external, only-partially-reconciled sub-system | Unknown until scoped | **Deliberately not done** — no one to ask "the billing owner"; left in place rather than guessing on an irreversible drop |
+| 7 | Decide whether the billing usage-metering trio is planned or dead | Entangled with an external, only-partially-reconciled sub-system | Unknown until scoped | **DONE 2026-09-29** — user confirmed directly; built as a real feature (CLAUDE.md §0za) rather than deleted |
 | 8 | Decide whether to remove `approval_is_granted()` (superseded by `roster-state.ts`'s inline check) or keep it as a documented alternative implementation | Minors-data function, was deliberately hardened once — worth understanding why before deleting | Low-medium | **DONE 2026-09-29** — git archaeology confirmed superseded; dropped (`phase16d`) |
 | 9 | Document the 10 pre-consolidation "Club Manager" migrations in CLAUDE.md | Pure documentation | None | **DONE 2026-09-29** |
 
-Steps 1–6, 8 and 9 are applied: `npx tsc --noEmit` and `npm run build` both
-clean, `npm run docs:permissions:check` clean, the full RLS suite re-run
-after the `phase16d` database change, and the new Troubleshoot audit-log
-section verified live against real showcase data (including the org
-filter). Step 7 was deliberately left undone — see its note above — because
-the one thing that would make it safe (confirming with whoever owns the
-external billing domain) isn't something this session can do on its own.
+All 9 steps are applied: `npx tsc --noEmit` and `npm run build` both clean,
+`npm run docs:permissions:check` clean, the full RLS suite re-run after
+every database change, and everything user-facing (the Troubleshoot
+audit-log section, the Billing tab's new utilization view) verified live
+against real showcase data. See CLAUDE.md §0za for step 7's full build —
+it grew into the largest single step once the user confirmed they wanted
+it, including two real bugs caught by actually running the new code before
+trusting it.

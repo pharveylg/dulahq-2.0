@@ -69,6 +69,7 @@ export async function upsertMyStaffProfile(clubId: string, formData: FormData) {
         fileName: photoFile.name,
         body: buffer,
         contentType: photoFile.type,
+        orgId: myStaffRow.org_id,
       });
       uploadedKey = key;
       photoKey = key;

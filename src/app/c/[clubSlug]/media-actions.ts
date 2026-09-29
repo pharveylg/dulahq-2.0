@@ -24,6 +24,7 @@ export async function uploadMedia(clubId: string, formData: FormData) {
 
   const dulaUser = await getCurrentDulaUser();
   const supabase = await createClient();
+  const { data: club } = await supabase.from('clubs').select('org_id').eq('id', clubId).maybeSingle();
 
   // R2 has no tenant isolation of its own -- the RLS check on the
   // following `media` insert IS the permission check; uploadFile just
@@ -37,6 +38,7 @@ export async function uploadMedia(clubId: string, formData: FormData) {
       fileName: file.name,
       body: buffer,
       contentType: file.type,
+      orgId: club?.org_id,
     }));
   } catch (e: any) {
     return { error: `Upload failed: ${e.message}` };

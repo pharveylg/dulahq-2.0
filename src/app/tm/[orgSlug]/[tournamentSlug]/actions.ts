@@ -129,11 +129,14 @@ export async function staffUploadEntryDocument(entryId: string, formData: FormDa
   if (!file || file.size === 0) return { error: 'Choose a file to upload.' };
   if (file.size > MAX_DOC_BYTES) return { error: 'File is too large (8MB max).' };
 
+  const supabase = await createClient();
+  const { data: entryRow } = await supabase.from('tournament_entries').select('host_org_id').eq('id', entryId).maybeSingle();
+
   const { key } = await uploadFile({
     tenantId: entryId, category: 'documents', fileName: file.name,
     body: Buffer.from(await file.arrayBuffer()), contentType: file.type || 'application/octet-stream',
+    orgId: entryRow?.host_org_id,
   });
-  const supabase = await createClient();
   const { error } = await (supabase as any).rpc('staff_upload_entry_document', {
     p_entry_id: entryId, p_type: type, p_name: name, p_storage_key: key, p_file_name: file.name, p_mime_type: file.type || null,
   });
@@ -253,6 +256,24 @@ export async function addEntry(tournamentId: string, formData: FormData) {
     p_entity_id: entry.id,
     p_after: { team_name: teamName, category_id: categoryId },
   });
+
+  // Usage metering (phase16e) -- the one genuine counter meter among the
+  // 7 seeded, recorded in real time rather than snapshotted monthly like
+  // the gauge meters. entry.id as the idempotency key means this can never
+  // double-count even if called twice for the same entry.
+  await (supabase as any)
+    .rpc('record_billing_usage_event', {
+      p_org_id: hostOrgId,
+      p_meter_key: 'tournament_entries_monthly',
+      p_context_type: 'tournament_entry',
+      p_context_id: entry.id,
+      p_quantity: 1,
+      p_source_type: 'tournament_entry.created',
+      p_source_id: entry.id,
+      p_idempotency_key: entry.id,
+    })
+    .then(() => {})
+    .catch(() => {});
 
   const warnings: string[] = [];
 

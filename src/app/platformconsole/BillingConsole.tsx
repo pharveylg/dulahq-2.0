@@ -30,12 +30,23 @@ type Org = { id: string; name: string; billingAccountId: string | null };
 type BillingAccount = { id: string; orgName: string; instructions: string | null; qrStorageKey: string | null };
 type UsageEvent = { id: string; orgName: string; meterKey: string; quantity: number; contextType: string; occurredAt: string; sourceType: string | null };
 type Subscription = { id: string; orgName: string; product: string; planName: string; status: string; startsAt: string; renewsAt: string | null };
+type Utilization = {
+  orgId: string;
+  orgName: string;
+  meterKey: string;
+  meterLabel: string;
+  unit: string;
+  quantity: number;
+  includedQuantity: number | null;
+  periodStart: string;
+  periodEnd: string;
+};
 
 function Status({ value }: { value: string }) {
   return <span className="chip">{paymentStatusLabel(value)}</span>;
 }
 
-export default function BillingConsole({ invoices, payments, orgs, accounts, usageEvents, subscriptions }: { invoices: Invoice[]; payments: Payment[]; orgs: Org[]; accounts: BillingAccount[]; usageEvents: UsageEvent[]; subscriptions: Subscription[] }) {
+export default function BillingConsole({ invoices, payments, orgs, accounts, usageEvents, subscriptions, utilization }: { invoices: Invoice[]; payments: Payment[]; orgs: Org[]; accounts: BillingAccount[]; usageEvents: UsageEvent[]; subscriptions: Subscription[]; utilization: Utilization[] }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -56,6 +67,12 @@ export default function BillingConsole({ invoices, payments, orgs, accounts, usa
       if (result?.error) setError(result.error);
       else setSuccess('Payment instructions saved.');
     });
+  }
+
+  const utilizationByOrg = new Map<string, { orgName: string; rows: Utilization[] }>();
+  for (const u of utilization) {
+    if (!utilizationByOrg.has(u.orgId)) utilizationByOrg.set(u.orgId, { orgName: u.orgName, rows: [] });
+    utilizationByOrg.get(u.orgId)!.rows.push(u);
   }
 
   function review(id: string, status: 'verified' | 'rejected') {
@@ -117,6 +134,51 @@ export default function BillingConsole({ invoices, payments, orgs, accounts, usa
       <div className="card">
         <h2 style={{ fontSize: 18 }}>Subscriptions and entitlements</h2>
         {subscriptions.length === 0 ? <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No validation subscriptions yet.</p> : subscriptions.map((subscription) => <div key={subscription.id} className="list-row"><div className="list-row-main"><div className="list-row-title">{subscription.orgName} · {subscription.planName} <span className="chip">{subscription.status}</span></div><div className="list-row-meta">{subscription.product} · started {new Date(subscription.startsAt).toLocaleDateString()}{subscription.renewsAt ? ` · renews ${new Date(subscription.renewsAt).toLocaleDateString()}` : ''}</div></div></div>)}
+      </div>
+
+      <div className="card">
+        <div className="page-header" style={{ marginBottom: 10 }}>
+          <div><h2 style={{ fontSize: 18 }}>Usage & utilization</h2><p className="subtitle">Recorded automatically on the 1st of each month, against what each org's plan includes</p></div>
+        </div>
+        {utilizationByOrg.size === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No utilization snapshots yet — the monthly job records these on the 1st.</p>
+        ) : (
+          Array.from(utilizationByOrg.values()).map(({ orgName, rows }) => (
+            <div key={orgName} style={{ padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+              <strong style={{ fontSize: 13.5 }}>{orgName}</strong>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 8 }}>
+                {/* periodStart is a date-only string ("2026-09-01"); Date parses that as
+                    UTC midnight, so formatting it in the viewer's own local timezone can
+                    roll it back a day (US timezones showed "August" for a September
+                    period). timeZone: 'UTC' keeps the label matching the date the string
+                    actually names. */}
+                {new Date(rows[0].periodStart).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {rows.map((r) => {
+                  const displayQty = r.unit === 'GB' ? r.quantity.toFixed(2) : Math.round(r.quantity);
+                  const over = r.includedQuantity != null && r.quantity > r.includedQuantity;
+                  const pct = r.includedQuantity ? Math.min(100, (r.quantity / r.includedQuantity) * 100) : null;
+                  return (
+                    <div key={r.meterKey} style={{ fontSize: 12.5 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <span>{r.meterLabel}</span>
+                        <span style={over ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
+                          {displayQty} {r.unit}{r.includedQuantity != null ? ` / ${r.includedQuantity} included` : ''}
+                        </span>
+                      </div>
+                      {pct != null && (
+                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 3 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: over ? 'var(--danger)' : 'var(--accent)', borderRadius: 2 }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="card">
