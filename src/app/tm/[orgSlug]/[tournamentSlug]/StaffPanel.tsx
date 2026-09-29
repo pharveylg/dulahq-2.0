@@ -11,9 +11,7 @@ const ROLES: { value: string; label: string }[] = [
   { value: 'team_coordinator', label: 'Team coordinator' },
   { value: 'secretary', label: 'Secretary' },
   { value: 'treasurer', label: 'Treasurer' },
-  { value: 'logistics', label: 'Logistics' },
   { value: 'communications', label: 'Communications' },
-  { value: 'volunteer_coordinator', label: 'Volunteer coordinator' },
   { value: 'referee_coordinator', label: 'Referee coordinator' },
   { value: 'tournament_it_admin', label: 'IT admin' },
 ];

@@ -1,20 +1,19 @@
 # Tournament staff guide
 
 For everyone who helps run a tournament besides the organizer: the treasurer, the IT
-admin, team coordinators, the secretary, logistics, communications, volunteers and
-referees. It also covers the people from outside teams who get access to their own
-entry.
+admin, team coordinators, the secretary, communications and referees. It also covers
+the people from outside teams who get access to their own entry.
 
 If you're the organizer, read the [tournament organizer guide](tournament-organizer.md)
 instead.
 
-_Last checked: 2026-09-21 · There are no demo accounts for these roles. The demo
+_Last checked: 2026-09-28 · There are no demo accounts for these roles. The demo
 organizer (Dennis Manalo, `/demo`) can add someone to try one._
 
 ## Read this first: what the roles can do and what the app shows
 
-The permission catalog defines nine tournament roles. Only three of them have screens
-that use their permissions today:
+The permission catalog defines seven tournament roles (logistics and volunteer
+coordinator were retired 2026-09-28 — see below). Only one of them has no screen yet:
 
 | Role | Has a working screen? |
 |---|---|
@@ -23,15 +22,19 @@ that use their permissions today:
 | **IT admin** | Yes: suspend and reactivate staff, and the audit trail, on the **Staff** tab |
 | **Team coordinator** | Yes: notes and flags on the **Entries** tab |
 | **Secretary** | Yes: the **Documents** tab |
-| **Logistics** | No |
 | **Communications** | Yes: the **Announcements** tab |
-| **Volunteer coordinator** | No |
 | **Referee coordinator** | No |
 
 Every role in the table can open the tournament console and **read** its **Entries**
-and **Categories**. For the roles with "No", that read-only view is everything the app
-offers today. The permissions are real and recorded, ready for when those screens
-are built, but there is nothing to click. Each section below says so plainly.
+and **Categories**. For Referee coordinator, that read-only view is everything the app
+offers today — the permission is real and recorded, ready for when an Officials screen
+is built, but there is nothing to click.
+
+**Logistics and volunteer coordinator no longer exist.** Neither role ever had a
+screen, a holder, or backing data beyond `venues` — they were retired from the
+catalog rather than left as roles that do nothing. If you were about to add someone
+as one, add them as a role that actually does something instead, or ask about
+building the feature first.
 
 ## Getting in
 
@@ -146,20 +149,6 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 
 On the **Documents** tab, filter by Pending/Approved/Rejected/All. **Approve** or **Reject** (a reason is required) a team's waiver, insurance proof or roster form; **Remove** takes one down entirely. **Add a document on a team's behalf** records paperwork a team sent you some other way (email, in person) — it still needs a review, by anyone with the permission, not necessarily you. Approving or rejecting notifies the team's contact who uploaded it; documents you add on their behalf don't notify anyone (there's no one new to tell).
 
-## Logistics
-
-You'd handle venues, fields, equipment, transport and match-day operations.
-
-<!-- BEGIN permissions: tournament:logistics -->
-_Generated from the platform permission catalog. Edit the catalog, not this table — run `npm run docs:permissions` to refresh it._
-
-| Permission | What it allows | Reach |
-|---|---|---|
-| **Manage tournament logistics** | Venues, fields, equipment, transportation, and match-day operations | This tournament |
-<!-- END permissions -->
-
-**No logistics screen exists yet.** Read-only Entries and Categories only.
-
 ## Communications
 
 You'd send tournament-wide announcements and notices.
@@ -173,20 +162,6 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 <!-- END permissions -->
 
 On the **Announcements** tab, write a **title** and a **message**, choose who gets it (**every team not declined**, or **accepted teams only**) and choose **Post announcement**. It appears on each team's entry page and in their notification bell. Teams whose entry was declined or withdrawn are never addressed, and a team with several contacts gets one notification per person. A post can't be edited: **Retract** hides it from the entry pages (the bell notification already sent stays) and you can post a corrected one. Posting and retracting are audited. A team only sees announcements once its team manager has signed in, so the organizer still has to tell each team to log in.
-
-## Volunteer coordinator
-
-You'd recruit volunteers and manage their shifts and availability.
-
-<!-- BEGIN permissions: tournament:volunteer_coordinator -->
-_Generated from the platform permission catalog. Edit the catalog, not this table — run `npm run docs:permissions` to refresh it._
-
-| Permission | What it allows | Reach |
-|---|---|---|
-| **Manage volunteers** | Volunteer recruitment, assignments, shifts, and availability | This tournament |
-<!-- END permissions -->
-
-**No volunteers screen exists yet.** Read-only Entries and Categories only.
 
 ## Referee coordinator
 

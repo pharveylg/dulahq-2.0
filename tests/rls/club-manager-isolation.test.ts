@@ -3590,3 +3590,134 @@ describe('tournament entry documents (phase15d)', () => {
     for (const id of [secId, orgzId, trId, mgrId, coachId, othId]) await adminClient.auth.admin.deleteUser(id);
   });
 });
+
+/**
+ * Retiring logistics and volunteer_coordinator (phase15e). Both were seeded roles
+ * (phase8b) with a permission and zero backing feature, zero UI, zero holders. Neither
+ * role string, nor the two permission keys they existed for, should be usable any more.
+ */
+describe('logistics and volunteer_coordinator are retired (phase15e)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const orgzEmail = `rls-retire-orgz-${tag}@rls-test.local`;
+  let orgzId: string;
+  let organizerClient: ReturnType<typeof createClient>;
+  let tId: string;
+
+  it('sets up a tournament with an organizer', async () => {
+    orgzId = (await createTestUser(orgzEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Retire Cup', org_id: orgA.id, slug: `rls-retire-${tag}` }).select().single(), 't').id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: orgzId, role: 'organizer', org_id: orgA.id }).select().single(), 'organizer');
+    organizerClient = await signInAs(orgzEmail);
+  });
+
+  it('the role strings are refused by tournament_staff\'s own check constraint', async () => {
+    for (const role of ['logistics', 'volunteer_coordinator']) {
+      const { error } = await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: orgzId, role, org_id: orgA.id });
+      expect(error).not.toBeNull();
+      expect(error!.code).toBe('23514');
+    }
+  });
+
+  it('neither role has any row in role_permission_defaults any more', async () => {
+    const { data } = await adminClient.from('role_permission_defaults').select('role').in('role', ['logistics', 'volunteer_coordinator']);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('the two permission keys they existed for are gone from the catalog entirely -- including the organizer\'s own grant of them', async () => {
+    const { data: perms } = await adminClient.from('permissions').select('key').in('key', ['manage_tournament_logistics', 'manage_tournament_volunteers']);
+    expect(perms ?? []).toHaveLength(0);
+    const { data: defaults } = await adminClient.from('role_permission_defaults').select('role, permission_key').in('permission_key', ['manage_tournament_logistics', 'manage_tournament_volunteers']);
+    expect(defaults ?? []).toHaveLength(0);
+  });
+
+  it('has_tournament_permission returns false for the retired keys, even for the organizer', async () => {
+    const a = await organizerClient.rpc('has_tournament_permission', { p_permission_key: 'manage_tournament_logistics', p_tournament_id: tId });
+    const b = await organizerClient.rpc('has_tournament_permission', { p_permission_key: 'manage_tournament_volunteers', p_tournament_id: tId });
+    expect(a.data).toBe(false);
+    expect(b.data).toBe(false);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    await adminClient.auth.admin.deleteUser(orgzId);
+  });
+});
+
+/**
+ * Tournament poster upload (phase16a). set_tournament_poster() is the checked write path
+ * -- tournaments_write is is_org_admin-only, so an Organizer (tournament_staff, not an org
+ * member) needs a dedicated RPC, same shape as set_public_listing/set_listing_block.
+ */
+describe('tournament poster (phase16a)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const orgzEmail = `rls-poster-orgz-${tag}@rls-test.local`;
+  const trEmail = `rls-poster-tr-${tag}@rls-test.local`;
+  let orgzId: string; let trId: string;
+  let organizerClient: ReturnType<typeof createClient>;
+  let treasurerClient: ReturnType<typeof createClient>;
+  let tId: string;
+  // Set inside the platform-admin test; cleaned up in the final "cleans up" it() rather
+  // than at the end of that same test, so a failed assertion there doesn't orphan it --
+  // exactly the trap the `05e96924` leftover from this test's own first (failing) run
+  // fell into.
+  let paId: string | null = null;
+  const paEmail = `rls-poster-pa-${tag}@rls-test.local`;
+
+  it('sets up a tournament with an organizer and a treasurer', async () => {
+    orgzId = (await createTestUser(orgzEmail, 'audience')).publicUser.id;
+    trId = (await createTestUser(trEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Poster Cup', org_id: orgA.id, slug: `rls-poster-${tag}` }).select().single(), 't').id;
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: orgzId, role: 'organizer', org_id: orgA.id }).select().single(), 'organizer');
+    must(await adminClient.from('tournament_staff').insert({ tournament_id: tId, user_id: trId, role: 'treasurer', org_id: orgA.id }).select().single(), 'treasurer');
+    organizerClient = await signInAs(orgzEmail);
+    treasurerClient = await signInAs(trEmail);
+  });
+
+  it('the organizer (manage_tournament) can set a poster; a treasurer cannot', async () => {
+    const url = 'https://example.supabase.co/storage/v1/object/public/tournament-posters/rls/poster-1';
+    const { error } = await organizerClient.rpc('set_tournament_poster', { p_tournament_id: tId, p_poster_url: url });
+    expect(error).toBeNull();
+    expect(must(await adminClient.from('tournaments').select('poster_url').eq('id', tId).single(), 't').poster_url).toBe(url);
+
+    const denied = await treasurerClient.rpc('set_tournament_poster', { p_tournament_id: tId, p_poster_url: 'https://x/y' });
+    expect(denied.error).not.toBeNull();
+  });
+
+  it('an org admin can set it too, and clearing with null works', async () => {
+    expect((await orgAdminAClient.rpc('set_tournament_poster', { p_tournament_id: tId, p_poster_url: 'https://example.supabase.co/x' })).error).toBeNull();
+    expect((await organizerClient.rpc('set_tournament_poster', { p_tournament_id: tId, p_poster_url: null })).error).toBeNull();
+    expect(must(await adminClient.from('tournaments').select('poster_url').eq('id', tId).single(), 't').poster_url).toBeNull();
+  });
+
+  it('a platform admin can set the poster on a tournament belonging to an org they hold no staff role in', async () => {
+    paId = (await createTestUser(paEmail, 'platform_admin')).publicUser.id;
+    must(await adminClient.from('platform_admins').insert({ email: paEmail }).select().single(), 'pa');
+    const paClient = await signInAs(paEmail);
+    const { error } = await paClient.rpc('set_tournament_poster', { p_tournament_id: tId, p_poster_url: 'https://example.supabase.co/z' });
+    expect(error).toBeNull();
+  });
+
+  it('a suspended host org refuses, even for the organizer', async () => {
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+    const r = await organizerClient.rpc('set_tournament_poster', { p_tournament_id: tId, p_poster_url: 'https://example.supabase.co/w' });
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    expect(r.error).not.toBeNull();
+  });
+
+  it('is audited', async () => {
+    const { data } = await adminClient.from('audit_log').select('action').eq('entity_id', tId).eq('action', 'tournament.poster.updated');
+    expect((data ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('audit_log').delete().eq('entity_id', tId);
+    await adminClient.from('tournament_staff').delete().eq('tournament_id', tId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    for (const id of [orgzId, trId]) await adminClient.auth.admin.deleteUser(id);
+    if (paId) {
+      await adminClient.from('platform_admins').delete().eq('email', paEmail);
+      await adminClient.auth.admin.deleteUser(paId);
+    }
+  });
+});

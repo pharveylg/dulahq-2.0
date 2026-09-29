@@ -2801,6 +2801,200 @@ inline base64; this is the first R2-backed document store).
 
 ---
 
+## 0u. Retiring logistics and volunteer coordinator (2026-09-28)
+
+`phase15e`. The proposal in `docs/proposals/tournament-roles-and-entrant-portal.md`
+asked, before slice 4 landed, whether to build slices 5–6 (an Officials tab; new
+tables for venues/arrivals and volunteer shifts) or retire the two roles with no
+holder, no screen, and no plan to get one. Decided: retire.
+
+Unlike `review_tournament_entry` (a permission seeded ahead of its feature, on a
+role — team_coordinator — that stayed and eventually got one, phase15b), these two
+roles themselves are gone, so their permission keys went with them —
+`manage_tournament_logistics`/`manage_tournament_volunteers` are removed from the
+catalog outright, same P0-2 precedent as the three dead guardian permissions:
+zero consumers anywhere, confirmed live before deleting, not assumed. This also
+removes the **organizer's own grant** of both keys (phase8b had seeded them there
+too) — an org-wide permission with no screen and no role left to delegate it to
+isn't worth keeping "in case".
+
+Checked first, not assumed: zero `tournament_staff` rows held either role and zero
+`tournament_staff_permission_grants` rows referenced either key. The migration
+itself refuses to run if a live row is ever found holding one of the retired
+roles, rather than deleting staff out from under someone.
+
+`tournament_staff.role`'s CHECK constraint now accepts seven roles (was nine);
+`role_permission_defaults.role`'s separate CHECK narrowed the same way. The
+Add-staff role dropdown (`StaffPanel.tsx`) and the how-to guides had both roles
+removed rather than left rendering a choice the database now refuses.
+
+**Verified:** RLS suite 290 → 296: the role strings refused by the check
+constraint, both roles absent from `role_permission_defaults`, both permission
+keys absent from `permissions` entirely, and `has_tournament_permission` false
+for both keys even for the organizer. `npm run docs:permissions:check` clean
+after removing the two guide sections (a role with zero `role_permission_defaults`
+rows throws rather than rendering, by the generator's own design — confirmed the
+failure mode before fixing it, not just fixing on faith).
+
+---
+
+## 0v. Tournament poster upload (2026-09-28)
+
+`phase16a`. `tournaments.poster_url` (the public tournament directory's 2:3 poster
+cards, §0r) had a reader in three places and a writer nowhere — the only thing
+that had ever set it was `scripts/seed-directory-art.mjs`, a dev seeding script.
+
+Built in one shared pair of pieces, used from both surfaces the user asked for
+(the organizer console, which an org admin already reaches with full access via
+`can()`'s own `is_org_admin` fallback; and the platform console, for any
+tournament regardless of org):
+
+- **`set_tournament_poster(tournament_id, poster_url)`** — the checked write.
+  `tournaments_write` is `is_org_admin(org_id)`-only, so an Organizer
+  (tournament_staff, not an org member) has no direct write path to this column
+  at all — same shape as `set_public_listing`/`set_listing_block`. Authorizes on
+  `is_platform_admin() or is_org_admin(org_id) or has_tournament_permission
+  ('manage_tournament', tournament_id)` — `manage_tournament` is the Organizer's
+  own "configure tournament identity" permission (its phase8b description
+  already says so), no new key needed. Gated on `org_access_allowed` like every
+  other tournament write. Audited as `tournament.poster.updated`.
+- **`src/lib/tournament-poster-actions.ts`** — the actual bytes. The
+  `tournament-posters` Storage bucket (public read, 5MB limit, four image mime
+  types — all enforced by Storage itself, confirmed live rather than assumed)
+  has `storage.objects` RLS that is **platform-admin-only** for every write,
+  found while building this — so an Organizer or org admin uploading directly
+  from their own session would always be refused. Fixed the same way club
+  documents and IT-issued logins both already solve "someone who isn't a
+  platform admin needs to write a protected resource": upload via the service
+  role first (`serviceClient()`, phase14a's module — the one place it's used),
+  then call the checked RPC with the caller's own session; a refusal there
+  removes the just-uploaded object again. Storage path is
+  `<orgSlug>/<tournamentSlug>-poster`, deliberately **without** a file
+  extension — the seed script's own `-poster.png` path meant switching image
+  formats orphaned the old object; an extension-less key is stable across
+  format changes since the browser reads the real type from the response's
+  `Content-Type`, not the URL.
+- **`TournamentPosterUpload.tsx`** — one component, both surfaces. Upload,
+  replace, remove; a `canManage` prop the caller computes (the organizer
+  console's existing `manage_tournament` check; always true on the platform
+  console, which is already platform-admin-gated to be on that page at all).
+
+Wired into the organizer console's **Public listing** tab (next to the existing
+"Poster: uploaded" preview line, which had nothing behind it until now) and the
+platform console's **Listings** tab (one card per tournament row, clubs
+unaffected — posters are tournament-only).
+
+**Verified:** RLS suite 296 → 303: organizer can set, treasurer can't; org admin
+can set and clear with null; a platform admin can set a poster on a tournament
+in an org they hold no staff role in at all; a suspended host org refuses even
+the organizer; audited. One test cleanup bug caught by re-running the suite
+afterward and finding its own leftover: the platform-admin sub-test deleted its
+throwaway `platform_admins` row and user at the end of its own test body rather
+than in the describe's final cleanup, so the first (failing, pre-migration) run
+left one behind when the assertion threw before reaching it — moved to the
+final cleanup, same lesson this file has recorded before about fixture cleanup
+needing to survive a failing assertion, not just the happy path.
+
+Driven live end-to-end as the Tiger Cup organizer: uploaded a test image (the
+sandboxed browser can't drive a native file picker, so the file was attached
+via `DataTransfer` directly on the hidden input, a documented workaround, not a
+first for this project), confirmed the new object under
+`davao-unity-sports/tiger-cup-poster` in the database, removed it, saw the
+"no poster" placeholder state render correctly, then re-ran `scripts/seed-
+directory-art.mjs` to restore the showcase tournament's real poster (skips
+anything that already has one, so re-running was safe). Also found and cleaned
+up two unrelated leftover fixtures from an earlier session that had never been
+removed (`docs-fixture`'s "Debug Cup" tournament with its own seeded poster,
+and one leftover `rls-test.local` platform admin) while verifying this —
+neither was caused by this phase, both are gone now. Confirmed the
+platform console's Listings tab renders a poster card per tournament row,
+including the correct empty state for one that has never had a poster.
+`npx tsc --noEmit` clean.
+
+---
+
+## 0w. Org accent theming (2026-09-28)
+
+The user's own framing: "try applying the org's accent color as a dominant color
+scheme for their interface after login." Two scoping questions were asked and
+answered before building, both taking the narrower option: (1) themed only
+within that org's own pages (club console, tournament console) — the platform
+console, public directory and anything not tied to one org stay the default
+green; (2) for someone who holds roles at more than one org, whichever org the
+*page* belongs to, not one fixed "primary" org for the whole session — a club
+page uses that club's org, a tournament page uses that tournament's org, no
+per-user "my org" concept needed.
+
+**The persistent top nav is deliberately NOT themed**, and this is a real
+architectural limit, not an oversight: the nav lives in the root layout,
+rendered as a sibling *before* `{children}`, not an ancestor of a nested
+route's own layout — so a CSS custom property set inside a club or tournament
+layout literally cannot cascade up to it (CSS inheritance only flows to
+descendants). Reaching the nav would need the root layout itself to resolve
+per-request org context, which no route segment currently threads up to it.
+Decided this was fine, even good: the nav stays Dulà HQ's own brand chrome,
+consistent everywhere; the workspace below becomes the org's.
+
+**`src/lib/org-theme.ts`** — pure, dependency-free (same discipline as
+`crest.ts`), turns one `#RRGGBB` into the small set of variants globals.css
+itself needs: an HSL-derived hover shade, soft tints for *both* themes, and an
+`onAccent` text color computed from WCAG relative luminance so a pale accent
+(tested with a bright yellow) gets dark text instead of unreadable white-on-
+pale. Invalid or missing input — an org's `accent` column is a free-typed
+field the platform console already lets an admin edit — falls back to the
+existing default green, never left unstyled or fed straight into a `<style>`
+tag unvalidated.
+
+**A real CSS bug, caught only by checking the rendered color, not by reading
+the component:** the first version set `--accent`/`--accent-hover`/etc. on the
+scoping div but buttons stayed the default green regardless. Root cause:
+`--accent-gradient: var(--accent);` is declared exactly once, at `:root` in
+globals.css, and a custom property's *computed* value is fixed wherever it is
+actually declared and then inherited as that already-resolved string — NOT
+re-evaluated against `--accent` at whatever element it's used from. So every
+descendant inherited `:root`'s frozen `#059669`, no matter what `--accent` was
+overridden to further down. Fixed by redeclaring `--accent-gradient: var(--accent);`
+inside the org-accent scope too, so it gets freshly resolved there. Grepped
+globals.css afterward for any other custom property whose value is itself
+`var(--accent...)` — only the one.
+
+**`OrgAccentTheme.tsx`** wraps its children in a `.org-accent-scope` div plus a
+`<style>` tag (not an inline `style` attribute) so the dark-mode soft tints can
+be set with a `:root[data-theme="dark"] .org-accent-scope { ... }` rule that
+reads the theme off `<html>` regardless of where the div sits — matching
+globals.css's own light/dark split rather than assuming one pale tint works on
+both a white and a near-black surface, which an arbitrary org color can't.
+
+**Two new layouts**, both server components reading the org's `accent` through
+the same RLS-respecting client every page under them already uses, so nothing
+about access changes:
+- `src/app/c/[clubSlug]/layout.tsx` — `clubs.org_id → organizations.accent`.
+  Works for both staff (any listing status, via `clubs_member_read`) and a
+  guest on a *listed* club's public page (the public read policy); a private
+  club a guest can't see just returns no row, so the page renders unthemed and
+  its own sign-in prompt is untouched.
+- `src/app/tm/[orgSlug]/[tournamentSlug]/layout.tsx` — `organizations.accent`
+  straight off the org slug already in the URL, no tournament join needed.
+  This route is never public, so there's no guest branch to think about.
+
+**Not themed, on purpose, to keep this pass scoped:** the entrant portal
+(`/entry/<id>`) — its host org's accent could be added the same way, but
+`entrant_entry_portal()` doesn't currently return one and this wasn't asked
+for; a clean follow-up if wanted, not assumed here.
+
+**Verified:** unit suite 69 → 79 (`org-theme.test.ts`: fallback on invalid/
+missing input, every derived value is a valid hex, luminance-based text-color
+flip, hover always darker or equal, light soft tint lighter than dark soft
+tint for the same accent, deterministic, case-insensitive input). Driven live:
+CDO FC's page (org accent `#2563EB`, blue) showed its "Listed" chip and
+primary buttons in blue while the top nav stayed the default dark green — the
+`--accent-gradient` bug was caught and fixed at exactly this step, before it
+was trusted. Tiger Cup's console (Davao Unity Sports, `#7C3AED`, purple)
+showed its active tab and primary buttons in purple after the fix, confirmed
+in both dark and light theme. `npx tsc --noEmit` clean.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |

@@ -1,6 +1,6 @@
 # Tournament roles with no screen, and the entrant portal
 
-_Written 2026-09-25. Status: **slice 1 (entrant portal) built 2026-09-26** (`/entry/<id>`, phase15a: entry status, invoices, payment instructions, payment submission by the team manager). Slice 2 (team coordinator notes and flags) built 2026-09-26, phase15b. Slice 3 (announcements to entrants) built 2026-09-26, phase15c. Slice 4 (entry documents) built 2026-09-27, phase15d. Slices 5 and 6 not started._
+_Written 2026-09-25. Status: **slice 1 (entrant portal) built 2026-09-26** (`/entry/<id>`, phase15a: entry status, invoices, payment instructions, payment submission by the team manager). Slice 2 (team coordinator notes and flags) built 2026-09-26, phase15b. Slice 3 (announcements to entrants) built 2026-09-26, phase15c. Slice 4 (entry documents) built 2026-09-27, phase15d. **Decision made and applied 2026-09-28 (phase15e): logistics and volunteer coordinator retired from the catalog** — see slice 6 below. Slice 5 not started._
 
 ## State when this was written
 
@@ -42,14 +42,21 @@ applications. Build the portal first because three of the roles depend on it.
    Needs the portal for uploads.
 5. **Referee coordinator.** An Officials tab over the existing tables. Match-level
    assignment stays in the tournament engine, because matches live in its JSON blob.
-6. **Logistics and volunteers.** New tables with no existing backing: venues and per-team
-   arrival and accommodation notes; volunteer shifts for people who may not have
-   accounts. Largest and least certain.
+6. ~~**Logistics and volunteers.**~~ **Decided and done (phase15e, 2026-09-28): retired,
+   not built.** New tables with no existing backing (venues and per-team arrival/
+   accommodation notes; volunteer shifts for people who may not have accounts) would
+   have been the largest and least certain slice, for two roles that never had a
+   holder or a screen. `manage_tournament_logistics`/`manage_tournament_volunteers`
+   are removed from the permission catalog outright — including the organizer's own
+   grant of them, since nothing consumed either, ever — and `tournament_staff.role`
+   no longer accepts `logistics` or `volunteer_coordinator`. Revisit as a fresh
+   proposal if a real need shows up; nothing here is reserved for it.
 
 ## Decision needed
 
-Build slices 1 to 4, and **retire logistics and volunteer coordinator from the catalog**
-until someone needs them, rather than leave roles that do nothing?
+~~Build slices 1 to 4, and retire logistics and volunteer coordinator from the catalog
+until someone needs them, rather than leave roles that do nothing?~~ **Decided: yes to
+both**, and both are done (see above).
 
 ## Risks
 

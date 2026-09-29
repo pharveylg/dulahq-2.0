@@ -126,8 +126,8 @@ Two facts worth knowing:
 
 1. In the console, open **Staff**.
 2. Under **Add staff**, enter the person's **email** and choose their **role**
-   (Organizer, Team coordinator, Secretary, Treasurer, Logistics, Communications,
-   Volunteer coordinator, Referee coordinator, or IT admin), then **Add**.
+   (Organizer, Team coordinator, Secretary, Treasurer, Communications, Referee
+   coordinator, or IT admin), then **Add**.
 
 They need an existing Dulà HQ account, the same as club staff. **Remove** archives
 someone rather than deleting them, so the record of who staffed the tournament is
