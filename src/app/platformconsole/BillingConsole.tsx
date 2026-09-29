@@ -41,12 +41,28 @@ type Utilization = {
   periodStart: string;
   periodEnd: string;
 };
+type InfraMetric = { metricKey: string; value: number; unit: string; periodStart: string };
+
+// Reference points for "how close to a real cost" -- not billed limits inside this
+// app, just the known, stable, publicly-published free-tier ceilings for the infra
+// this app actually runs on (Supabase project is on the free tier per CLAUDE.md §8;
+// R2's free allowance is flat and doesn't depend on a plan). Crossing one of these
+// is the actual cost-implication signal on a project that isn't paying for any of
+// this yet -- a dollar estimate would be more precise once Supabase is on a paid
+// plan, but guessing a plan tier here would be more misleading than useful.
+const INFRA_REFERENCE: Record<string, { limit: number; label: string; note: string }> = {
+  supabase_db_size_gb: { limit: 0.5, label: 'Supabase database', note: 'Free tier cap' },
+  supabase_storage_gb: { limit: 1, label: 'Supabase file storage', note: 'Free tier cap' },
+  supabase_auth_mau: { limit: 50000, label: 'Supabase monthly active users', note: 'Free tier cap' },
+  r2_storage_gb: { limit: 10, label: 'Cloudflare R2 storage', note: 'Always-free allowance, any plan' },
+};
+const R2_OVERAGE_USD_PER_GB = 0.015; // Cloudflare's own published flat rate, not plan-dependent
 
 function Status({ value }: { value: string }) {
   return <span className="chip">{paymentStatusLabel(value)}</span>;
 }
 
-export default function BillingConsole({ invoices, payments, orgs, accounts, usageEvents, subscriptions, utilization }: { invoices: Invoice[]; payments: Payment[]; orgs: Org[]; accounts: BillingAccount[]; usageEvents: UsageEvent[]; subscriptions: Subscription[]; utilization: Utilization[] }) {
+export default function BillingConsole({ invoices, payments, orgs, accounts, usageEvents, subscriptions, utilization, infraMetrics }: { invoices: Invoice[]; payments: Payment[]; orgs: Org[]; accounts: BillingAccount[]; usageEvents: UsageEvent[]; subscriptions: Subscription[]; utilization: Utilization[]; infraMetrics: InfraMetric[] }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -86,8 +102,62 @@ export default function BillingConsole({ invoices, payments, orgs, accounts, usa
     });
   }
 
+  const infraByKey = new Map(infraMetrics.map((m) => [m.metricKey, m]));
+  const infraPeriod = infraMetrics[0]?.periodStart;
+  const r2Metric = infraByKey.get('r2_storage_gb');
+  const r2OverageGb = r2Metric ? Math.max(0, r2Metric.value - INFRA_REFERENCE.r2_storage_gb.limit) : 0;
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      <div className="card">
+        <div className="page-header" style={{ marginBottom: 10 }}>
+          <div><h2 style={{ fontSize: 18 }}>Infrastructure costs</h2><p className="subtitle">What running Dula HQ itself costs, platform-wide — not billed to any organization</p></div>
+        </div>
+        {infraMetrics.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No infra snapshot yet — the monthly job records these on the 1st.</p>
+        ) : (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 8 }}>
+              {infraPeriod && new Date(infraPeriod).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {Object.entries(INFRA_REFERENCE).map(([key, ref]) => {
+                const metric = infraByKey.get(key);
+                if (!metric) return null;
+                const displayVal = metric.unit === 'GB' ? metric.value.toFixed(3) : Math.round(metric.value);
+                const over = metric.value > ref.limit;
+                const pct = Math.min(100, (metric.value / ref.limit) * 100);
+                return (
+                  <div key={key} style={{ fontSize: 12.5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span>{ref.label}</span>
+                      <span style={over ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
+                        {displayVal} {metric.unit} / {ref.limit} {metric.unit} ({ref.note})
+                      </span>
+                    </div>
+                    <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 3 }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: over ? 'var(--danger)' : 'var(--accent)', borderRadius: 2 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {r2Metric && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
+                {r2OverageGb > 0
+                  ? `R2 storage is ${r2OverageGb.toFixed(2)} GB past its always-free allowance — roughly $${(r2OverageGb * R2_OVERAGE_USD_PER_GB).toFixed(2)}/month at Cloudflare's published rate.`
+                  : 'R2 storage is within its always-free allowance — $0/month.'}
+              </p>
+            )}
+            <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 10, fontStyle: 'italic' }}>
+              Vercel bandwidth and compute aren't tracked here — nothing in this app's own
+              data can approximate them; seeing real numbers would need a separate
+              connection to Vercel's own usage API.
+            </p>
+          </>
+        )}
+      </div>
+
       <div className="card">
         <div className="page-header" style={{ marginBottom: 10 }}>
           <div><h2 style={{ fontSize: 18 }}>Platform billing</h2><p className="subtitle">Simulation/manual QR mode — no payment provider connected</p></div>

@@ -3339,6 +3339,83 @@ Billing tab (the monthly cron is the only trigger; add one later if waiting for 
 monthly job — tournaments already have their own lifecycle elsewhere in the console;
 revisit if it turns out to matter for pricing.
 
+### Follow-up, same day: infrastructure cost visibility (`phase16k`)
+
+Immediately after the above, the user asked for something genuinely different:
+"metered usage should capture micro-transactions that could have cost implications
+with systems like supabase, firebase, vercel, etc" — not what any org's plan should
+be measured against (§0za's own catalog above), but what running Dula HQ itself
+costs to operate.
+
+**"Micro-transactions" isn't literally achievable.** Checked first: none of
+Supabase, Vercel, or Cloudflare expose individual-request cost data via any API —
+all three report usage as periodic rollups (daily/monthly totals), the same
+gauge-style pattern already built for the business meters, just pointed at
+infrastructure instead of business entities. Confirmed with the user directly
+(asked, not assumed) on three real forks:
+
+1. **Which providers** — Vercel + Supabase + R2 (this app's actual stack). Firebase
+   isn't used anywhere in this codebase — nothing to track there unless it's ever
+   added.
+2. **New credentials or not** — both Vercel's usage API and Supabase's Management
+   API need a personal/project access token that doesn't exist in this project's
+   env vars today (only the anon/service-role/R2 keys do). **Chose: estimate from
+   data already in the app, no new credentials.**
+3. **Per-org or platform-wide** — **platform-wide.** Most of this genuinely isn't
+   attributable to one tenant's traffic (Vercel bandwidth and Supabase compute are
+   shared across every org).
+
+**What "estimate from data already in the app" actually meant, once checked:**
+three of the four metrics turned out to be *exact*, not estimates — `pg_database_size(current_database())`,
+`sum(storage.objects.metadata->>'size')`, and `org_storage_events` (already built
+for §0za, just summed with no org filter for the platform total) are all real
+Postgres data, not approximations. Only `supabase_auth_mau` is a genuine proxy
+(`auth.users.last_sign_in_at` in the current month stands in for Supabase's own
+MAU billing metric, which fires on any authenticated request, not just sign-in —
+documented as an approximation, not claimed as exact).
+
+**Vercel has no proxy at all**, and this app doesn't pretend otherwise — nothing in
+this Postgres database can stand in for bandwidth or compute, since nothing here
+logs individual HTTP requests. The UI says so directly rather than inventing a
+number (`BillingConsole.tsx`): *"Vercel bandwidth and compute aren't tracked here
+— nothing in this app's own data can approximate them; seeing real numbers would
+need a separate connection to Vercel's own usage API."*
+
+**New table `platform_infra_metrics`** (metric_key, value, unit, period, unique
+per metric+period) — platform-admin-only read, written only by
+`record_platform_infra_metric_system()` (unchecked, service_role-only, same split
+discipline as §0za's own functions) which `run_monthly_infra_snapshot()` calls
+directly for the same reason `run_monthly_usage_snapshot()` does: it's already the
+trusted gate. Scheduled alongside the existing monthly job (`15 1 1 * *`, 15
+minutes after, so they don't race).
+
+**Cost framing without a fabricated dollar figure:** the underlying Supabase
+project is still on the **free tier** (CLAUDE.md §8), so a computed "$X/month"
+against paid-tier overage pricing would describe spending that isn't happening.
+Instead, each Supabase metric shows against its real, stable, publicly-published
+free-tier cap (DB 0.5GB, storage 1GB, 50,000 MAU) — the actual cost-implication
+signal on a project that isn't paying for any of this yet is *how close to the
+free ceiling*, not a hypothetical bill. R2 gets the one place a real number *is*
+defensible: its always-free allowance (10GB) doesn't depend on a plan tier at all,
+so overage past it is priced with Cloudflare's own flat, stable $0.015/GB-month
+rate — shown as "$0/month" while under the allowance, a real estimate once over
+it.
+
+### Verified
+
+Confirmed the authorization boundary directly before building any UI: a platform
+admin (with the `email` JWT claim `is_platform_admin()` actually checks — an
+earlier manual test without it read as "not admin", a test-setup gap, not a
+policy bug) reads all four metrics; the same org admin who was refused §0za's
+storage events is refused here too; ran `run_monthly_infra_snapshot()` manually
+against the live project and got real numbers (24MB DB, 14 MAU, ~215KB Supabase
+Storage, 0 R2 so far — nothing's been uploaded since §0za's "track going forward"
+choice). RLS suite grew again (platform admin reads / org admin and anon refused /
+the recorder and snapshot functions are service_role-only / a real snapshot run
+produces exactly the four expected metric rows). Driven live in the browser as the
+platform admin persona: real numbers, correct progress bars, no console errors.
+`npx tsc --noEmit` and `npm run build` both clean.
+
 ---
 
 ## 1. The two deployments

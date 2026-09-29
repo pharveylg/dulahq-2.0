@@ -3935,3 +3935,51 @@ describe('usage metering: storage events + monthly snapshot (phase16e-16i)', () 
     await adminClient.from('org_storage_events').delete().eq('org_id', orgA.id);
   });
 });
+
+/**
+ * Infra cost visibility (phase16k). A different concern from the org-facing
+ * billing_usage_meters catalog above: platform_infra_metrics tracks what running
+ * Dula HQ itself costs (Supabase DB/storage/MAU, R2 storage total), platform-wide,
+ * not attributed to any org -- so it's platform-admin-only, not is_org_member-gated.
+ */
+describe('platform infra metrics (phase16k)', () => {
+  const platformAdminEmail = `rls-infra-admin-${crypto.randomUUID().slice(0, 8)}@rls-test.local`;
+  let platformAdminUserId: string;
+  let platformAdminClient: ReturnType<typeof createClient>;
+
+  it('sets up a platform admin', async () => {
+    const admin = await createTestUser(platformAdminEmail, 'platform_admin');
+    platformAdminUserId = admin.publicUser.id;
+    must(await adminClient.from('platform_admins').insert({ email: platformAdminEmail }).select().single(), 'platform_admins insert');
+    platformAdminClient = await signInAs(platformAdminEmail);
+  });
+
+  it('run_monthly_infra_snapshot (service_role) produces real rows for the current month', async () => {
+    const { error } = await adminClient.rpc('run_monthly_infra_snapshot');
+    expect(error).toBeNull();
+    const periodStart = new Date().toISOString().slice(0, 8) + '01';
+    const { data } = await adminClient.from('platform_infra_metrics').select('metric_key, value, unit').eq('period_start', periodStart);
+    const keys = (data ?? []).map((r: any) => r.metric_key).sort();
+    expect(keys).toEqual(['r2_storage_gb', 'supabase_auth_mau', 'supabase_db_size_gb', 'supabase_storage_gb']);
+    for (const row of data ?? []) expect(Number(row.value)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('run_monthly_infra_snapshot and the unchecked recorder are service_role-only', async () => {
+    expect((await platformAdminClient.rpc('run_monthly_infra_snapshot')).error).not.toBeNull();
+    expect((await platformAdminClient.rpc('record_platform_infra_metric_system', { p_metric_key: 'supabase_db_size_gb', p_value: 1, p_unit: 'GB', p_period_start: '2026-01-01', p_period_end: '2026-01-31' })).error).not.toBeNull();
+  });
+
+  it('a platform admin can read platform_infra_metrics; an org admin and anon cannot', async () => {
+    const asAdmin = await platformAdminClient.from('platform_infra_metrics').select('metric_key');
+    expect(asAdmin.data?.length ?? 0).toBeGreaterThan(0);
+    const asOrgAdmin = await orgAdminAClient.from('platform_infra_metrics').select('metric_key');
+    expect(asOrgAdmin.data ?? []).toHaveLength(0);
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    expect((await anon.from('platform_infra_metrics').select('metric_key')).data ?? []).toHaveLength(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('platform_admins').delete().eq('email', platformAdminEmail);
+    await adminClient.auth.admin.deleteUser(platformAdminUserId);
+  });
+});

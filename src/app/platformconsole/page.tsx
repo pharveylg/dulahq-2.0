@@ -116,6 +116,7 @@ export default async function PlatformConsolePage({
   let billingUsageEvents: any[] = [];
   let billingSubscriptions: any[] = [];
   let billingUtilization: any[] = [];
+  let billingInfraMetrics: any[] = [];
   let listingRows: ListingRow[] = [];
   let loginRows: any[] = [];
   if (activeTab === 'logins') {
@@ -206,6 +207,18 @@ export default async function PlatformConsolePage({
       });
     }
     billingUtilization.sort((a, b) => a.orgName.localeCompare(b.orgName) || a.meterLabel.localeCompare(b.meterLabel));
+
+    // Infra cost visibility (phase16k): what running Dula HQ itself costs,
+    // platform-wide -- a different concern from the org-facing utilization
+    // above. Latest period per metric, same "most recent row wins" pattern.
+    const { data: infraRows } = await db.from('platform_infra_metrics').select('metric_key, value, unit, period_start').order('period_start', { ascending: false });
+    const seenMetric = new Set<string>();
+    billingInfraMetrics = [];
+    for (const row of infraRows ?? []) {
+      if (seenMetric.has(row.metric_key)) continue;
+      seenMetric.add(row.metric_key);
+      billingInfraMetrics.push({ metricKey: row.metric_key, value: Number(row.value), unit: row.unit, periodStart: row.period_start });
+    }
   }
 
   let activeSession = null;
@@ -253,7 +266,7 @@ export default async function PlatformConsolePage({
         {activeTab === 'directory' && <Directory orgs={orgs} />}
         {activeTab === 'provision' && <ProvisionForm />}
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
-        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} utilization={billingUtilization} />}
+        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} utilization={billingUtilization} infraMetrics={billingInfraMetrics} />}
         {activeTab === 'listings' && <Listings rows={listingRows} />}
         {activeTab === 'logins' && <ProvisionLoginPanel scope="platform" scopeId={null} logins={loginRows} allowReissueByEmail />}
         {activeTab === 'troubleshoot' && <Troubleshoot orgs={orgs} activeSession={activeSession} />}
