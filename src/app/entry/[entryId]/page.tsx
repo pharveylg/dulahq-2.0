@@ -4,11 +4,13 @@ import { createClient } from '@/lib/supabase/server';
 import { formatMoney } from '@/lib/billing';
 import EntryPaymentForm from './EntryPaymentForm';
 import EntryDocuments, { type PortalDocument } from './EntryDocuments';
+import OrgAccentTheme from '@/components/OrgAccentTheme';
+import PosterWatermark from '@/components/PosterWatermark';
 
 type Submission = { id: string; amount: number; status: string; method: string; reference_number: string | null; reviewer_note: string | null; submitted_at: string };
 type Invoice = { id: string; invoice_number: string; status: string; currency: string; total: number; amount_paid: number; due_at: string | null; pending_amount: number; submissions: Submission[] };
 type Portal = {
-  entry: { id: string; team_name: string; status: string; tournament_name: string; host_org_name: string; category_name: string | null };
+  entry: { id: string; team_name: string; status: string; tournament_name: string; tournament_poster_url: string | null; host_org_name: string; host_org_accent: string | null; category_name: string | null };
   my_role: string;
   instructions: string | null;
   announcements: { id: string; title: string; body: string; author_name: string | null; created_at: string }[];
@@ -56,8 +58,10 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
   const canUpload = portal.my_role === 'team_manager' || portal.my_role === 'coach';
 
   return (
-    <main className="page">
-      <div className="container" style={{ maxWidth: 720 }}>
+    <OrgAccentTheme accent={portal.entry.host_org_accent}>
+      <main className="page" style={{ position: 'relative', overflow: 'hidden' }}>
+        <PosterWatermark url={portal.entry.tournament_poster_url} />
+        <div className="container" style={{ maxWidth: 720, position: 'relative' }}>
         <Link href="/" className="back-link">← Home</Link>
         <div className="page-header">
           <div>
@@ -138,7 +142,8 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
         })}
 
         <EntryDocuments entryId={entryId} documents={portal.documents} canUpload={canUpload} />
-      </div>
-    </main>
+        </div>
+      </main>
+    </OrgAccentTheme>
   );
 }

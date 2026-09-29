@@ -1,106 +1,63 @@
-'use client';
+import { createClient } from '@/lib/supabase/server';
+import OrgAccentTheme from '@/components/OrgAccentTheme';
+import LoginForm from './LoginForm';
 
-import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
-import Reveal from '@/components/motion/Reveal';
-import Spotlight from '@/components/motion/Spotlight';
+// redirectTo comes from middleware.ts, set whenever a direct link to a protected page
+// gated sign-in first. Matched only against these two known-safe shapes -- the captured
+// groups feed a parameterized query/RPC arg, never a raw string, so there's nothing to
+// sanitize beyond "does it look like one of these paths at all".
+const TM_CONSOLE = /^\/tm\/([a-z0-9-]+)\/([a-z0-9-]+)/;
+const ENTRY_PORTAL = /^\/entry\/([0-9a-fA-F-]{36})/;
 
-function LoginForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const searchParams = useSearchParams();
+type Background = { posterUrl: string | null; accent: string | null };
 
-  async function doSignIn(signInEmail: string, signInPassword: string) {
-    setLoading(true);
-    setError(null);
+/**
+ * Which tournament (if any) this sign-in is "for", so the screen can show its poster and
+ * accent before anyone has authenticated -- the request was specifically "starting with
+ * the login screen". Two shapes:
+ *
+ *  - /tm/<org>/<tournament> (the organizer console): read through public_tournaments,
+ *    the same anon-safe view the public directory already uses -- so this only shows a
+ *    background for a tournament its own owner chose to list. Nothing new is exposed.
+ *  - /entry/<id> (the entrant portal): the entry itself is never public, so this goes
+ *    through entry_login_background() (phase16b) -- a narrow, DELIBERATELY anon-readable
+ *    function that returns only a tournament's name/poster/accent for a given entry id,
+ *    nothing about the entry. See CLAUDE.md §0w/§0x for why that's an acceptable, tracked
+ *    exception rather than a silent one.
+ */
+async function resolveBackground(redirectTo: string | undefined): Promise<Background | null> {
+  if (!redirectTo) return null;
+  const supabase = await createClient();
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email: signInEmail, password: signInPassword });
-
-    if (error) {
-      setError(
-        /banned/i.test(error.message)
-          ? 'This temporary password has expired. Ask your IT admin to issue a new one.'
-          : error.message,
-      );
-      setLoading(false);
-      return;
-    }
-
-    // Only honor a same-origin relative path -- redirectTo comes from a
-    // URL query param (set by middleware.ts when it gates a direct link
-    // to a protected page), so a crafted "//evil.com" or "https://evil.com"
-    // value must never be followed.
-    const redirectTo = searchParams.get('redirectTo');
-    const target = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/';
-    router.push(target);
-    router.refresh();
+  const tm = TM_CONSOLE.exec(redirectTo);
+  if (tm) {
+    const [, orgSlug, tournamentSlug] = tm;
+    const { data } = await supabase
+      .from('public_tournaments')
+      .select('poster_url, org_accent')
+      .eq('org_slug', orgSlug)
+      .eq('slug', tournamentSlug)
+      .maybeSingle();
+    return data ? { posterUrl: data.poster_url || null, accent: data.org_accent || null } : null;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    await doSignIn(email, password);
+  const entry = ENTRY_PORTAL.exec(redirectTo);
+  if (entry) {
+    const { data } = await (supabase as any).rpc('entry_login_background', { p_entry_id: entry[1] });
+    const row = data?.[0];
+    return row ? { posterUrl: row.poster_url || null, accent: row.accent || null } : null;
   }
 
-  return (
-    <main className="page" style={{ position: 'relative', overflow: 'hidden' }}>
-      <Spotlight />
-      <div className="container" style={{ maxWidth: 360, position: 'relative' }}>
-        <Reveal>
-          <div className="page-header" style={{ marginBottom: 24 }}>
-            <h1>Sign in</h1>
-          </div>
-        </Reveal>
-        <Reveal index={1}>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && <p className="error-text">{error}</p>}
-            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-        </Reveal>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 16 }}>
-          This app doesn't create staff accounts — sign in with an existing
-          Dula HQ login. Staff accounts are still managed the same way the
-          rest of the app already handles them.
-        </p>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 8 }}>
-          Invited as a guardian? <Link href="/guardian-signup">Create your account</Link>.
-        </p>
-      </div>
-    </main>
-  );
+  return null;
 }
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ redirectTo?: string }> }) {
+  const { redirectTo } = await searchParams;
+  const background = await resolveBackground(redirectTo);
+
   return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
+    <OrgAccentTheme accent={background?.accent ?? null}>
+      <LoginForm posterUrl={background?.posterUrl ?? null} />
+    </OrgAccentTheme>
   );
 }

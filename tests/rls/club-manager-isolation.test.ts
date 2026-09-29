@@ -829,6 +829,11 @@ describe('no SECURITY DEFINER function is reachable by anon', () => {
     const { error } = await anonClient.rpc('requires_guardian_consent', { p_player_id: playerA1.id });
     expect(error).not.toBeNull();
   });
+
+  it('the one deliberate exception is exactly entry_login_background (phase16b), nothing else', async () => {
+    const { data } = await adminClient.rpc('anon_executable_secdef_allowlist');
+    expect(data).toEqual(['entry_login_background']);
+  });
 });
 
 /**
@@ -3719,5 +3724,70 @@ describe('tournament poster (phase16a)', () => {
       await adminClient.from('platform_admins').delete().eq('email', paEmail);
       await adminClient.auth.admin.deleteUser(paId);
     }
+  });
+});
+
+/**
+ * Entrant portal accent + a public, pre-login poster lookup for the /login watermark
+ * (phase16b). The portal already refuses non-contacts entirely -- this only adds one
+ * more field to what an active contact already reads. entry_login_background() is
+ * DELIBERATELY anon-readable: it exists purely so the sign-in screen can show a
+ * tournament's poster and accent before anyone is authenticated, and it reveals only
+ * that cosmetic pair (plus the tournament's own name) for a given entry id -- nothing
+ * about the entry's team, status, or contacts. An organization's name/accent/logo are
+ * already anon-readable with no listing gate at all (orgs_public_read), so this is no
+ * wider than what's already public.
+ */
+describe('entrant portal accent + login background lookup (phase16b)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const mgrEmail = `rls-bg-mgr-${tag}@rls-test.local`;
+  let mgrId: string;
+  let mgr: ReturnType<typeof createClient>;
+  let tId: string; let entryId: string;
+
+  it('sets up a tournament (purple accent) with one entry and an active contact', async () => {
+    mgrId = (await createTestUser(mgrEmail, 'audience')).publicUser.id;
+    tId = must(await adminClient.from('tournaments').insert({ name: 'RLS Background Cup', org_id: orgA.id, slug: `rls-bg-${tag}`, poster_url: 'https://example.supabase.co/poster.png' }).select().single(), 't').id;
+    entryId = must(await adminClient.from('tournament_entries').insert({ tournament_id: tId, host_org_id: orgA.id, entrant_org_id: orgA.id, team_name: 'Background FC', status: 'accepted' }).select().single(), 'entry').id;
+    must(await adminClient.from('tournament_entry_contacts').insert({ entry_id: entryId, org_id: orgA.id, name: 'Manager', email: mgrEmail, role: 'team_manager', account_status: 'active', user_id: mgrId }).select().single(), 'contact');
+    mgr = await signInAs(mgrEmail);
+  });
+
+  it('the portal now returns the host org\'s accent to its own contact', async () => {
+    const { data, error } = await mgr.rpc('entrant_entry_portal', { p_entry_id: entryId });
+    expect(error).toBeNull();
+    const accent = (data as any).entry.host_org_accent;
+    expect(accent === null || /^#[0-9a-fA-F]{6}$/.test(accent)).toBe(true);
+  });
+
+  it('anon can read the login-page poster background for a real entry id, and it carries no entrant data', async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    const { data, error } = await anon.rpc('entry_login_background', { p_entry_id: entryId });
+    expect(error).toBeNull();
+    const row = (data as any[])?.[0];
+    expect(row).toMatchObject({ tournament_name: 'RLS Background Cup', poster_url: 'https://example.supabase.co/poster.png' });
+    expect(Object.keys(row).sort()).toEqual(['accent', 'poster_url', 'tournament_name'].sort());
+  });
+
+  it('a non-existent entry id returns no rows, not an error', async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    const { data, error } = await anon.rpc('entry_login_background', { p_entry_id: crypto.randomUUID() });
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('a suspended host org hides the background too', async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', orgA.id);
+    const { data } = await anon.rpc('entry_login_background', { p_entry_id: entryId });
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', orgA.id);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('tournament_entry_contacts').delete().eq('entry_id', entryId);
+    await adminClient.from('tournament_entries').delete().eq('id', entryId);
+    await adminClient.from('tournaments').delete().eq('id', tId);
+    await adminClient.auth.admin.deleteUser(mgrId);
   });
 });

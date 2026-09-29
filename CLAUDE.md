@@ -2995,6 +2995,83 @@ in both dark and light theme. `npx tsc --noEmit` clean.
 
 ---
 
+## 0x. Entrant portal theming, and a poster watermark starting at /login (2026-09-29)
+
+Follow-up to §0v/§0w, from the same user request as the poster feature: extend the
+accent theming to the entrant portal, and use a tournament's poster as a "watermark
+background" — starting with the sign-in screen itself, before anyone has authenticated.
+
+**Entrant portal (`/entry/<id>`)** now wraps in the same `OrgAccentTheme` as club and
+tournament pages, using the host org's accent — `entrant_entry_portal()` (phase16b)
+now also returns `host_org_accent` and `tournament_poster_url`, so the portal needed
+no new query, just two more fields on a function that already authorizes the caller
+as a contact of that entry.
+
+**`PosterWatermark.tsx`** — a poster faded into the page's own background: low
+opacity, blurred, vignetted to `var(--bg)` so it fades identically in either theme
+and never fights the content's contrast. Renders nothing at all when there's no
+poster (most tournaments won't have one, §0o), rather than an empty gap. Dropped
+into the entrant portal and, per the request, `/login`.
+
+**Theming `/login` needed knowing which tournament a sign-in is "for" before anyone
+is authenticated**, which the shared `/login` route never needed before. Split
+`LoginForm` (client, unchanged apart from a new `posterUrl` prop) out of a new
+`page.tsx` (server component) that reads the `redirectTo` query param — already set
+by `middleware.ts` whenever a direct link to a protected page gated sign-in first —
+and resolves a background for two shapes:
+
+- `/tm/<org>/<tournament>` (the organizer console): through `public_tournaments`,
+  the same anon-safe view the public directory already uses. Only shows a background
+  for a tournament its own owner chose to list — nothing new is exposed.
+- `/entry/<id>` (the entrant portal): entries are never public, so this needed a new
+  function, **`entry_login_background(entry_id)`** — deliberately callable by
+  `anon`. It returns only a tournament's name/poster/accent for a given entry id,
+  nothing about the entry itself (no team, no status, no contacts), and only while
+  the host org is active. Flagged to the user before building it: this is the first
+  conscious exception to this project's own "zero anon-executable SECURITY DEFINER
+  functions" invariant (§0g), tracked rather than silently added —
+  `anon_executable_secdef_count()`'s guard gained a named, one-entry
+  `anon_executable_secdef_allowlist()` rather than being weakened generally, and a
+  test pins the allowlist to exactly this one function. Not a wider hole than
+  what's already public: `organizations`' own name/accent/logo are anon-readable
+  with **no** listing gate at all (`orgs_public_read`), so this reveals less than
+  that already does.
+
+**A real bug in the guard itself, caught by the RLS suite, not by inspection
+(`phase16b1`):** `anon_executable_secdef_count()` is deliberately NOT `security
+definer` (§0g — it has to stay outside the set it counts), which means it runs
+as its *caller*, not its owner. It calls `anon_executable_secdef_allowlist()`
+internally, and that function's `EXECUTE` had only been granted to
+`service_role` — so any ordinary authenticated caller of the counter (the RLS
+suite's own club admin, or any real app code) got refused with `42501` just for
+calling it, which the suite caught immediately on the next full run. Fixed by
+granting `authenticated` too; the allowlist itself names nothing sensitive.
+
+**A real bug, environment-specific, not app code:** right after building this, the
+sign-in form's own fields and button rendered as fully transparent in the browser
+pane — `getComputedStyle` showed the `Reveal`-wrapped elements stuck at their
+`initial={{opacity:0}}` framer-motion state, never reaching `animate`. The
+accessibility tree showed the form was genuinely present and interactive throughout
+(`Email`/`Password`/`Sign in` all there); only the animated *opacity* never
+resolved. Restarting the dev server fixed it once, then it recurred on the very
+next navigation in the same tab — this is the same class of limitation §0k already
+recorded (`AnimatedNumber`'s `useInView` not firing in a stale/backgrounded
+automation tab), not something to chase further: verify motion-gated content in
+this environment via the accessibility tree and computed styles, the same way §0k's
+workaround did, not by trusting a screenshot's opacity.
+
+**Verified:** RLS suite 303 → 309 (the portal's two new fields, the anon lookup
+returning exactly the three safe columns for a real entry, refusing nothing but
+returning zero rows for a made-up id, hidden while the host org is suspended, and
+the allowlist pinned to exactly `entry_login_background`). Driven live: a throwaway
+entrant's own portal page showed the purple Davao Unity Sports accent and the Tiger
+Cup poster watermark; `/login?redirectTo=/tm/davao-unity-sports/tiger-cup` and
+`/login?redirectTo=/entry/<a real id>` both showed the same purple accent and
+poster pre-authentication, confirmed via computed `--accent` on `.org-accent-scope`
+rather than relying on the screenshot (see the bug above). `npx tsc --noEmit` clean.
+
+---
+
 ## 1. The two deployments
 
 | | Tournament Manager | Club Manager |
