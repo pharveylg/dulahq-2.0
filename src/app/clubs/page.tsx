@@ -4,6 +4,7 @@ import DemoDataControls from './DemoDataControls';
 import ClubList from './ClubList';
 import PublicClubList from './PublicClubList';
 import { loadPublicClubs } from '@/lib/public-directory';
+import { getDisplayRole } from '@/lib/demo-personas';
 
 /**
  * Guests get the public directory (§6.C) -- clubs that opted into
@@ -83,7 +84,7 @@ export default async function ClubsPage() {
             <h1>Clubs</h1>
             <p className="subtitle">
               {dulaUser
-                ? `Signed in as ${dulaUser.role}`
+                ? `Signed in as ${getDisplayRole(dulaUser.email, dulaUser.role)}`
                 : 'Your account isn\u2019t linked to a Dula HQ user yet — ask an admin to add you.'}
             </p>
           </div>

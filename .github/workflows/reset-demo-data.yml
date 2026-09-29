@@ -1,0 +1,58 @@
+name: Reset demo data
+
+# Keeps the /demo showcase data (Usna Gali, Davao Unity Sports, CDO, Pilipinas
+# Futbol, OLLES -- see docs/demo-data-showcase.md) from accumulating whatever
+# prospects/testers edit while signed in as a demo persona. Option B from the
+# /demo containment proposal: real writes through the real app (no
+# special-casing anywhere), reverted on a schedule rather than truly
+# session-scoped -- Supabase free tier has no branching, and demo personas
+# are standing shared accounts, not unique per visitor, so per-session
+# isolation isn't achievable without a much bigger rebuild (see CLAUDE.md).
+#
+# Reuses scripts/seed-showcase-demo.mjs exactly as-is -- it's already
+# idempotent and safely re-runnable (wipes its own prior run by org slug and
+# by the @dulahq-showcase.local email domain before reseeding). This
+# workflow only adds the schedule and the credentials to run it against the
+# real project; no script logic lives here.
+#
+# Needs two repo secrets that don't exist yet (added manually, never by this
+# workflow or by an agent -- Settings -> Secrets and variables -> Actions):
+#   SUPABASE_URL               -- the live project's URL (same as .env.local)
+#   SUPABASE_SERVICE_ROLE_KEY  -- the live project's service-role key
+# R2 credentials are deliberately NOT required here: the seed script's own
+# poster/logo re-seeding step already treats a missing/failed R2 upload as a
+# non-fatal warning, and after the first successful run it's a no-op anyway
+# (seed-directory-art.mjs skips anything that already has an image).
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # manual "run now" button in the Actions tab, for testing this workflow itself
+
+jobs:
+  reset-demo-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env.local for the seed script
+        run: |
+          cat > .env.local <<EOF
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EOF
+
+      - name: Reseed the showcase demo data
+        env:
+          # seed-directory-art.mjs (spawned by the seed script as a child
+          # process) reads process.env directly rather than .env.local, so
+          # these need to be real job env vars too, not just in the file above.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/seed-showcase-demo.mjs

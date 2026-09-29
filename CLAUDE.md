@@ -3778,3 +3778,58 @@ actually shared between the club_staff and tournament_staff catalogs (that's
 Verified live: platform admin button gone, both sections render with the
 right personas, the shared chip appears on both Org admin cards. `npx tsc
 --noEmit` and `npm run build` both clean.
+
+**Same day, immediate follow-up: "(demo)" tagging, contained edits, and a
+logout fix.** Three more asks, one genuinely hard.
+
+- **"(demo)" tag, everywhere a demo account's role is shown.** The label was
+  always the wrong thing to begin with: `layout.tsx`'s nav chip and
+  `/clubs`' "Signed in as X" line both read `public.users.role`, a legacy
+  display-only column (§5/§6.F) that's literally just `"audience"` for
+  every demo account — not "Team Manager." Pulled the real label instead
+  from a single new file, `src/lib/demo-personas.ts` (`PERSONAS` moved out
+  of `DemoPersonas.tsx` into it, imported back rather than duplicated), with
+  a `getDisplayRole(email, fallbackRole)` helper: known `@dulahq-showcase.local`
+  emails get `"<real role> (demo)"`, everyone else keeps their normal
+  role/fallback unchanged. Wired into three places: the persona picker
+  card, the site-wide nav chip, `/clubs`' subtitle.
+- **Logout redirect.** `NavActions.tsx` pushed to `/login` after sign-out;
+  changed to `/` — one line, matches how `/` already handles both guest and
+  signed-in views with no login wall.
+- **Contained demo edits — proposed three options, user picked Option B**
+  (real writes through the real app, reverted on a schedule) **at a 30-minute
+  cadence**, not the nightly cadence first proposed. Ruled out true
+  per-session isolation as disproportionate here: Supabase free tier has no
+  branching (§1), and demo personas are standing shared accounts, not
+  unique per visitor, so two prospects could be on the *same* account
+  concurrently — real session-scoped isolation would need either simulating
+  every write client-side (touches nearly every feature in the app) or
+  provisioning a fresh cloned tenant per sign-in (a real build, not a
+  config change). A scheduled reset costs almost nothing because the reset
+  mechanism already existed and needed no changes: `scripts/seed-showcase-demo.mjs`
+  is already idempotent and safely re-runnable (wipes its own prior run by
+  org slug and by the `@dulahq-showcase.local` domain before reseeding).
+
+  New `.github/workflows/reset-demo-data.yml` (`schedule: */30 * * * *`,
+  plus `workflow_dispatch` for a manual "run now"), running that exact
+  script against the **live** project unchanged — no script logic added,
+  only the schedule and credentials. Needs two new GitHub Actions secrets
+  this session could not add itself (repo settings access, and the service-role
+  key shouldn't be handled in chat either way): `SUPABASE_URL` and
+  `SUPABASE_SERVICE_ROLE_KEY`, same values as `.env.local`. **Until those
+  are added, the workflow will fail on every scheduled run** — flagged
+  here so a string of red X's in the Actions tab isn't mistaken for a new
+  bug. R2 credentials weren't requested: the seed script's own poster/logo
+  step already treats a missing/failed R2 upload as a non-fatal warning,
+  and it's a no-op after the first successful run anyway
+  (`seed-directory-art.mjs` skips anything that already has an image).
+
+  Honest limit, stated rather than glossed over: this is "resets every 30
+  minutes," not "vanishes the instant you log out." Two prospects on the
+  same persona within the same 30-minute window can still see each other's
+  edits. Accepted tradeoff for the cost, per the user's own choice of
+  Option B.
+
+Not yet verified live (the workflow can't actually run until the two
+secrets above are added) — `npx tsc --noEmit` and `npm run build` both
+clean for the app-code changes; the workflow YAML itself wasn't run.

@@ -11,6 +11,7 @@ import NotificationBell from '@/components/NotificationBell';
 import { getMyNotifications } from '@/lib/notifications-actions';
 import ImpersonationBanner from './ImpersonationBanner';
 import SuspendedOrgBanner from './SuspendedOrgBanner';
+import { getDisplayRole } from '@/lib/demo-personas';
 
 export const metadata: Metadata = {
   title: 'Dulà HQ — Club Manager',
@@ -69,9 +70,10 @@ export default async function RootLayout({
               {authUser && (
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   {dulaUser?.name ?? authUser.email}
-                  {dulaUser?.role && (
-                    <span className="chip" style={{ marginLeft: 8 }}>{dulaUser.role}</span>
-                  )}
+                  {(() => {
+                    const displayRole = getDisplayRole(authUser.email, dulaUser?.role);
+                    return displayRole && <span className="chip" style={{ marginLeft: 8 }}>{displayRole}</span>;
+                  })()}
                 </span>
               )}
               {navPersonaLinks.map((l) => (
