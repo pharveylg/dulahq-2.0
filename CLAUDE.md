@@ -32,6 +32,33 @@ it is updated — not before.
 
 ## 0a. Migration file reference (2026-09-07)
 
+**What §0a doesn't cover: the 10 migrations that predate it.** The
+application-flow audit (§0-onward's own housekeeping, 2026-09-29) found that
+`supabase/migrations/` starts with 10 files not narrated anywhere in this
+document, despite being the live schema's actual foundation — everything
+§0a onward builds on top of:
+
+| File | What it does |
+|---|---|
+| `0001_foundation.sql` | Base schema copied from the sibling `dula-hq` repo: `tenants`, `organizations`, `sports`, `audit_logs`, shared `set_updated_at()` trigger. Predates the identity rework below entirely. |
+| `0002_rls_policies.sql` | `is_tenant_member()` + first-generation RLS policies for the phase-1.0 schema above. |
+| `0003_role_permissions.sql` | `role_permissions` table (role/resource/action rows) + `has_permission()` — the pre-catalog, coarse permission model later fully superseded by phase6a's catalog. |
+| `0004_club_manager_core.sql` | Club Manager's original core tables (`clubs`, teams/players linkage); RLS deferred to the next file. |
+| `0005_club_manager_rls.sql` | Three-way RLS scoping (club-wide staff OR assigned-team staff OR own-player guardian) — `is_club_staff()` and friends, the direct ancestor of every later `is_club_*` helper. |
+| `0006_club_manager_role_permissions.sql` | Seed rows for Club Manager's 5 original roles. |
+| `20260820032053_club_manager_foundation.sql` | Mirror of what was actually run live against `zytyakbgwaegvftblkcn` (identity via `auth.jwt()->>'email'`, not `auth.uid()` — predates phase1's identity rework by ~2.5 weeks). Committed after the fact so migration tooling treats it as already-applied history. |
+| `20260820032120_club_manager_core.sql` | Mirror of the live core-entities migration; players resolved only via `players → teams → club_id` (no direct `players.club_id` column yet — that arrives in phase3). |
+| `20260820032148_club_manager_rls.sql` | Mirror of the live RLS migration; team-level scoping via the pre-existing `current_user_team_ids()`. |
+| `20260820034751_club_manager_team_linking_policy.sql` | Live bug-fix: lets `club_admin` link an *unclaimed* existing team to their club; refuses re-linking one that already belongs elsewhere. |
+
+The schema these create is live and correct — this is a documentation gap,
+not dead code. See `docs/LEGACY_CANDIDATES.md` for the full audit this came
+from, including its screen/route inventory and orphaned-code findings (two
+of which — `updateClubName`, `deleteSession` — were removed, and a third,
+`approval_is_granted()`, was dropped in `phase16d` after confirming it was
+superseded by `src/lib/roster-state.ts` the same day it was locked down in
+`phase6s`).
+
 All seventeen of today's migrations are committed under `supabase/migrations/`,
 filenames matching the live project's migration history by version timestamp.
 `phase2h` and `phase2i` were reconstructed from the live schema state when these

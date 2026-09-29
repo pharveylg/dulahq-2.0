@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { listOrgPeople, startPlatformViewAs, endPlatformViewAs, getEffectiveAccessForPlatform } from './troubleshoot-actions';
+import { useState, useEffect, useTransition } from 'react';
+import { listOrgPeople, startPlatformViewAs, endPlatformViewAs, getEffectiveAccessForPlatform, getPlatformAuditLog } from './troubleshoot-actions';
 
 type Org = { id: string; name: string; entitlements: string[] };
 type Person = { user_id: string; name: string | null; email: string; source: string; role: string };
@@ -13,6 +13,16 @@ type ActiveSession = {
   target_name: string | null;
   reason: string;
   expires_at: string;
+};
+type AuditEntry = {
+  id: number;
+  ts: string;
+  org_name: string | null;
+  actor_email: string | null;
+  scope_type: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -35,8 +45,26 @@ export default function Troubleshoot({ orgs, activeSession: initialActiveSession
   // so start/end have to update it directly or the banner goes stale (an
   // ended session that still reads "Active" is worse than no banner).
   const [activeSession, setActiveSession] = useState(initialActiveSession);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[] | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditPending, setAuditPending] = useState(false);
 
   const selectedOrg = orgs.find((o) => o.id === orgId);
+
+  // Refetch whenever the org filter changes -- orgId === '' means "every org",
+  // matching platform_audit_log's own p_org_id null = no filter behavior.
+  useEffect(() => {
+    let cancelled = false;
+    setAuditPending(true);
+    setAuditError(null);
+    getPlatformAuditLog(orgId || null).then((result) => {
+      if (cancelled) return;
+      if (result.error) setAuditError(result.error);
+      else setAuditEntries(result.entries ?? []);
+      setAuditPending(false);
+    });
+    return () => { cancelled = true; };
+  }, [orgId]);
 
   function loadPeople(id: string) {
     setError(null);
@@ -166,6 +194,38 @@ export default function Troubleshoot({ orgs, activeSession: initialActiveSession
           )}
         </div>
       )}
+
+      <div className="card">
+        <h2 style={{ fontSize: 16, marginBottom: 4 }}>
+          Platform audit log{selectedOrg ? ` — ${selectedOrg.name}` : ''}
+        </h2>
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 0 }}>
+          The most recent 100 actions{selectedOrg ? ' in this organization' : ' across every organization'}.
+          Select an organization above to narrow it down.
+        </p>
+        {auditError && <p className="error-text">{auditError}</p>}
+        {auditPending && !auditEntries && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>}
+        {auditEntries && auditEntries.length === 0 && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No audit activity found.</p>
+        )}
+        {auditEntries && auditEntries.length > 0 && (
+          <div style={{ display: 'grid', gap: 0 }}>
+            {auditEntries.map((entry) => (
+              <div key={entry.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
+                <span style={{ color: 'var(--text-muted)' }}>{new Date(entry.ts).toLocaleString()}</span>
+                {' · '}
+                <strong>{entry.actor_email ?? 'unknown actor'}</strong>
+                {' — '}
+                {entry.action}
+                {entry.entity_type && ` (${entry.entity_type}${entry.entity_id ? `: ${entry.entity_id}` : ''})`}
+                {!selectedOrg && entry.org_name && (
+                  <span style={{ color: 'var(--text-muted)' }}> · {entry.org_name}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

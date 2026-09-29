@@ -46,6 +46,17 @@ export async function endPlatformViewAs(sessionId: string) {
   return { success: true };
 }
 
+export async function getPlatformAuditLog(orgId: string | null) {
+  if (!(await isPlatformAdmin())) return { error: 'Platform admin only.' };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('platform_audit_log', {
+    p_org_id: orgId,
+    p_limit: 100,
+  });
+  if (error) return { error: friendlyError(error) };
+  return { entries: data ?? [] };
+}
+
 export async function getEffectiveAccessForPlatform(targetUserId: string, orgId: string) {
   if (!(await isPlatformAdmin())) return { error: 'Platform admin only.' };
   const supabase = await createClient();
