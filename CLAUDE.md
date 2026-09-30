@@ -4079,3 +4079,46 @@ present and pointed at `/official`; no console errors. Unit suite 79 → **81**
 build` both clean (confirmed `/official` in the route list). The RLS suite
 wasn't re-run — no policy changed, and the self-scoping proof above already
 covers the one new authorization surface directly.
+
+**A real bug, found live the same day by the user clicking through the new
+persona, not by inspection:** `/official`'s Assignments list linked each row
+to `/t/<orgSlug>` — the frozen Tournament Manager engine. That app resolves
+identity purely from `org_members`/`club_staff` (§0a's decade-old model); it
+has no concept of `org_officials` at all. Following the link while signed in
+as the Referee persona reproduced exactly: `#signin-wrap`'s `completeSupabaseLogin_`
+(shared session, §6.B) tried to resolve the referee's email against
+`org_members`, found nothing, fell back to `platform_admins`, found nothing
+there either, and showed "Signed in as X, but no tenant membership was
+found. Contact your platform admin." — alarming and wrong, since nothing
+actually needs a platform admin's attention. Fixed in `dula-hq-2.0` by
+removing the link entirely (assignment rows are now plain, non-clickable —
+there is no coherent destination for this identity in that app). `/official`
+was never supposed to send anyone there in the first place; this was always
+going to break, the persona just gave a live account to actually click it.
+
+**The same trap turned out to be much older and broader**, confirmed by
+reproducing it as the pre-existing **Tournament organizer** persona too, via
+the organizer console's own "Open tournament engine" link — every one of the
+now-8 tournament_staff personas hits the identical error, since none of them
+have an `org_members` row either; this predates today's work entirely; today's
+six new personas just made a rarely-exercised corner far more likely to be
+clicked. Fixed at the source in `DulaHQ/index.html` (`b2fc1fa` — a third
+deliberate, narrow exception to §8's "keep it unrewritten," same precedent as
+the mobile-nav fix and the demo-gallery removal): reworded the message reached
+from any `/t/...` URL (`checkPlatformAdmin()`'s failure branch — the one both
+the referee and the organizer actually hit) to "Signed in as X, but this
+account has no role in this tournament here. Continue as a guest below, or
+sign in with a different account." — accurate for both identity shapes, and
+correct that `Continue as Guest` was sitting right there the whole time,
+functional, just next to a message that made it look like something was
+broken. The generic root-sign-in copy of this same string (reached only by
+signing in directly on that app's own root domain, with no tenant URL at all —
+none of this app's links produce that path) was deliberately left unchanged, a
+narrower, less-reached case not worth conflating with this fix.
+
+Verified live end-to-end on both fixes: cleared cookies, signed in fresh as
+the Referee persona, clicked the (now plain-text) assignment row — no
+navigation, stays on `/official`; separately reproduced the Organizer's
+"Open tournament engine" failure before the fix (`#auth-error` read exactly
+the old string) and confirmed the reworded string renders correctly at that
+exact URL after deploying the `DulaHQ` fix.

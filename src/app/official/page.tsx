@@ -87,12 +87,11 @@ export default async function OfficialHomePage() {
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tournament assignments yet.</p>
           )}
           {(assignments ?? []).map((a: any) => (
-            <a
-              key={`${a.tournament_id}-${a.role}`}
-              href={`/t/${a.org_slug}`}
-              className="list-row"
-              style={{ textDecoration: 'none', color: 'inherit' }}
-            >
+            // Not a link to /t/<org>: that's the frozen Tournament Manager engine,
+            // which resolves identity from org_members/club_staff only -- it has no
+            // concept of a linked official at all, so following this link signed in
+            // as one always dead-ends in "no tenant membership was found" there.
+            <div key={`${a.tournament_id}-${a.role}`} className="list-row">
               <div className="list-row-main">
                 <div className="list-row-title">{a.tournament_name}</div>
                 <div className="list-row-meta">
@@ -100,7 +99,7 @@ export default async function OfficialHomePage() {
                 </div>
               </div>
               <span className="chip">{ROLE_LABEL[a.role] ?? a.role}</span>
-            </a>
+            </div>
           ))}
         </div>
       </div>
