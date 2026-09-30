@@ -4213,3 +4213,41 @@ landed with `S.role === 'referee'` and no error; claimed a match, started it,
 logged a goal, ended it, final score correct; confirmed via direct query
 that `tournaments.data` stayed null throughout. `npx tsc --noEmit` clean for
 the `dula-hq-2.0` side.
+
+### A second, real bug found immediately after — a genuine race, not flaky testing
+
+Re-verifying the same flow on **production** (not the local build) via the
+*actual* click-through path (`/demo` → `/official` → click the assignment
+link, exactly how a real user reaches it — the local test above had signed
+in via a raw `signInWithPassword()` call instead) intermittently failed with
+the *old, unworded* "no tenant membership was found" string, `S.role:
+"admin"`, `signedIn: false` — as if none of this session's fixes existed. A
+fresh incognito-equivalent tab reproduced it too, ruling out stale tab state.
+
+Root cause: `completeSupabaseLogin_`'s `/t/{org-slug}` branch trusted
+`PENDING_TENANT_ORG_SLUG`, a global the file's own `/t/` boot path — a
+*separate* script block near the very end of the file — sets. That block's
+own comment claimed the global is "always ready" by the time the auth
+callback reads it. Demonstrably false: an *already-persisted* session
+(exactly what arriving via a shared cookie from an already-signed-in
+`dula-hq-2.0` page means, §6.B) fires `completeSupabaseLogin_` the instant
+the Supabase client restores it from the cookie — no network round-trip
+needed — which can beat the later boot script to the punch. A `signInWithPassword()`
+call made *after* the page has already finished loading (the local test's
+own method) can never race this way, since it necessarily waits on a real
+network response; that's why the first round of local verification missed it
+entirely.
+
+Fixed by removing the shared mutable state instead of trying to sequence
+around it: `completeSupabaseLogin_` now parses `location.pathname` itself,
+fresh, at the point of use — a pure string match with no network call and no
+dependency on script-execution order. `checkOrgOfficial`/`resolveOrgMember`
+downstream are unchanged; only how the org slug is obtained changed.
+
+Reproduced the exact failing shape locally (sign in first, *then* navigate
+fresh to the tournament URL — the only way to make an already-persisted
+session race the boot script on a controlled machine) and confirmed clean
+across three consecutive runs after the fix. Also re-confirmed the
+Organizer's still-unrecognized-here behavior is unchanged (`tournament_staff`
+recognition was never in scope this round, only `org_officials` — the
+reworded, non-alarming "no role" message still shows, as documented in §0ze).
