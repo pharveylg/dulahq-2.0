@@ -13,9 +13,16 @@ import ImpersonationBanner from './ImpersonationBanner';
 import SuspendedOrgBanner from './SuspendedOrgBanner';
 import { getDisplayRole } from '@/lib/demo-personas';
 
+const SITE_TITLE = 'Dulà HQ — Multi-Sport Platform';
+const SITE_DESCRIPTION = 'Run a club, run a tournament, or book a court.';
+
 export const metadata: Metadata = {
-  title: 'Dulà HQ — Club Manager',
-  description: 'Club setup and staff management',
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  // No explicit og:image -- link previews fall back to a plain card, which
+  // is fine until there's a real one worth showing.
+  openGraph: { title: SITE_TITLE, description: SITE_DESCRIPTION, siteName: 'Dulà HQ' },
+  twitter: { card: 'summary', title: SITE_TITLE, description: SITE_DESCRIPTION },
   // manifest.ts and icon.tsx/apple-icon.tsx are Next.js file conventions --
   // both auto-linked in <head>, nothing to wire up here.
 };
