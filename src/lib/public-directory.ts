@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getDownloadUrl } from '../../shared/files/lib/r2';
+import { isDemoOrgSlug } from './demo-orgs';
 
 /**
  * The public clubs and tournaments the homepage, /clubs and /tournaments all
@@ -10,11 +11,14 @@ import { getDownloadUrl } from '../../shared/files/lib/r2';
 export type PublicClubTile = {
   slug: string;
   name: string;
+  orgSlug: string;
   orgName: string;
   location: string | null;
   accent: string | null;
   /** A ready-to-use image URL, or null when the crest should be generated. */
   logoUrl: string | null;
+  /** True for the four showcase orgs scripts/seed-showcase-demo.mjs creates. */
+  isDemo: boolean;
 };
 
 export type PublicTournamentCard = {
@@ -26,6 +30,8 @@ export type PublicTournamentCard = {
   posterUrl: string | null;
   eventDate: string | null;
   venue: string | null;
+  /** True for the four showcase orgs scripts/seed-showcase-demo.mjs creates. */
+  isDemo: boolean;
 };
 
 // Long enough that a page a visitor leaves open doesn't lose its images.
@@ -52,7 +58,7 @@ async function resolveLogo(row: { logo_key: string | null; org_logo_url: string 
 export async function loadPublicClubs(supabase: SupabaseClient<any, any, any>) {
   const { data, error } = await supabase
     .from('public_clubs')
-    .select('slug, name, location, org_name, org_accent, logo_key, org_logo_url')
+    .select('slug, name, location, org_slug, org_name, org_accent, logo_key, org_logo_url')
     .order('name');
 
   // public_clubs is a view, so PostgREST can't see that the joined columns are
@@ -63,10 +69,12 @@ export async function loadPublicClubs(supabase: SupabaseClient<any, any, any>) {
     rows.map(async (c: any) => ({
       slug: c.slug,
       name: c.name,
+      orgSlug: c.org_slug,
       orgName: c.org_name,
       location: c.location ?? null,
       accent: c.org_accent ?? null,
       logoUrl: await resolveLogo(c),
+      isDemo: isDemoOrgSlug(c.org_slug),
     }))
   );
   return { clubs, error: error?.message ?? null };
@@ -90,6 +98,7 @@ export async function loadPublicTournaments(supabase: SupabaseClient<any, any, a
       posterUrl: t.poster_url && String(t.poster_url).trim() ? t.poster_url : null,
       eventDate: t.event_date ?? null,
       venue: t.venue ?? null,
+      isDemo: isDemoOrgSlug(t.org_slug),
     }));
   return { tournaments, error: error?.message ?? null };
 }

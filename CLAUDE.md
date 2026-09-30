@@ -3833,3 +3833,118 @@ logout fix.** Three more asks, one genuinely hard.
 Not yet verified live (the workflow can't actually run until the two
 secrets above are added) — `npx tsc --noEmit` and `npm run build` both
 clean for the app-code changes; the workflow YAML itself wasn't run.
+
+---
+
+## 0zb. Mobile nav on the frozen Tournament Manager, and where OLLES's accent color actually stops (2026-09-29)
+
+Two reports checked the same day, both against `ollesfc`/`ollescup15` (15th OLLES Cup).
+
+### The pre-sign-in bottom tabs, and a duplicate "Teams" in the More sheet
+
+"At the login screen for tournaments, the tabs at the bottom should not be
+there... the dropdown for categories, schedule, etc. should not be redundant
+to the bottom tabs" was about the frozen sibling `DulaHQ` (Vite) repo, not this
+one — a deliberate, scoped exception to §8's "keep it unrewritten" rule, same
+precedent as the demo-gallery removal in §0z. Confirmed live at mobile
+viewport (375×812) before touching anything: `#signin-wrap` was covering the
+screen, but `renderNav()` had already populated the bottom tab bar, the
+category strip and the header dropdown behind it — clickable, not just
+visible. `AUTH.signedIn` starts `false` and every real entry point
+(`completeLogin`, `enterGuestView`, the demo/superadmin/tenant logins,
+`guestRegisterTeam`) sets it `true` right before its own `renderNav()` call, so
+`renderNav()` now bails out (clearing all four nav surfaces, mirroring the
+existing `superadmin`/`guestTeamReg` bail-out shape already in the function)
+until one of those has run.
+
+Separately, admin's curated `MOB_BAR` bottom bar (Home/Teams/Groups/
+Officials/Bracket — the only role with a curated subset; every other role's
+full nav list is 7 items or fewer) left the "More" overflow sheet rendering
+the role's *entire* unfiltered `NAV` list, so "Teams" (and Home/Groups/
+Officials/Bracket) appeared a second time under People. Fixed by excluding
+whatever page key already has a bottom tab before building the sheet.
+Desktop's header dropdown was left untouched on purpose — it's the sole nav
+there (no bottom bar to duplicate against), so it still needs every item.
+
+Verified live end-to-end against a local static build of the edited file:
+signed out, `#mob-nav-inner`/`#category-strip`/`#manage-dropdown-wrap` all
+empty; "Continue as Guest" (audience role) repopulates the bar correctly;
+signing in as a real `admin`-role account (`org_members.role`, this app's own
+untouched role system) shows the curated 5-tab bar plus "More", and the More
+sheet lists Setup/Categories/Registrations/Access Requests/Document Reviews/
+Users/Referees/Officiating Team/Standings/Live Streams/Audit trail plus the
+system items — no Home/Teams/Groups/Officials/Bracket. Committed to `DulaHQ`
+directly (`19eb2b3`), not this repo.
+
+### OLLES's accent color: correct in the new console, absent by design in the old engine
+
+"The accent color selected for the org did not carry over to their tournament
+screen color theme... check 15th OLLES Cup" turned out to be two different
+screens with two different, both-correct answers, not one bug. `organizations
+.accent` for `ollesfc` is `#009dff`, confirmed via SQL. Checked both consumers
+live, signed in as a throwaway org-admin scoped to that org:
+
+- **`/tm/ollesfc/ollescup15`** (this repo's own native organizer console,
+  §0o) — `.org-accent-scope`'s computed `--accent` and `--accent-gradient`
+  both read `#009dff`, and a real rendered button's background is
+  `rgb(0, 157, 255)`. Theming works exactly as built in §0w.
+- **`/t/ollesfc/ollescup15`** (the proxied, frozen `DulaHQ` engine) — no
+  `.org-accent-scope` element exists at all and no accent custom property is
+  set anywhere on the page. This is the screen the user actually meant, and
+  it was never wired up: §0w/§0x/§0y's org-accent-theming work only ever
+  extended to this repo's own `/c/` and `/tm/` layouts, never into the
+  frozen Vite app §8 keeps unrewritten. Not a regression — a real, so-far
+  undocumented scope boundary, now recorded here rather than left to look
+  like a bug on the next report. Extending it would mean giving the frozen
+  engine its own accent-reading boot step, which is a real (if small) carve-out
+  of "unrewritten," not attempted here without it being asked for directly.
+
+No code change followed from this half — reported as a finding, not a fix.
+
+---
+
+## 0zc. Homepage: Tournaments first, both sections collapsible, "(demo)" tags (2026-09-29)
+
+Three asks against the public directory on `/`: swap section order (Tournaments
+before Clubs), make both collapsible, and label showcase data "(demo)".
+
+**Order and collapse.** `PublicDirectory()` in [src/app/page.tsx](src/app/page.tsx)
+now renders Tournaments, then Clubs, then Courts, each wrapped in a native
+`<details className="dir-section" open>`/`<summary>` instead of a plain
+`<section>` — no client JS, the browser owns open/closed state, and it degrades
+to plain content if CSS fails. All three default open, so nothing changes
+visually until someone collapses one. `.dir-section`/`.dir-section-chevron` in
+[globals.css](src/app/globals.css) suppress the native disclosure marker
+(`list-style: none` for Firefox, `::-webkit-details-marker` for Chromium/Safari)
+and draw a `▸` that rotates 90° on `[open]` instead, so the summary reads as the
+section's own heading rather than a generic widget.
+
+**"(demo)" tagging.** New [src/lib/demo-orgs.ts](src/lib/demo-orgs.ts) — pure,
+same discipline as `demo-personas.ts`'s own `DEMO_EMAIL_DOMAIN` check — hardcodes
+the four showcase org slugs `scripts/seed-showcase-demo.mjs` creates (`usna-gali`,
+`cdo-ysc`, `pilipinas-futbol`, `davao-unity-sports`; confirmed against the seed
+script rather than guessed). `public_clubs`/`public_tournaments` already returned
+`org_slug` (added for logo/poster resolution); `loadPublicClubs`/
+`loadPublicTournaments` in [public-directory.ts](src/lib/public-directory.ts) now
+also select it and compute `isDemo` once, so `PublicClubList`/
+`PublicTournamentList` just render `.dir-demo-tag` (italic, `--text-muted`, no new
+color) next to the name — no org-slug list duplicated into either component. No
+migration: both view columns already existed, this only changed what the loader
+selects.
+
+**OLLES confirmed not a showcase org**, matching §0zb's own finding earlier the
+same day — "15th OLLES Cup" renders untagged, the four showcase orgs' clubs and
+tournaments all render "(demo)".
+
+Verified live: page text at both desktop and mobile (375×812) viewport shows the
+new Tournaments-then-Clubs-then-Courts order with every showcase listing tagged
+and OLLES's own untagged; clicking the "Tournaments" summary collapses only that
+section (Clubs/Courts stay open, re-verified via `details.open` + the chevron's
+computed `transform` rather than trusting a screenshot, matching this project's
+established verification discipline) and clicking again reopens it cleanly.
+`npx tsc --noEmit` and `npm run build` both clean (the only errors are the
+pre-existing, unrelated `tests/rls/club-manager-isolation.test.ts` batch §0m
+already recorded). Hit the same corrupted dev-server webpack cache §0y already
+documented (`Cannot find module './873.js'`, caused here by running `npm run
+build` against the same `.next` directory a dev server already had open) —
+cleared `.next` and restarted, same fix as last time.

@@ -49,7 +49,7 @@ export default function PublicClubList({ clubs }: { clubs: PublicClubTile[] }) {
                   size={96}
                 />
               </span>
-              <span className="dir-name">{club.name}</span>
+              <span className="dir-name">{club.name}{club.isDemo && <span className="dir-demo-tag"> (demo)</span>}</span>
               <span className="dir-meta">{club.orgName}</span>
               {club.location && <span className="dir-meta">{club.location}</span>}
             </Link>

@@ -42,7 +42,7 @@ function PosterCard({ t }: { t: PublicTournamentCard }) {
         {date && <span className="poster-date">{date}</span>}
       </span>
       <span className="poster-cap">
-        <span className="dir-name" style={{ marginTop: 0 }}>{t.name}</span>
+        <span className="dir-name" style={{ marginTop: 0 }}>{t.name}{t.isDemo && <span className="dir-demo-tag"> (demo)</span>}</span>
         <span className="dir-meta">{t.orgName}</span>
         {t.venue && <span className="dir-meta">{t.venue}</span>}
       </span>

@@ -33,41 +33,50 @@ async function PublicDirectory() {
         </p>
       </Reveal>
 
-      <section style={{ marginBottom: 40 }}>
-        <Reveal index={2}>
-          <h2 style={{ fontSize: 20, marginBottom: 4 }}>Clubs</h2>
-          <p className="subtitle" style={{ marginBottom: 14 }}>
-            Browse public clubs, or sign in to manage your own.
-          </p>
-        </Reveal>
-        {clubsError && <p className="error-text">Couldn&apos;t load clubs: {clubsError}</p>}
-        {!clubsError && clubs.length === 0 && (
-          <div className="card empty-state">
-            <p>No clubs are publicly listed yet.</p>
-          </div>
-        )}
-        {clubs.length > 0 && <PublicClubList clubs={clubs} />}
-      </section>
-
-      <section style={{ marginBottom: 40 }}>
-        <Reveal index={3}>
-          <h2 style={{ fontSize: 20, marginBottom: 4 }}>Tournaments</h2>
+      <Reveal index={2}>
+        <details className="dir-section" style={{ marginBottom: 40 }} open>
+          <summary>
+            <h2 style={{ fontSize: 20 }}>Tournaments</h2>
+            <span className="dir-section-chevron">▸</span>
+          </summary>
           <p className="subtitle" style={{ marginBottom: 14 }}>
             Browse public tournaments, or sign in to manage your own.
           </p>
-        </Reveal>
-        {tournamentsError && <p className="error-text">Couldn&apos;t load tournaments: {tournamentsError}</p>}
-        {!tournamentsError && tournaments.length === 0 && (
-          <div className="card empty-state">
-            <p>No tournaments are publicly listed yet.</p>
-          </div>
-        )}
-        {tournaments.length > 0 && <PublicTournamentList tournaments={tournaments} />}
-      </section>
+          {tournamentsError && <p className="error-text">Couldn&apos;t load tournaments: {tournamentsError}</p>}
+          {!tournamentsError && tournaments.length === 0 && (
+            <div className="card empty-state">
+              <p>No tournaments are publicly listed yet.</p>
+            </div>
+          )}
+          {tournaments.length > 0 && <PublicTournamentList tournaments={tournaments} />}
+        </details>
+      </Reveal>
 
-      <section>
-        <Reveal index={4}>
-          <h2 style={{ fontSize: 20, marginBottom: 4 }}>Courts</h2>
+      <Reveal index={3}>
+        <details className="dir-section" style={{ marginBottom: 40 }} open>
+          <summary>
+            <h2 style={{ fontSize: 20 }}>Clubs</h2>
+            <span className="dir-section-chevron">▸</span>
+          </summary>
+          <p className="subtitle" style={{ marginBottom: 14 }}>
+            Browse public clubs, or sign in to manage your own.
+          </p>
+          {clubsError && <p className="error-text">Couldn&apos;t load clubs: {clubsError}</p>}
+          {!clubsError && clubs.length === 0 && (
+            <div className="card empty-state">
+              <p>No clubs are publicly listed yet.</p>
+            </div>
+          )}
+          {clubs.length > 0 && <PublicClubList clubs={clubs} />}
+        </details>
+      </Reveal>
+
+      <Reveal index={4}>
+        <details className="dir-section" open>
+          <summary>
+            <h2 style={{ fontSize: 20 }}>Courts</h2>
+            <span className="dir-section-chevron">▸</span>
+          </summary>
           <p className="subtitle" style={{ marginBottom: 14 }}>
             Book a court, or join the walk-in queue.
           </p>
@@ -79,8 +88,8 @@ async function PublicDirectory() {
             </span>
             <span className="chip">Open courts.dulahq.app →</span>
           </a>
-        </Reveal>
-      </section>
+        </details>
+      </Reveal>
     </>
   );
 }
