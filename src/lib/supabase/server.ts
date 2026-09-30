@@ -332,18 +332,19 @@ export async function claimPendingGuardianInvite() {
 }
 
 /**
- * Whether this person has a guardian record and/or a player record -- the two
- * people /guardian and /player exist for. Keyed the same way those pages find
- * them (user_id = the public.users id), and memoised per request because both the
- * homepage and the layout ask.
+ * Whether this person has a guardian record, a player record, and/or a linked
+ * official record -- the three people /guardian, /player and /official exist
+ * for. Keyed the same way those pages find them (user_id = the public.users
+ * id), and memoised per request because both the homepage and the layout ask.
  */
-export const getMyPersonas = cache(async (): Promise<{ guardian: boolean; player: boolean }> => {
+export const getMyPersonas = cache(async (): Promise<{ guardian: boolean; player: boolean; official: boolean }> => {
   const dulaUser = await getCurrentDulaUser();
-  if (!dulaUser) return { guardian: false, player: false };
+  if (!dulaUser) return { guardian: false, player: false, official: false };
   const supabase = await createClient();
-  const [guardians, players] = await Promise.all([
+  const [guardians, players, officials] = await Promise.all([
     supabase.from('guardians').select('id', { count: 'exact', head: true }).eq('user_id', dulaUser.id),
     supabase.from('players').select('id', { count: 'exact', head: true }).eq('user_id', dulaUser.id),
+    supabase.from('org_officials').select('id', { count: 'exact', head: true }).eq('user_id', dulaUser.id),
   ]);
-  return { guardian: (guardians.count ?? 0) > 0, player: (players.count ?? 0) > 0 };
+  return { guardian: (guardians.count ?? 0) > 0, player: (players.count ?? 0) > 0, official: (officials.count ?? 0) > 0 };
 });

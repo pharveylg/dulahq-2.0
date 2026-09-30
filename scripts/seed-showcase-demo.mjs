@@ -501,6 +501,18 @@ async function main() {
     report.demoPersonas.tournamentOfficeRoles.push({ role, name, email });
   }
 
+  // Linked-official demo persona -- org_officials, not tournament_staff, so it
+  // gets no console at all, just /official's own profile+assignments page.
+  // Links the account to the "Head Referee" row seeded above (davaoOfficials[0]),
+  // already assigned 'referee' on both of Davao's tournaments by
+  // assignOfficials(), rather than a fresh unassigned pool member -- so the
+  // page has real assignments to show from the first sign-in. Also created,
+  // idempotently and without this wipe, by scripts/seed-demo-referee.mjs.
+  const refereeEmail = `referee.davao-unity-sports@${EMAIL_DOMAIN}`;
+  const refereeUserId = await createPerson(refereeEmail, davaoOfficials[0].full_name);
+  await must(admin.from('org_officials').update({ user_id: refereeUserId }).eq('id', davaoOfficials[0].id), 'link referee official');
+  report.demoPersonas.referee = { name: davaoOfficials[0].full_name, email: refereeEmail };
+
   // ---------- write the doc ----------
   writeReport(report);
   console.log('\nDone. See docs/demo-data-showcase.md for the full breakdown.');
@@ -546,6 +558,9 @@ function writeReport(report) {
     }
     for (const p of d.tournamentOfficeRoles ?? []) {
       lines.push(`| ${p.role} (Tiger Cup, Davao Unity Sports) | ${p.name} | \`${p.email}\` → \`/tm/davao-unity-sports/tiger-cup\` |`);
+    }
+    if (d.referee) {
+      lines.push(`| Referee (linked official, Davao Unity Sports — org_officials, no console) | ${d.referee.name} | \`${d.referee.email}\` → \`/official\` |`);
     }
     lines.push('');
     lines.push('---');

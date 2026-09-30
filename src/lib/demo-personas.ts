@@ -137,6 +137,14 @@ export const PERSONAS: Persona[] = [
     destination: () => '/tm/davao-unity-sports/tiger-cup',
     products: ['tournament'],
   },
+  {
+    email: 'referee.davao-unity-sports@dulahq-showcase.local',
+    role: 'Referee',
+    name: 'Mark Bendijo',
+    description: 'A linked official (org_officials), not tournament_staff — no console at all, just their own profile and assignments at /official. Head Referee for Davao Unity Sports, already assigned to both Tiger Cup and National Team Qualifiers.',
+    destination: () => '/official',
+    products: ['tournament'],
+  },
 ];
 
 const PERSONA_BY_EMAIL = new Map(PERSONAS.map((p) => [p.email.toLowerCase(), p]));

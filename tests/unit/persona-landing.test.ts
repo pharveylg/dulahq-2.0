@@ -32,13 +32,23 @@ describe('personaLanding: where "/" sends someone who is signed in', () => {
   it('someone who is neither a guardian nor a player keeps the public homepage', () => {
     expect(personaLanding({ hasOrg: false, guardian: false, player: false })).toBeNull();
   });
+
+  it('a linked official with no organization goes to /official, after guardian and player', () => {
+    expect(personaLanding({ hasOrg: false, guardian: false, player: false, official: true })).toBe('/official');
+    expect(personaLanding({ hasOrg: false, guardian: true, player: false, official: true })).toBe('/guardian');
+  });
+
+  it('an official who belongs to an organization keeps the organization home', () => {
+    expect(personaLanding({ hasOrg: true, guardian: false, player: false, official: true })).toBeNull();
+  });
 });
 
-describe('personaLinks: the nav links for people who have a guardian or player page', () => {
+describe('personaLinks: the nav links for people who have a guardian, player or official page', () => {
   it('offers one link per page the person actually has', () => {
     expect(personaLinks({ guardian: true, player: false })).toEqual([{ href: '/guardian', label: 'My children' }]);
     expect(personaLinks({ guardian: false, player: true })).toEqual([{ href: '/player', label: 'My profile' }]);
     expect(personaLinks({ guardian: true, player: true }).map((l) => l.href)).toEqual(['/guardian', '/player']);
+    expect(personaLinks({ guardian: false, player: false, official: true })).toEqual([{ href: '/official', label: 'My officiating' }]);
   });
 
   it('offers nothing to everyone else', () => {

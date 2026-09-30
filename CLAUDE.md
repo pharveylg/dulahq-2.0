@@ -4000,3 +4000,82 @@ already-covered, unchanged authorization paths (`tournament_staff` insert via
 service role, which bypasses RLS; the console itself is gated by policies the
 existing 328-test suite already exercises), and the live sign-in above is
 itself an end-to-end proof against the real RLS, not a substitute test.
+
+---
+
+## 0ze. `/official`: a self-view page for a linked official, and a Referee persona (2026-09-29)
+
+Follow-up to §0zd. Asked why a referee/official persona couldn't be added
+too. Checked rather than assumed: `org_officials.user_id` **is** nullable-
+linkable to a real login, and `officials_read`/`toff_read` already let a
+linked official read their own pool row and their own match assignments
+(phase16c, §0y) — a login was never the blocker. The real gap: **nothing in
+the app renders anything for that account.** Grepped every consumer of
+`org_officials`/`tournament_officials` — the only one is the organizer
+console's own Officials tab (staff-side, assigning officials), never a
+self-service view. Signing a linked official in would have landed them on
+the plain public homepage, same as a guest, since `personaLanding()` only
+knew about org membership, club staff and tournament staff. Confirmed this
+with the user before building — not a hard wall, just unbuilt — and they
+asked for the real page, not just the persona.
+
+**`my_officiating_assignments()`** (`phase16l`, new SECURITY DEFINER
+function, self-scoped on `auth.uid()`, no parameter) is why a new function
+was needed at all: a linked official's own `tournament_officials` row is
+directly readable, but **`tournaments`' own SELECT policy** is
+`is_org_member` OR `is_tournament_staff` OR publicly-listed — none of which
+covers a plain `org_officials.user_id` link, and a private tournament isn't
+in `public_tournaments` either. A plain embedded select would have silently
+returned `tournaments: null` for every row the page needs to show. Same
+shape as `entrant_entry_portal()` needing a definer function for the same
+reason. Verified the self-scoping directly: the org admin persona (zero
+`org_officials` rows) gets zero rows back, provable both by query and by the
+function's own `where o.user_id = auth.uid()` — no parameter to widen, so
+there is nothing else to check. `anon_executable_secdef_count()` stayed `0`
+after adding it.
+
+**`/official`** (new page) mirrors `/player`/`/guardian`'s own shape: auth-
+gated, a "not linked" empty state for a real signed-in account with no
+`org_officials` row, otherwise a read-only profile card (org, designation,
+grade, contact info, active/inactive) per linked official row plus an
+Assignments list (tournament name, org, date, venue, role) from the new RPC,
+each row linking out to `/t/<orgSlug>`. Deliberately read-only — adding,
+editing or assigning an official all stay staff-side actions in the
+organizer console; this page has no write path at all.
+
+**`getMyPersonas()`/`persona-landing.ts`** gained a third persona
+(`official`, optional on the type so existing call sites without it keep
+compiling), alongside guardian/player: `personaLanding` now also redirects
+"/" to `/official` for a linked official with no org and nothing to manage
+(after guardian/player, same ordering rationale as the existing two), and
+`personaLinks` offers a "My officiating" nav link. Both call sites
+(`page.tsx`, `layout.tsx`) already spread `getMyPersonas()`'s full result, so
+neither needed a code change.
+
+**Referee demo persona** links a new account to the *existing* "Mark
+Bendijo" / Head Referee `org_officials` row at Davao Unity Sports (Davao's
+own officials pool, seeded by `seed-showcase-demo.mjs`) rather than creating
+a fresh, unassigned pool member — so `/official` has a real assignment to
+show from the first sign-in, not an empty list. `scripts/seed-demo-
+referee.mjs` (new) mirrors `seed-demo-organizer.mjs`'s own idempotent,
+non-destructive pattern; `seed-showcase-demo.mjs` links the same official
+(reading `davaoOfficials[0].full_name` rather than hardcoding it, so the
+name stays correct even though it comes from the script's own deterministic-
+but-order-dependent name generator) so a future full re-seed keeps it.
+`src/lib/demo-personas.ts` gained one more entry (`destination: () =>
+'/official'`), explicit in its own description that this is `org_officials`,
+not `tournament_staff` — no console, just this one page.
+
+Verified live: signed in as the new Referee persona, landed directly on
+`/official` (confirming the persona-landing redirect fires for a real
+account, not just the unit test) with the real profile (Head Referee, Davao
+Unity Sports, phone/email on file) and exactly one real assignment (National
+Team Qualifiers, correctly joined — Tiger Cup's own earlier assignment for
+this official is no longer live, from other testing in an earlier session;
+the page correctly reflects whatever is actually in the database rather than
+what the original seed script intended); the "My officiating" nav link
+present and pointed at `/official`; no console errors. Unit suite 79 → **81**
+(two new `persona-landing.test.ts` cases). `npx tsc --noEmit` and `npm run
+build` both clean (confirmed `/official` in the route list). The RLS suite
+wasn't re-run — no policy changed, and the self-scoping proof above already
+covers the one new authorization surface directly.
