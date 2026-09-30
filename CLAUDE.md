@@ -4122,3 +4122,94 @@ navigation, stays on `/official`; separately reproduced the Organizer's
 "Open tournament engine" failure before the fix (`#auth-error` read exactly
 the old string) and confirmed the reworded string renders correctly at that
 exact URL after deploying the `DulaHQ` fix.
+
+---
+
+## 0zf. Every persona should exercise its own role, not just view it (2026-09-29)
+
+Direct follow-up: the wording fix above stopped the Referee persona from
+hitting a scary error, but it still couldn't do the one thing a referee
+actually does — officiate a match. Asked to make that work, and to check
+every other persona against the same bar: can they *do* their role's real
+actions, not just look at a page.
+
+### The audit
+
+Went through all 16 personas against what their console/page actually
+permits writing, not just what it shows:
+
+- **Club side (7) and the shared Org admin**: already fully functional —
+  rename/staff/finance/membership (club manager), author development records
+  (coach), documents/membership (team manager), view-as + audit (IT admin),
+  confirm/decline roster acknowledgements + submit payment (guardian), create
+  clubs/tournaments (org admin). Player is inherently the one mostly-viewing
+  role in the real product too (a player doesn't administratively act on
+  their own record) — not a demo gap, a correct reflection of the role.
+- **Tournament side (6 of 7 tournament_staff roles)**: already fully
+  functional — accept/decline entries (Organizer), create/reissue logins +
+  suspend accounts (IT admin), add notes/flags (Team coordinator), review
+  documents (Secretary), issue invoices/record payments (Treasurer), post
+  announcements (Communications), assign officials (Referee coordinator) —
+  every one of these is a real, previously-verified RLS-backed write path.
+- **Referee**: the one genuine gap. `/official` (§0ze) was deliberately
+  read-only, and the *actual* match-officiating functions (claim a match,
+  start it, log events, enter a score, end it) live entirely inside the
+  frozen `DulaHQ` engine's own legacy identity system (`org_members.role =
+  'referee'`) — a system `org_officials`-linked accounts had no standing in
+  at all until this pass.
+
+### The decision, and why the obvious shortcut was wrong
+
+The fast fix — add an `org_members` row (`role='referee'`) for the Referee
+persona at Davao Unity Sports — was rejected on purpose. `org_members` isn't
+`DulaHQ`-only data: `is_org_member()`/`is_org_admin()` and most of
+`dula-hq-2.0`'s own RLS read it too, so that row would have quietly made the
+persona an "org member" of Davao Unity Sports in the *newer* system as well
+— exactly the standing this whole project has deliberately withheld from
+officials everywhere else (§0l, §0y: an official is a name in a pool, never
+folded into `org_members`/`club_staff`). A demo shortcut that widens a real
+security boundary, even narrowly, isn't a shortcut worth taking.
+
+Built the clean version instead, in `DulaHQ/index.html` (`22670ab` — a fourth
+deliberate, narrow exception to §8, same precedent as the three before it):
+`resolveOrgMember`'s failure branch, when an org is known (a `/t/{org-slug}
+...` URL) and no `org_members` row exists, now also checks `org_officials`
+via `checkOrgOfficial()` — keyed on `user_id = auth.uid()`, the same
+self-read RLS branch phase16c already granted. Found active, it's treated
+exactly like a real `org_members` row with `role='referee'` from that point
+on: `loadTenantTournament_()` doesn't care how the role was determined, so
+claiming, scoring and ending a match all work identically either way, with
+zero change to what `dula-hq-2.0`'s own RLS grants the account.
+
+`/official`'s assignment link (removed in §0ze because it only ever failed)
+is back — now pointing at the specific tournament
+(`/t/<org_slug>/<tournament_slug>`, more precise than the org-only link
+removed before) — because it now actually works.
+
+### A genuine surprise while verifying
+
+Signed in as the Referee persona on a local static build, claimed "Pagadian
+Panthers vs Tagum Titans," started it, logged a goal (1–0), ended the match —
+full-time score recorded, "pending verification by the tournament
+committee." Real, working, end-to-end. But a direct query afterward showed
+`tournaments.data` for Tiger Cup is **null** — none of this was ever written
+to the database. The referee console's own "Generate draw first" fallback
+(seen elsewhere in this file) means an empty `data` makes the app
+synthesize a believable placeholder bracket entirely client-side, and my
+claim/score/end actions only ever mutated that transient state. Reassuring
+for cleanup (nothing to revert, confirmed by re-querying — the match is
+exactly as unplayed in the database as it always was) but worth recording
+plainly: the "real game" exercised here is the app's own placeholder
+fallback, not curated seed data, for this specific tournament. The
+underlying code path is identical to what a real production referee with
+real bracket data would use.
+
+### Verified
+
+Local static build (`serve -s`, SPA fallback needed — plain `serve` 404s on
+nested `/t/<org>/<tournament>` paths, a pure local-testing quirk unrelated to
+Vercel's own rewrites): fresh cookies, signed in as the Referee persona,
+landed with `S.role === 'referee'` and no error; claimed a match, started it,
+logged a goal, ended it, final score correct; confirmed via direct query
+that `tournaments.data` stayed null throughout. `npx tsc --noEmit` clean for
+the `dula-hq-2.0` side.
