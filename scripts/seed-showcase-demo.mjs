@@ -479,6 +479,28 @@ async function main() {
   await must(admin.from('tournament_staff').insert({ tournament_id: tigerCup.id, user_id: organizerId, role: 'organizer', org_id: davao.id }), 'tournament_staff organizer');
   report.demoPersonas.organizer = { name: organizerName, email: organizerEmail };
 
+  // The rest of the tournament_staff catalog (logistics/volunteer_coordinator
+  // were retired, §0u), all on the same Tiger Cup entry as the Organizer above
+  // so all seven tournament roles are directly comparable in one console --
+  // same reasoning as the coach/team-manager pair sharing U15 Girls. Also
+  // created, idempotently and without this wipe, by
+  // scripts/seed-demo-tournament-staff.mjs.
+  const TOURNAMENT_OFFICE_ROLES = [
+    { role: 'tournament_it_admin', slug: 'tournamentit', name: 'Ariel Salazar' },
+    { role: 'team_coordinator', slug: 'teamcoordinator', name: 'Camille Ocampo' },
+    { role: 'secretary', slug: 'tournamentsecretary', name: 'Noel Fernandez' },
+    { role: 'treasurer', slug: 'tournamenttreasurer', name: 'Grace Domingo' },
+    { role: 'communications', slug: 'tournamentcomms', name: 'Marcus Pascual' },
+    { role: 'referee_coordinator', slug: 'refereecoordinator', name: 'Teodoro Navarro' },
+  ];
+  report.demoPersonas.tournamentOfficeRoles = [];
+  for (const { role, slug, name } of TOURNAMENT_OFFICE_ROLES) {
+    const email = `${slug}.tiger-cup.davao-unity-sports@${EMAIL_DOMAIN}`;
+    const userId = await createPerson(email, name);
+    await must(admin.from('tournament_staff').insert({ tournament_id: tigerCup.id, user_id: userId, role, org_id: davao.id }), `tournament_staff ${role}`);
+    report.demoPersonas.tournamentOfficeRoles.push({ role, name, email });
+  }
+
   // ---------- write the doc ----------
   writeReport(report);
   console.log('\nDone. See docs/demo-data-showcase.md for the full breakdown.');
@@ -521,6 +543,9 @@ function writeReport(report) {
     lines.push(`| Player | ${d.player.name} | \`${d.player.email}\` |`);
     if (d.organizer) {
       lines.push(`| Tournament organizer (Tiger Cup, Davao Unity Sports — no org membership) | ${d.organizer.name} | \`${d.organizer.email}\` → \`/tm/davao-unity-sports/tiger-cup\` |`);
+    }
+    for (const p of d.tournamentOfficeRoles ?? []) {
+      lines.push(`| ${p.role} (Tiger Cup, Davao Unity Sports) | ${p.name} | \`${p.email}\` → \`/tm/davao-unity-sports/tiger-cup\` |`);
     }
     lines.push('');
     lines.push('---');

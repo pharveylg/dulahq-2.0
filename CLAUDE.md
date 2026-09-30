@@ -3948,3 +3948,55 @@ already recorded). Hit the same corrupted dev-server webpack cache §0y already
 documented (`Cannot find module './873.js'`, caused here by running `npm run
 build` against the same `.next` directory a dev server already had open) —
 cleared `.next` and restarted, same fix as last time.
+
+---
+
+## 0zd. Tournament Roles demo personas: the rest of the catalog (2026-09-29)
+
+`/demo`'s "Tournament Roles" section had only two cards (Org admin, Tournament
+organizer) against "Club Roles"' seven — flagged by the user, who also asked
+for something plain-English ("referee, official/committee") that doesn't map
+1:1 to any role string in either system. Checked before building: on-field
+match officials (`org_officials`/`tournament_officials`) have no login at all
+in this app — a pool of names, not accounts — so they can't be a "sign in as"
+persona regardless of interpretation. Asked the user to pick a scope; they
+confirmed the full remaining `tournament_staff` catalog (six roles:
+`tournament_it_admin`, `team_coordinator`, `secretary`, `treasurer`,
+`communications`, `referee_coordinator` — `logistics`/`volunteer_coordinator`
+stay retired per §0u).
+
+All six join the *same* Tiger Cup entry (Davao Unity Sports) as the existing
+Organizer persona, rather than being spread across tournaments — same
+reasoning §0d already used for the coach/team-manager pair sharing U15 Girls:
+one console where all seven tournament roles are directly comparable.
+
+`scripts/seed-demo-tournament-staff.mjs` (new) mirrors
+`scripts/seed-demo-organizer.mjs`'s own pattern exactly — idempotent,
+upsert-by-`(tournament_id, user_id, role)`, no destructive wipe — so it could
+be run once against the live database without touching any other demo data.
+`scripts/seed-showcase-demo.mjs` gained the same six accounts (in a
+`TOURNAMENT_OFFICE_ROLES` loop right after the Organizer block, plus a
+`report.demoPersonas.tournamentOfficeRoles` array feeding `writeReport()`'s
+table) so a future full re-seed keeps them — not run this session, since a
+full re-seed is destructive to live demo data and the standalone script
+already had the live effect. `src/lib/demo-personas.ts` gained six `Persona`
+entries; `/demo`'s grouping is entirely data-driven off `products`, so no
+component code changed.
+
+Descriptions state each role's real boundary rather than just its name:
+Team coordinator reviews/flags but cannot decide (Organizer alone can, per
+§0l's deliberate deviation from the Team Manager spec's own suggestion);
+Referee coordinator assigns officials to *this* tournament's matches but
+cannot touch the org-wide officials pool (`org_admin`-only, §0o/§0y); IT admin
+holds no business authority at all (mirrors club IT admin, §0e).
+
+Verified live: signed in as Referee coordinator, landed on the console
+showing exactly Entries/Categories/Officials (no Finance/Staff/Announcements/
+Public listing — matches holding only `manage_officiating`); signed in as
+Organizer and opened Staff, which now lists all 7 tournament_staff rows with
+the right names, emails and roles. `npx tsc --noEmit` and `npm run build`
+both clean. The RLS suite wasn't re-run — this added only data rows through
+already-covered, unchanged authorization paths (`tournament_staff` insert via
+service role, which bypasses RLS; the console itself is gated by policies the
+existing 328-test suite already exercises), and the live sign-in above is
+itself an end-to-end proof against the real RLS, not a substitute test.
