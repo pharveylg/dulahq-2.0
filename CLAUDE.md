@@ -4251,3 +4251,134 @@ across three consecutive runs after the fix. Also re-confirmed the
 Organizer's still-unrecognized-here behavior is unchanged (`tournament_staff`
 recognition was never in scope this round, only `org_officials` — the
 reworded, non-alarming "no role" message still shows, as documented in §0ze).
+
+---
+
+## 0zg. Notification writes move behind a service-role boundary (phase16o, 2026-10-02)
+
+Picked up from a local, uncommitted patch (`LOCAL_CHANGES.md`, prepared outside
+this session) that reconciled the §0zf-era push-notification build with a real,
+live gap it had never closed. Reviewed against the live project before trusting
+any of it — every table/column/function signature the patch referenced was
+checked with `pg_get_functiondef`/`information_schema`, not assumed — then
+applied in the only safe order: app code deployed first, migration second.
+
+### The gap was real, not hypothetical
+
+`notifications_staff_create`'s own INSERT policy was `with check
+is_org_member(org_id)` — it never checked the **recipient**. Any club or
+tournament staff member could POST a row directly to `/rest/v1/notifications`
+naming an arbitrary `recipient_user_id`, `template`, `payload` and `link_path`
+— a live spoofing/phishing vector (a fake "your login was reset" notice with a
+malicious `link_path`, attributed to nobody in particular since the recipient
+was never validated). Confirmed via `pg_policies` before writing anything.
+Six client-facing RPCs were also `authenticated`-executable with no equivalent
+scope check: `create_notification`, `push_subscription_targets`,
+`mark_notification_sent`, `delete_stale_push_subscription`,
+`staff_holding_permission`, `platform_admin_user_ids` — the last of these
+returns every platform admin's user id, which is exactly the kind of thing
+§0g's own minors-data caution would flag if it were player data instead.
+
+### The fix: service role + explicit per-call authorization, not RLS
+
+`notify.ts` is rewritten so every notification write goes through the
+service-role client (`admin-auth.ts`), gated by `isRecipientAuthorized()`
+before the insert — not by the table's RLS, which no longer admits
+`authenticated` INSERT/UPDATE at all beyond the `read_at` column. This is a
+deliberate departure from this project's usual "SECURITY DEFINER SQL function
+is the authorization boundary" pattern: the check now lives in TypeScript,
+re-implementing (not calling) `is_user_in_org`-equivalent logic for three
+recipient shapes `is_user_in_org` doesn't cover on its own —
+`provisioned_logins.owner_org_id` for a brand-new account that has no
+`club_staff`/`tournament_staff` row yet (same chicken-and-egg §0t already
+solved for login provisioning), a live `org_officials`/`tournament_officials`
+assignment for an official, and the platform-admin roster for the two
+templates that address it. Worth watching: any **future** notification
+template needs its own branch added to `isRecipientAuthorized` — there's no
+RLS backstop catching an omission the way there would be for a table write.
+
+Push dispatch (`sendPushForNotification`) now takes only a persisted
+notification id and re-reads the recipient/payload/link from that row —
+callers never choose a recipient or construct a push payload directly, so a
+compromised or buggy call site can at most push an already-authorized
+notification a second time, never an arbitrary one.
+
+`post_tournament_announcement`/`review_entry_document` (phase16m, then
+simplified again here) now return only the notification id(s) they created,
+not a payload a client could reuse to send its own push — `postAnnouncement`/
+`reviewEntryDocument` in `tm/.../actions.ts` pass those ids straight to
+`sendPushForNotification` and never see a recipient.
+
+### Three real notification events wired, one of them cross-checked for the first time
+
+Support-request replies (both directions, via the new `notifyPlatformAdmins`),
+tournament-official assignment (`assignOfficial` now validates the official
+and tournament actually share an org before writing — the old insert trusted
+its caller-supplied `orgId` outright), and IT-issued login creation/reissue
+(`logins-actions.ts`, scoped to `provisioned_logins.owner_org_id` so a
+reissue notice can't be forged for an account the issuing scope never
+provisioned). `OFFICIAL_ROLE_LABEL` moved out of `Officials.tsx`/
+`official/page.tsx` into `src/lib/officiating.ts` so the assignment
+notification's body text and both UI call sites share one source.
+
+### Deploy ordering: the migration must follow the code, not precede it
+
+Confirmed by reading `HEAD` before touching anything: the deployed app still
+called `create_notification`/`push_subscription_targets`/
+`mark_notification_sent`/`delete_stale_push_subscription`/
+`staff_holding_permission` directly as the authenticated user. Revoking
+`authenticated` EXECUTE on those (the whole point of this migration) before
+the new service-role-based code shipped would have broken every live
+notification path — officiating assignment, fee/document/goal/evaluation
+notifications, staff notifications, push cleanup — across every real org,
+immediately. So: commit and push the app code, confirm the Vercel deployment
+is `READY` and aliased to `dulahq.app` (checked via the Vercel MCP tools, not
+assumed from a successful `git push`), **then** apply the migration.
+
+Also backfilled two migration files that were live in the database (confirmed
+via `list_migrations`) but never committed to this repo at all —
+`20260930093236_phase16m_push_enable_tournament_notifications.sql` and
+`20260930100512_phase16n_platform_admin_user_ids.sql` — reconstructed from
+`pg_get_functiondef()` against the live project immediately before phase16o
+superseded them, same reconstruction precedent as phase2h/phase2i (§0a). The
+live project recorded four incremental `apply_migration` calls that day for
+phase16m alone (`v1`, `v2`, a `_fix`, a `_v3`); this backfill captures their
+net final effect in one file rather than inventing plausible intermediate
+diffs for steps whose exact history wasn't preserved.
+
+### Also bundled in the same patch: a dependency and runtime bump
+
+Next.js 15→16.3.8, Vitest 2→4.1.11, Node target →22.x (`.nvmrc`, `engines`,
+both GitHub Actions workflows), done after `npm audit` found vulnerabilities
+in the old versions. `tsconfig.json` now excludes `tests/` from the app
+type-check (`tsc` was never clean against that file — a pre-existing,
+unrelated diagnostic batch this file has recorded since §0m; Vitest still
+type-checks and runs the tests themselves, only the top-level `tsc --noEmit`
+gate is scoped narrower). Riding a major framework bump in the same commit as
+a production security fix was flagged as a real tradeoff, not silently
+accepted — build, `tsc --noEmit`, and the unit suite all stayed clean, but a
+future session wanting to roll back just the notification hardening will have
+to pick through an unrelated framework change to do it cleanly.
+
+### Verified
+
+Before touching the live project: every function signature and table column
+the patch and the migration reference was checked directly against
+`information_schema`/`pg_proc` — zero drift from what the code assumes.
+`npm audit` (0 vulnerabilities), `npm run build`, `npx tsc --noEmit`,
+`npm run test:unit` (81/81) and `git diff --check` all re-run and confirmed
+clean before committing, not taken on the patch author's word. After deploying
+(commit `aab99e9`, confirmed `READY` and aliased to `dulahq.app` via the
+Vercel MCP tools) and applying the migration: `anon_executable_secdef_count()`
+stayed `0`, `get_advisors` showed no new or unexpected findings (the three
+RPCs still `authenticated`-executable — `post_tournament_announcement`,
+`review_entry_document`, `save_push_subscription` — are exactly the ones
+meant to stay that way), and the RLS suite went from the prior 328-test
+baseline to **331/331**, run live against production with no leftover test
+fixtures afterward (`notifications`/`push_subscriptions`/test users/test orgs
+all confirmed at zero). The 3 new tests pin exactly the gap this closes: a
+direct `notifications` insert and all six narrowed RPCs are refused to an
+authenticated org admin (platform_admin_user_ids excepted only for the
+service-role caller), a service-role-written notification is visible only to
+its actual recipient, and `save_push_subscription` still works self-scoped for
+an ordinary user.
