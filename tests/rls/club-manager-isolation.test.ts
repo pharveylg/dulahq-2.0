@@ -290,6 +290,85 @@ afterAll(async () => {
   }
 });
 
+describe('notification boundary and recipient RLS (phase16o)', () => {
+  it('authenticated users cannot insert arbitrary notifications or invoke server delivery helpers', async () => {
+    const payload = { title: 'Unauthorized', body: 'This must not persist.' };
+    const directInsert = await (orgAdminAClient as any).from('notifications').insert({
+      org_id: orgA.id,
+      recipient_user_id: clubStaffBUserId,
+      channel: 'in_app',
+      template: 'test.unauthorized',
+      payload,
+    });
+    expect(directInsert.error).not.toBeNull();
+
+    const create = await (orgAdminAClient as any).rpc('create_notification', {
+      p_org_id: orgA.id,
+      p_recipient_user_id: clubStaffBUserId,
+      p_recipient_guardian_id: null,
+      p_channel: 'in_app',
+      p_template: 'test.unauthorized',
+      p_payload: payload,
+      p_link_path: null,
+    });
+    expect(create.error).not.toBeNull();
+
+    expect((await (orgAdminAClient as any).rpc('push_subscription_targets', {
+      p_org_id: orgA.id,
+      p_user_id: clubStaffBUserId,
+    })).error).not.toBeNull();
+    expect((await (orgAdminAClient as any).rpc('mark_notification_sent', {
+      p_notification_id: crypto.randomUUID(),
+      p_failed_reason: null,
+    })).error).not.toBeNull();
+    expect((await (orgAdminAClient as any).rpc('delete_stale_push_subscription', {
+      p_endpoint: `https://push.invalid/${crypto.randomUUID()}`,
+    })).error).not.toBeNull();
+    expect((await (orgAdminAClient as any).rpc('staff_holding_permission', {
+      p_club_id: clubA.id,
+      p_permission_key: 'submit_support_request',
+      p_team_id: null,
+    })).error).not.toBeNull();
+    expect((await (orgAdminAClient as any).rpc('platform_admin_user_ids')).error).not.toBeNull();
+    const serverAdminIds = await (adminClient as any).rpc('platform_admin_user_ids');
+    expect(serverAdminIds.error).toBeNull();
+    expect(Array.isArray(serverAdminIds.data)).toBe(true);
+  });
+
+  it('service-role writes are visible only to the actual notification recipient', async () => {
+    const row = must<{ id: string }>(await (adminClient as any).from('notifications').insert({
+      org_id: orgA.id,
+      recipient_user_id: coachA1UserId,
+      channel: 'in_app',
+      template: 'test.recipient_only',
+      payload: { title: 'Recipient test', body: 'Private to the recipient.' },
+      link_path: '/player',
+    }).select('id').single(), 'service-role notification');
+
+    const own = await (coachA1Client as any).from('notifications').select('id').eq('id', row.id);
+    const unrelated = await (guardianOfA1Client as any).from('notifications').select('id').eq('id', row.id);
+    expect(own.data).toHaveLength(1);
+    expect(unrelated.data).toHaveLength(0);
+    await (adminClient as any).from('notifications').delete().eq('id', row.id);
+  });
+
+  it('authenticated users can still save their own push subscription only', async () => {
+    const endpoint = `https://push.invalid/${crypto.randomUUID()}`;
+    const saved = await (coachA1Client as any).rpc('save_push_subscription', {
+      p_endpoint: endpoint,
+      p_p256dh: 'test-public-key',
+      p_auth_key: 'test-auth-secret',
+    });
+    expect(saved.error).toBeNull();
+
+    const own = await coachA1Client.from('push_subscriptions').select('user_id').eq('endpoint', endpoint);
+    const unrelated = await guardianOfA1Client.from('push_subscriptions').select('user_id').eq('endpoint', endpoint);
+    expect(own.data).toEqual([{ user_id: coachA1UserId }]);
+    expect(unrelated.data).toHaveLength(0);
+    await adminClient.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  });
+});
+
 describe('club-level isolation: clubs / club_staff', () => {
   it('club_manager at Club B CANNOT update Club A', async () => {
     const { data } = await clubStaffBClient.from('clubs').update({ name: 'Hijacked' }).eq('id', clubA.id).select();
@@ -3369,7 +3448,7 @@ describe('tournament announcements (phase15c)', () => {
   const portal = async (c: ReturnType<typeof createClient>, entry: string) =>
     ((await c.rpc('entrant_entry_portal', { p_entry_id: entry })).data as any)?.announcements?.map((a: any) => a.title) ?? [];
   const bell = async (userId: string) =>
-    ((await adminClient.from('notifications').select('template, link_path').eq('recipient_user_id', userId).like('template', 'tournament.announcement%')).data ?? []) as any[];
+    ((await adminClient.from('notifications').select('id, template, link_path').eq('recipient_user_id', userId).like('template', 'tournament.announcement%')).data ?? []) as any[];
 
   it('sets up two tournaments: one with accepted, pending and declined entrants; another with one entrant', async () => {
     commsId = (await createTestUser(commsEmail, 'audience')).publicUser.id;
@@ -3397,7 +3476,11 @@ describe('tournament announcements (phase15c)', () => {
 
   it('a communications holder posts; entrants of that tournament get it in the portal and the bell (declined ones do not)', async () => {
     const r = await post(comms, 'Kickoff moved', 'Opening match now 9am', 'all');
-    expect(r.error).toBeNull(); annAll = r.data as unknown as string;
+    expect(r.error).toBeNull();
+    const result = r.data as any;
+    annAll = result.announcement_id;
+    expect(result.recipient_count).toBe(2);
+    expect(result.notification_ids).toHaveLength(2);
     expect(await portal(acc, accEntry)).toEqual(['Kickoff moved']);
     expect(await portal(pen, penEntry)).toEqual(['Kickoff moved']);
     expect(await portal(dec, decEntry)).toEqual([]);           // declined teams are not addressed
@@ -3405,13 +3488,22 @@ describe('tournament announcements (phase15c)', () => {
     expect(await bell(accId)).toHaveLength(1);
     expect((await bell(accId))[0].link_path).toBe(`/entry/${accEntry}`);
     expect(await bell(penId)).toHaveLength(1);
+    expect(result.notification_ids).toEqual(expect.arrayContaining([
+      (await bell(accId))[0].id,
+      (await bell(penId))[0].id,
+    ]));
     expect(await bell(decId)).toHaveLength(0);
     expect(await bell(othId)).toHaveLength(0);
   });
 
   it('an accepted-only post skips pending entrants', async () => {
     const r = await post(comms, 'Bring two kits', 'Accepted teams only', 'accepted');
-    expect(r.error).toBeNull(); annAccepted = r.data as unknown as string;
+    expect(r.error).toBeNull();
+    const result = r.data as any;
+    annAccepted = result.announcement_id;
+    expect(result.recipient_count).toBe(1);
+    expect(result.notification_ids).toHaveLength(1);
+    expect((await bell(accId)).map((notification) => notification.id)).toContain(result.notification_ids[0]);
     expect((await portal(acc, accEntry)).sort()).toEqual(['Bring two kits', 'Kickoff moved']);
     expect(await portal(pen, penEntry)).toEqual(['Kickoff moved']);
     expect(await bell(penId)).toHaveLength(1);
@@ -3556,9 +3648,13 @@ describe('tournament entry documents (phase15d)', () => {
     expect((await review(sec, waiverId, 'approved')).error).toBeNull();
     const row = must(await adminClient.from('tournament_entry_documents').select('status, reviewed_by').eq('id', waiverId).single(), 'reviewed');
     expect(row).toMatchObject({ status: 'approved', reviewed_by: secId });
-    expect((await review(orgz, rosterId, 'rejected', 'wrong squad listed')).error).toBeNull();
-    const notif = await adminClient.from('notifications').select('template, link_path').eq('recipient_user_id', coachId).eq('template', 'tournament.document.reviewed');
+    const reviewResult = await review(orgz, rosterId, 'rejected', 'wrong squad listed');
+    expect(reviewResult.error).toBeNull();
+    const notificationId = (reviewResult.data as any)?.notification_id;
+    expect(notificationId).toBeTruthy();
+    const notif = await adminClient.from('notifications').select('id, template, link_path').eq('recipient_user_id', coachId).eq('template', 'tournament.document.reviewed');
     expect((notif.data ?? [])).toHaveLength(1);
+    expect((notif.data ?? [])[0].id).toBe(notificationId);
     expect((notif.data ?? [])[0].link_path).toBe(`/entry/${entryId}`);
   });
 

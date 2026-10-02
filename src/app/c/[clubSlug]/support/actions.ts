@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { notifyPlatformAdmins } from '@/lib/notify';
 import { createClient } from '@/lib/supabase/server';
 
 function friendlyError(error: { code?: string; message: string }) {
@@ -30,14 +31,25 @@ export async function createSupportRequest(clubId: string, formData: FormData) {
   const { data: club } = await supabase.from('clubs').select('org_id').eq('id', clubId).maybeSingle();
   if (!club) return { error: 'Club not found.' };
 
-  const { error } = await supabase.from('support_requests').insert({
-    org_id: club.org_id,
-    created_by: dulaUser.user.id,
-    category,
-    subject,
-    body,
-  });
+  const { data: request, error } = await supabase
+    .from('support_requests')
+    .insert({
+      org_id: club.org_id,
+      created_by: dulaUser.user.id,
+      category,
+      subject,
+      body,
+    })
+    .select('id, org_id, subject')
+    .single();
   if (error) return { error: friendlyError(error) };
+
+  await notifyPlatformAdmins({
+    orgId: request.org_id,
+    template: 'support.request.created',
+    payload: { title: 'New support request', body: request.subject },
+    linkPath: '/platformconsole',
+  });
 
   revalidatePath('/c/[clubSlug]/support', 'page');
   return { success: true };
@@ -57,6 +69,20 @@ export async function replySupportRequest(requestId: string, body: string) {
     body: trimmed,
   });
   if (error) return { error: friendlyError(error) };
+
+  const { data: request } = await supabase
+    .from('support_requests')
+    .select('org_id, subject')
+    .eq('id', requestId)
+    .maybeSingle();
+  if (request) {
+    await notifyPlatformAdmins({
+      orgId: request.org_id,
+      template: 'support.request.reply',
+      payload: { title: 'Support request updated', body: request.subject },
+      linkPath: '/platformconsole',
+    });
+  }
 
   revalidatePath('/c/[clubSlug]/support', 'page');
   return { success: true };

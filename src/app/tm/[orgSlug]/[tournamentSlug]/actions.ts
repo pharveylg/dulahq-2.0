@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { notifyUser, sendPushForNotification } from '@/lib/notify';
+import { OFFICIAL_ROLE_LABEL } from '@/lib/officiating';
 import { createClient } from '@/lib/supabase/server';
 import { uploadFile, deleteFile } from '../../../../../shared/files/lib/r2';
 
@@ -56,11 +58,38 @@ export async function assignOfficial(tournamentId: string, orgId: string, formDa
   if (!officialId) return { error: 'Choose an official.' };
   if (!OFFICIAL_ROLES.includes(role)) return { error: 'Choose a role.' };
   const supabase = await createClient();
-  const { error } = await supabase.from('tournament_officials').insert({ org_id: orgId, tournament_id: tournamentId, official_id: officialId, role });
+  const [{ data: official }, { data: tournament }] = await Promise.all([
+    supabase.from('org_officials').select('org_id, user_id').eq('id', officialId).maybeSingle(),
+    supabase.from('tournaments').select('org_id, name, slug').eq('id', tournamentId).maybeSingle(),
+  ]);
+  if (!official || official.org_id !== orgId) return { error: 'That official is not in this organization’s pool.' };
+  if (!tournament || tournament.org_id !== orgId) return { error: 'Tournament and organization do not match.' };
+
+  const { error } = await supabase.from('tournament_officials').insert({
+    org_id: tournament.org_id,
+    tournament_id: tournamentId,
+    official_id: officialId,
+    role,
+  });
   if (error) {
     if (error.code === '23505') return { error: 'Already assigned to that role.' };
     return { error: friendlyError(error) };
   }
+
+  const { data: organization } = await supabase.from('organizations').select('slug').eq('id', orgId).maybeSingle();
+  if (official.user_id) {
+    await notifyUser({
+      orgId: tournament.org_id,
+      recipientUserId: official.user_id,
+      template: 'tournament.official.assigned',
+      payload: {
+        title: 'New officiating assignment',
+        body: `${tournament.name} · ${OFFICIAL_ROLE_LABEL[role] ?? role}`,
+      },
+      linkPath: organization?.slug ? `/t/${organization.slug}/${tournament.slug}` : '/official',
+    });
+  }
+
   refresh();
   return { success: true };
 }
@@ -99,10 +128,16 @@ export async function decideEntry(entryId: string, status: 'accepted' | 'decline
 export async function postAnnouncement(tournamentId: string, title: string, body: string, audience: 'all' | 'accepted') {
   if (!title.trim() || !body.trim()) return { error: 'Add a title and a message.' };
   const supabase = await createClient();
-  const { error } = await (supabase as any).rpc('post_tournament_announcement', {
+  const { data, error } = await (supabase as any).rpc('post_tournament_announcement', {
     p_tournament_id: tournamentId, p_title: title, p_body: body, p_audience: audience,
   });
   if (error) return { error: friendlyError(error) };
+
+  const notificationIds = Array.isArray((data as any)?.notification_ids)
+    ? (data as any).notification_ids as string[]
+    : [];
+  await Promise.all(notificationIds.map((id) => sendPushForNotification(id)));
+
   refresh();
   return { success: true };
 }
@@ -148,8 +183,12 @@ export async function staffUploadEntryDocument(entryId: string, formData: FormDa
 export async function reviewEntryDocument(documentId: string, status: 'approved' | 'rejected', note = '') {
   if (status === 'rejected' && !note.trim()) return { error: 'Say why it was rejected so the team knows what to fix.' };
   const supabase = await createClient();
-  const { error } = await (supabase as any).rpc('review_entry_document', { p_document_id: documentId, p_status: status, p_note: note });
+  const { data, error } = await (supabase as any).rpc('review_entry_document', { p_document_id: documentId, p_status: status, p_note: note });
   if (error) return { error: friendlyError(error) };
+
+  const notificationId = (data as any)?.notification_id;
+  if (typeof notificationId === 'string') await sendPushForNotification(notificationId);
+
   refresh();
   return { success: true };
 }

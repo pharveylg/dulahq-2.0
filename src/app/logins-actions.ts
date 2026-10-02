@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { serviceClient, newTempPassword } from '@/lib/admin-auth';
 import { looksLikeEmail, TEMP_PASSWORD_HOURS } from '@/lib/temp-password';
+import { notifyUser } from '@/lib/notify';
 
 type Scope = 'club' | 'tournament' | 'platform';
 
@@ -14,6 +15,17 @@ function scopeArgs(scope: Scope, scopeId: string | null) {
 function friendly(error: { code?: string; message: string }) {
   if (error.code === '42501') return 'You don’t have permission to do that.';
   return error.message;
+}
+
+/** club/tournament scopeId is that table's own id; platform scope has no org. */
+async function orgIdForScope(supabase: Awaited<ReturnType<typeof createClient>>, scope: Scope, scopeId: string | null) {
+  if (scope === 'platform' || !scopeId) return null;
+  if (scope === 'club') {
+    const { data } = await supabase.from('clubs').select('org_id').eq('id', scopeId).maybeSingle();
+    return data?.org_id ?? null;
+  }
+  const { data } = await supabase.from('tournaments').select('org_id').eq('id', scopeId).maybeSingle();
+  return data?.org_id ?? null;
 }
 
 /**
@@ -65,6 +77,23 @@ export async function provisionLogin(scope: Scope, scopeId: string | null, name:
     return { error: friendly(recordError) };
   }
 
+  // Best-effort. The new account has no push subscription yet, so this is a
+  // durable in-app notice only. Never include the temporary password here.
+  try {
+    const orgId = await orgIdForScope(supabase, scope, scopeId);
+    if (orgId) {
+      await notifyUser({
+        orgId,
+        recipientUserId: created.user.id,
+        template: 'login.created',
+        payload: { title: 'Your Dulà HQ login is ready', body: 'Sign in and set your password to get started.' },
+        linkPath: '/login',
+      });
+    }
+  } catch (error) {
+    console.error('Could not create login notification', error);
+  }
+
   revalidatePath('/', 'layout');
   return { success: true as const, email: cleanEmail, name: cleanName, password, hours: TEMP_PASSWORD_HOURS };
 }
@@ -94,6 +123,22 @@ export async function reissueLogin(scope: Scope, scopeId: string | null, targetU
     app_metadata: { must_change_password: true },
   });
   if (error || !data.user) return { error: error?.message ?? 'Could not reissue the login.' };
+
+  // Best-effort, and intentionally excludes the newly issued password.
+  try {
+    const orgId = await orgIdForScope(supabase, scope, scopeId);
+    if (orgId) {
+      await notifyUser({
+        orgId,
+        recipientUserId: targetUserId,
+        template: 'login.reissued',
+        payload: { title: 'Your login was reset', body: 'Sign in with the new temporary password to continue.' },
+        linkPath: '/login',
+      });
+    }
+  } catch (error) {
+    console.error('Could not create login notification', error);
+  }
 
   revalidatePath('/', 'layout');
   return { success: true as const, email: data.user.email ?? '', name: (data.user.user_metadata as any)?.name ?? '', password, hours: TEMP_PASSWORD_HOURS };

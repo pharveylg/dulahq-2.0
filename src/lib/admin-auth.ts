@@ -1,20 +1,21 @@
+import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import { randomInt } from 'node:crypto';
 import { generateTempPassword } from './temp-password';
 
 /**
- * The ONE place the service-role key is used by the app (previously only the RLS test
- * suite used it). It bypasses every RLS policy, so:
+ * The server-only factory for the service-role client. It bypasses every RLS policy,
+ * so:
  *
- *  - Import this only from server actions ('use server' files) and route handlers,
- *    never from a component. Nothing here is re-exported to the client.
- *  - Every caller must have authorized the user FIRST, through a database function
- *    (can_provision_login / can_reissue_login), before touching this client. Those
- *    functions are the authority; this module only performs what they allowed.
+ *  - Import this only from server actions, route handlers, or other modules guarded by
+ *    `server-only`; never from a component. Nothing here is re-exported to the client.
+ *  - Login provisioning must pass its database authorization RPC before using it.
+ *    Notification writes must derive recipients from authorized domain actions, verify
+ *    recipient scope, and push only from a persisted notification ID.
  *  - The key must never be prefixed NEXT_PUBLIC_ or logged.
  *
- * Needs SUPABASE_SERVICE_ROLE_KEY in the environment (Vercel project settings for
- * production, .env.local locally).
+ * Needs SUPABASE_SERVICE_ROLE_KEY in the environment (.env.local locally and a
+ * separately authorized production configuration for deployment).
  */
 export function serviceClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

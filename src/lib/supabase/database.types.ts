@@ -4868,6 +4868,18 @@ export type Database = {
         Args: { p_club_id: string; p_permission_key: string; p_team_id?: string | null }
         Returns: string[]
       }
+      platform_admin_user_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
+      }
+      post_tournament_announcement: {
+        Args: { p_tournament_id: string; p_title: string; p_body: string; p_audience?: string }
+        Returns: Json
+      }
+      review_entry_document: {
+        Args: { p_document_id: string; p_status: string; p_note?: string | null }
+        Returns: Json
+      }
       set_staff_account_status: {
         Args: { p_club_id: string; p_target_user_id: string; p_status: string }
         Returns: undefined

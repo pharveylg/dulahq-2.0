@@ -1,18 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { OFFICIAL_ROLE_LABEL } from '@/lib/officiating';
 import { addOrgOfficial, setOrgOfficialActive, assignOfficial, removeOfficialAssignment } from './actions';
 
 export type OrgOfficial = { id: string; fullName: string; grade: string | null; designation: string | null; phone: string | null; email: string | null; active: boolean };
 export type OfficialAssignment = { id: string; officialId: string; officialName: string; role: string };
-
-const ROLE_LABEL: Record<string, string> = {
-  referee: 'Referee',
-  assistant_referee: 'Assistant referee',
-  fourth_official: 'Fourth official',
-  commissioner: 'Commissioner',
-  table_official: 'Table official',
-};
 
 function AddOfficialForm({ orgId }: { orgId: string }) {
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +122,7 @@ function AssignForm({ tournamentId, orgId, pool }: { tournamentId: string; orgId
       <div className="form-group" style={{ flex: 1, minWidth: 160, margin: 0 }}>
         <label htmlFor="assign-role">Role</label>
         <select id="assign-role" name="role" defaultValue="referee">
-          {Object.entries(ROLE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {Object.entries(OFFICIAL_ROLE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
       <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? 'Assigning…' : 'Assign'}</button>
@@ -154,7 +147,7 @@ function AssignmentRow({ assignment, canAssign }: { assignment: OfficialAssignme
     <div className="list-row">
       <div className="list-row-main">
         <div className="list-row-title">{assignment.officialName}</div>
-        <div className="list-row-meta">{ROLE_LABEL[assignment.role] ?? assignment.role}</div>
+        <div className="list-row-meta">{OFFICIAL_ROLE_LABEL[assignment.role] ?? assignment.role}</div>
         {error && <p className="error-text" style={{ margin: '4px 0 0' }}>{error}</p>}
       </div>
       {canAssign && <button className="btn" style={{ fontSize: 11.5 }} disabled={pending} onClick={remove}>Remove</button>}

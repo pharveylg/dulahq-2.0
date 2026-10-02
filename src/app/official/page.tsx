@@ -1,13 +1,6 @@
 import { redirect } from 'next/navigation';
+import { OFFICIAL_ROLE_LABEL } from '@/lib/officiating';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
-
-const ROLE_LABEL: Record<string, string> = {
-  referee: 'Referee',
-  assistant_referee: 'Assistant referee',
-  fourth_official: 'Fourth official',
-  commissioner: 'Commissioner',
-  table_official: 'Table official',
-};
 
 function formatDate(value: string | null) {
   if (!value) return null;
@@ -103,7 +96,7 @@ export default async function OfficialHomePage() {
                   {a.org_name}{formatDate(a.event_date) ? ` · ${formatDate(a.event_date)}` : ''}{a.venue ? ` · ${a.venue}` : ''}
                 </div>
               </div>
-              <span className="chip">{ROLE_LABEL[a.role] ?? a.role}</span>
+              <span className="chip">{OFFICIAL_ROLE_LABEL[a.role] ?? a.role}</span>
             </a>
           ))}
         </div>

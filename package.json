@@ -2,6 +2,9 @@
   "name": "dula-hq-2.0",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "description": "Dula HQ 2.0 -- Club Manager (built first) integrating with the existing live Dula HQ Tournament Manager database",
   "scripts": {
     "dev": "next dev",
@@ -18,7 +21,7 @@
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.45.0",
     "motion": "^13.2.0",
-    "next": "^15.0.0",
+    "next": "^16.3.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "web-push": "^3.6.7"
@@ -28,6 +31,6 @@
     "@types/react": "^19.0.0",
     "@types/web-push": "^3.6.4",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.11"
   }
 }
