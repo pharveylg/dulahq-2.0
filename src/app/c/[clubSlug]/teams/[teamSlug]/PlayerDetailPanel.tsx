@@ -77,6 +77,8 @@ export default function PlayerDetailPanel({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
+  // Mirrors Family.tsx's own justSent state -- see that component for why.
+  const [justSent, setJustSent] = useState<Set<string>>(new Set());
 
   function handleRemovePlayer() {
     setError(null);
@@ -106,7 +108,16 @@ export default function PlayerDetailPanel({
     setError(null);
     startTransition(async () => {
       const result = await inviteGuardian(clubId, teamId, guardianId, email ?? '');
-      if (result?.error) setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+      setJustSent((prev) => new Set(prev).add(guardianId));
+      setTimeout(() => setJustSent((prev) => {
+        const next = new Set(prev);
+        next.delete(guardianId);
+        return next;
+      }), 3000);
     });
   }
 
@@ -213,15 +224,19 @@ export default function PlayerDetailPanel({
                 )}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {canManage && g.accountStatus === 'no_account' && (
+                {canManage && (g.accountStatus === 'no_account' || g.accountStatus === 'invited') && (
+                  justSent.has(g.guardianId) ? (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sent ✓</span>
+                  ) : (
                   <button
                     onClick={() => handleInviteGuardian(g.guardianId, g.contactInfo?.email)}
                     disabled={pending || !g.contactInfo?.email}
                     title={g.contactInfo?.email ? undefined : 'Add an email first'}
                     style={{ background: 'none', border: 'none', cursor: g.contactInfo?.email ? 'pointer' : 'not-allowed', color: 'var(--accent)', fontSize: 12 }}
                   >
-                    Invite
+                    {g.accountStatus === 'invited' ? 'Resend invite' : 'Invite'}
                   </button>
+                  )
                 )}
                 {canManage && (
                   <button

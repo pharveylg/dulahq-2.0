@@ -4526,3 +4526,46 @@ changing its actual password, which isn't a test to run against a live
 account without being asked to. `npx tsc --noEmit`, `npm run build`, and
 `npm run test:unit` (81 → 86, the 5 new `email-template.test.ts` cases) all
 stayed clean.
+
+### Resend invite (2026-10-02)
+
+The "Invite" button on the Family tab (`Family.tsx`) and the roster quick
+view (`PlayerDetailPanel.tsx`) only rendered while `accountStatus ===
+'no_account'` — once a guardian was invited, the control vanished entirely.
+`inviteGuardian()` was already idempotent (a plain status-flip update plus a
+best-effort email, safe to call again), so the only real gap was the UI
+never exposing a second call: an email that never arrived, got lost, or a
+guardian asking again had no path forward short of a database edit.
+
+Both components now show the same control for `'no_account'` **or**
+`'invited'`, relabelled "Resend invite" in the latter case, calling the
+exact same `inviteGuardian()` action — no new server action. Added a
+transient per-guardian "Sent ✓" (3s, local `Set` state) in place of the
+button right after a successful call, since a resend doesn't change
+`account_status` (it was already `'invited'`), so without it nothing on
+screen would confirm the click did anything. The existing
+disabled-without-an-email-on-file guard carries over unchanged for the
+resend case too.
+
+**Verified** live against real showcase data rather than a fixture:
+temporarily flipped a real `no_account` guardian (Gabriel Garcia, U15 Girls)
+to `'invited'` and confirmed the Family tab correctly showed "Resend invite",
+disabled with the same "Add an email first" title as before — this
+guardian, like every other one in the showcase seed data, has only a phone
+on file, which incidentally proved the disabled-guard carries over exactly
+as intended. Temporarily added a test email to the same row, reloaded, and
+confirmed the (now enabled) button fires `inviteGuardian()` successfully —
+server logs showed a clean 895ms execution with the same graceful
+"Email is not configured" degradation §0zh already established, both times
+it was clicked. **Not independently confirmed:** the exact 3-second "Sent
+✓" window — this dev environment's round trip to the live project ran
+8–11 seconds end to end (Turbopack dev-mode overhead, not the action
+itself), long enough that two attempts both missed the narrow visible
+window before capturing page text. The mechanism itself is plain, synchronous
+`useState`/`setTimeout`, the same shape already used elsewhere in this
+codebase, so this is a timing-visibility gap in how it was checked, not a
+claim that it works untested. All test mutations (`contact_info`,
+`account_status`, `invited_at`) were reverted to their exact original values
+afterward. `npx tsc --noEmit`, `npm run build`, and `npm run test:unit`
+(86/86, unchanged — this is pure UI, no new pure-function logic to test)
+all stayed clean.

@@ -56,6 +56,11 @@ export default function Family({
   const [error, setError] = useState<string | null>(null);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
   const [expandedPermissions, setExpandedPermissions] = useState<string | null>(null);
+  // Guardian ids whose invite email was just (re)sent -- shows "Sent" in
+  // place of the button for a few seconds, since account_status doesn't
+  // change on a resend (it was already 'invited') and the button would
+  // otherwise give no sign anything happened.
+  const [justSent, setJustSent] = useState<Set<string>>(new Set());
 
   function handleTogglePermission(linkId: string, key: string, currentlyGranted: boolean) {
     setError(null);
@@ -86,7 +91,16 @@ export default function Family({
     setError(null);
     startTransition(async () => {
       const result = await inviteGuardian(clubId, teamId, guardianId, email ?? '');
-      if (result?.error) setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+      setJustSent((prev) => new Set(prev).add(guardianId));
+      setTimeout(() => setJustSent((prev) => {
+        const next = new Set(prev);
+        next.delete(guardianId);
+        return next;
+      }), 3000);
     });
   }
 
@@ -150,15 +164,19 @@ export default function Family({
                         Permissions{overrideCount > 0 ? ` (${overrideCount} custom)` : ''}
                       </button>
                     )}
-                    {g.accountStatus === 'no_account' && (
-                      <button
-                        onClick={() => handleInviteGuardian(g.guardianId, g.contactInfo?.email)}
-                        disabled={pending || !g.contactInfo?.email}
-                        title={g.contactInfo?.email ? undefined : 'Add an email first'}
-                        style={{ background: 'none', border: 'none', cursor: g.contactInfo?.email ? 'pointer' : 'not-allowed', color: 'var(--accent)', fontSize: 12 }}
-                      >
-                        Invite
-                      </button>
+                    {(g.accountStatus === 'no_account' || g.accountStatus === 'invited') && (
+                      justSent.has(g.guardianId) ? (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sent ✓</span>
+                      ) : (
+                        <button
+                          onClick={() => handleInviteGuardian(g.guardianId, g.contactInfo?.email)}
+                          disabled={pending || !g.contactInfo?.email}
+                          title={g.contactInfo?.email ? undefined : 'Add an email first'}
+                          style={{ background: 'none', border: 'none', cursor: g.contactInfo?.email ? 'pointer' : 'not-allowed', color: 'var(--accent)', fontSize: 12 }}
+                        >
+                          {g.accountStatus === 'invited' ? 'Resend invite' : 'Invite'}
+                        </button>
+                      )
                     )}
                     <button
                       onClick={() => handleRemoveGuardian(g.linkId)}
