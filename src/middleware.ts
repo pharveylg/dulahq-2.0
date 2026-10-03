@@ -51,7 +51,14 @@ export async function middleware(request: NextRequest) {
   // once it stopped being proxied to the Tournament Manager app (see
   // next.config.js). It has no guest content at all, so it's gated here
   // like any other protected route instead of relying on its own redirect.
-  const PUBLIC_PATHS = ['/login', '/guardian-signup', '/demo'];
+  // /forgot-password is reached signed-out by definition. /auth/confirm is the
+  // token_hash landing route a freshly-emailed reset link points at -- the
+  // browser arrives there with no session cookie yet, so it must be public
+  // too, or this gate would bounce it to /login before verifyOtp ever runs.
+  // /reset-password itself is NOT listed here: by the time the browser lands
+  // there, /auth/confirm has already set real session cookies, so it passes
+  // the normal signed-in gate like any other page.
+  const PUBLIC_PATHS = ['/login', '/guardian-signup', '/demo', '/forgot-password', '/auth/confirm'];
   const isPublic =
     PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p)) ||
     request.nextUrl.pathname === '/' ||

@@ -3698,10 +3698,15 @@ migrations supersede Appendix F entirely — do not run it.
   Supabase (1 GB free, small structured blobs like `document_uploads`) and
   R2 (photos, logos) — not Supabase alone. `wrangler.toml` in this repo is
   still dead weight; nothing here runs on Workers.
-- Supabase built-in email sends **2 per hour** — blocks guardian signup, password
-  resets and staff invites. Wire custom SMTP (Resend free 3k/mo, Brevo 300/day)
-  before onboarding any real club. **This blocks the consent flow**, which is the
-  guardian's first contact with the product.
+- ~~Supabase built-in email sends 2 per hour — blocks guardian signup, password
+  resets and staff invites. Wire custom SMTP before onboarding any real
+  club.~~ **Superseded, see §0zh.** Guardian invite delivery and password
+  reset are now sent directly via Resend from app code, bypassing Supabase's
+  own (still rate-limited) built-in mailer entirely — nothing here needed its
+  dashboard SMTP settings touched. Guardian **signup's own** "confirm your
+  email" step (`supabase.auth.signUp()`, only relevant if Supabase's
+  Confirm-email setting is on) still goes through Supabase's built-in mailer
+  and is NOT covered by this — a separate, smaller gap, not fixed here.
 - Player and guardian records are **minors' data**. Backups and retention are not
   optional niceties.
 
@@ -4382,3 +4387,142 @@ authenticated org admin (platform_admin_user_ids excepted only for the
 service-role caller), a service-role-written notification is visible only to
 its actual recipient, and `save_push_subscription` still works self-scoped for
 an ordinary user.
+
+---
+
+## 0zh. Email: guardian invites and password reset, via Resend (2026-10-02)
+
+Picks up §8's long-standing gap ("there is not even a forgot password link")
+and the guardian-invite half of it ("the guardian is never contacted and must
+be told out-of-band"). Chose Resend specifically for a "less carrier
+visibility" requirement: what a recipient actually sees (From address, body,
+links) can be 100% `dulahq.app` once the sending domain is verified, even
+though the underlying SPF/DKIM records will always name *some* ESP — that's
+inherent to using anyone's sending infrastructure on a free tier, not a Resend
+limitation. `src/lib/email.ts` calls Resend's HTTP API directly with `fetch`
+rather than their SDK, matching this codebase's standing preference for a
+provider's REST API over a wrapper dependency (`web-push`, the S3-compatible
+R2 client) — no new npm dependency added.
+
+**Not wired into `shared/`.** That folder's own README is explicit:
+"Extract a service into this layer only when the concept is genuinely
+shared — don't build here speculatively ahead of a real second consumer."
+Email is a Club Manager (dula-hq-2.0) concern only; the frozen Tournament
+Manager app has no use for it and stays untouched per §8's own rule.
+
+### Password reset never touches Supabase's own mailer, or shows a supabase.co URL
+
+The obvious approach — `supabase.auth.resetPasswordForEmail()` — relies on
+Supabase's own built-in email delivery (the 2/hour-capped, unbranded mailer
+this whole gap is about) unless the project's Auth → SMTP dashboard settings
+are pointed at a custom provider, which is dashboard-only and not reachable
+through any tool this session has. Built the other supported path instead:
+`admin.auth.admin.generateLink({ type: 'recovery', email, options: {
+redirectTo } })` (service role, `src/app/forgot-password/actions.ts`) issues
+the token without sending anything; this app sends its own fully-branded
+email via Resend with a link built from the response's `properties
+.hashed_token`, not Supabase's own `action_link` — the difference being that
+`action_link` points first at the project's own `supabase.co` domain before
+redirecting, while a `token_hash` link can point straight at
+`dulahq.app/auth/confirm` from the first click. Same principle as the "less
+carrier visibility" framing, extended to the auth provider too, not just the
+mail carrier.
+
+`src/app/auth/confirm/route.ts` is the landing route — the standard
+documented Supabase/Next.js App Router pattern (`verifyOtp({ type,
+token_hash })`), generic over `type` rather than recovery-only so a future
+email-verification flow can reuse it without its own copy. On success it
+redirects to `next` (here, `/reset-password`); on failure, to `/login` with
+a plain-English `?error=` the login page now reads and displays (`LoginForm
+.tsx`'s error state is lazily initialized from it).
+
+`src/app/reset-password/page.tsx` + `actions.ts` is deliberately a **separate**
+page from `/change-password` — that one is gated on an already-authenticated
+session and the IT-issued-temp-password `must_change_password` flag
+specifically (§0t); this one is reached by someone who wasn't signed in a
+moment ago, verified only by the emailed token. Both end up calling the same
+`supabase.auth.updateUser({ password })` and the same `checkNewPassword()`
+rule, just with different entry conditions.
+
+**Always returns the same generic "if an account exists…" message**,
+whether or not the email matched a real account — the alternative lets
+anyone enumerate which addresses have logins. `middleware.ts` gained
+`/forgot-password` and `/auth/confirm` as public paths (reached signed-out
+by definition); `/reset-password` is deliberately **not** public — by the
+time the browser lands there, `/auth/confirm` has already set real session
+cookies via the recovery token, so it passes the normal signed-in gate like
+any other page, and visiting it directly while signed out correctly bounces
+to `/login?redirectTo=/reset-password`.
+
+### Guardian invites: a real email where there was none
+
+`inviteGuardian()` (`teams/[teamSlug]/actions.ts`) previously only flipped
+`guardians.account_status` to `'invited'` and did nothing else — the
+person was never actually told, by design, until SMTP existed. Now sends a
+plain-link email (no token: `/guardian-signup` already self-claims by email
+match, same established pattern as the tournament entry-contact flow) naming
+the inviting club and, when on file, the guardian's own name. The status
+flip is the durable, authoritative record either way — the email send is
+wrapped in its own try/catch and never blocks it, so a Resend outage or a
+not-yet-configured `RESEND_API_KEY` degrades to exactly today's existing
+behavior (staff sees "invited", tells the guardian out-of-band) rather than
+failing the whole action.
+
+**A real bug caught before it shipped, not after:** the first draft chained
+`.update({...}).select('name')` to fetch the guardian's name for the email
+body in one round trip — exactly the RETURNING-triggers-a-read-check trap
+this file has recorded twice before (Phase 5c, §15d1): an UPDATE's
+`.select()` is evaluated as `RETURNING`, which Postgres checks against the
+table's SELECT policy too, and that isn't guaranteed to pass for every
+caller of this action. Fixed by doing the name/club-name lookups as their
+own plain, separate `SELECT` calls instead — ordinary reads, no RETURNING
+involved.
+
+**A second issue, caught by writing a test before trusting the code, not
+after:** the first version interpolated `guardian.name` and `club.name` —
+both staff-entered free text — directly into the email's HTML with no
+escaping, the same markup-injection class `crest.ts` already guards against
+for user-input club names on the public directory. Fixed by pulling
+`escapeHtml`/`renderEmailHtml` out of `email.ts` into a new pure,
+dependency-free `email-template.ts` (same reason `crest.ts`/`org-theme.ts`/
+`temp-password.ts` are split out that way — `email.ts` itself imports
+`server-only`, which can't be pulled into a Vitest unit test) and running
+every dynamic string through it before interpolating.
+
+### What's still manual, and why
+
+No GitHub secrets tool and no Supabase Auth-config API were available in
+this session (checked — `gh` isn't installed on this machine, and the
+Supabase MCP tools here cover migrations/SQL/branches/advisors only, nothing
+auth-config-shaped). Two things stay genuinely manual for the account
+owner: toggling Supabase's **leaked-password protection** (dashboard,
+Authentication → Policies — free, one click, still off per §3.7), and adding
+`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` as **GitHub Actions secrets**
+(`reset-demo-data.yml` has been failing every scheduled run without them
+since §10's own note). Creating a Resend account, verifying `dulahq.app` as
+a sending domain, and setting `RESEND_API_KEY`/`EMAIL_FROM` in `.env.local`
+and Vercel's production env vars are the same kind of manual, credential-
+holding step as VAPID's own rollout (§0c Phase 5a) — `.env.local` got a new
+commented section with exactly what's needed, no placeholder secret value
+written anywhere.
+
+### Verified
+
+Confirmed every piece against the real live project rather than assumed:
+`/login` renders the new "Forgot password?" link; submitting
+`/forgot-password` for a **real** account (the platform admin's own email —
+the only one available to test with, since there is no staging project,
+§1) ran the full chain through `generateLink()` against production and
+logged exactly the expected "Email is not configured" message from
+`sendEmail` once `RESEND_API_KEY` was confirmed unset — proving
+`serviceClient()`, `generateLink`, and the graceful degradation path all
+work, without ever emailing anything or touching the account's actual
+password. `/auth/confirm` with no token correctly redirects to `/login` with
+the error message visible; `/reset-password` visited signed-out correctly
+redirects to `/login?redirectTo=/reset-password`. **Deliberately not**
+driven further than that: completing the full happy path would mean
+clicking a real recovery link for the real production admin account and
+changing its actual password, which isn't a test to run against a live
+account without being asked to. `npx tsc --noEmit`, `npm run build`, and
+`npm run test:unit` (81 → 86, the 5 new `email-template.test.ts` cases) all
+stayed clean.

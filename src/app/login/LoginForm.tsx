@@ -9,12 +9,14 @@ import Spotlight from '@/components/motion/Spotlight';
 import PosterWatermark from '@/components/PosterWatermark';
 
 function LoginFields({ posterUrl, destination }: { posterUrl: string | null; destination: string | null }) {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // A spent/expired /auth/confirm link redirects here with ?error= set -- shown
+  // once, like any other sign-in error, not a separate banner.
+  const [error, setError] = useState<string | null>(() => searchParams.get('error'));
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   async function doSignIn(signInEmail: string, signInPassword: string) {
     setLoading(true);
@@ -76,7 +78,12 @@ function LoginFields({ posterUrl, destination }: { posterUrl: string | null; des
               />
             </div>
             <div className="form-group">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">
+                Password
+                <Link href="/forgot-password" style={{ float: 'right', fontWeight: 400, fontSize: 12.5 }}>
+                  Forgot password?
+                </Link>
+              </label>
               <input
                 id="password"
                 type="password"

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
+import { sendEmail, renderEmailHtml, escapeHtml } from '@/lib/email';
+import { appOrigin } from '@/lib/app-url';
 
 function friendlyError(error: { code?: string; message: string }) {
   if (error.code === '42501' || error.message.includes('row-level security')) {
@@ -141,7 +143,8 @@ export async function removeGuardianLink(clubId: string, teamId: string, playerG
  * guardians recognize them ("account_status = 'invited'").
  */
 export async function inviteGuardian(clubId: string, teamId: string, guardianId: string, email: string) {
-  if (!email?.trim()) return { error: 'This guardian needs an email on file before they can be invited.' };
+  const cleanEmail = email?.trim();
+  if (!cleanEmail) return { error: 'This guardian needs an email on file before they can be invited.' };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -150,6 +153,44 @@ export async function inviteGuardian(clubId: string, teamId: string, guardianId:
     .eq('id', guardianId);
 
   if (error) return { error: friendlyError(error) };
+
+  // The status flip above is the durable record of "invited" -- staff can see
+  // and act on it even if this best-effort email never arrives. A plain
+  // separate select (not chained onto the update above) avoids the
+  // RETURNING-triggers-a-read-check trap this codebase has hit before
+  // (CLAUDE.md §0c Phase 5c, §15d1): .update().select() runs the SELECT
+  // policy against the just-written row, which isn't guaranteed to pass here.
+  try {
+    const [{ data: guardian }, { data: club }] = await Promise.all([
+      supabase.from('guardians').select('name').eq('id', guardianId).maybeSingle(),
+      supabase.from('clubs').select('name').eq('id', clubId).maybeSingle(),
+    ]);
+    const origin = await appOrigin();
+    const signupUrl = `${origin}/guardian-signup`;
+    const clubName = club?.name ?? 'Your club';
+    // guardian.name/clubName are staff-entered free text -- escape before
+    // interpolating into HTML (same discipline crest.ts already applies to
+    // user-input club names). cleanEmail is included too, defensively.
+    const safeClubName = escapeHtml(clubName);
+    const safeGuardianName = guardian?.name ? escapeHtml(guardian.name) : null;
+    const safeEmail = escapeHtml(cleanEmail);
+    await sendEmail({
+      to: cleanEmail,
+      subject: `${clubName} invited you to Dulà HQ`,
+      html: renderEmailHtml({
+        title: `${safeClubName} invited you to Dulà HQ`,
+        bodyHtml: `${safeGuardianName ? `Hi ${safeGuardianName}, y` : 'Y'}ou’ve been added as a guardian on Dulà HQ. ` +
+          `Create your account with this same email address (<b>${safeEmail}</b>) to see your child’s ` +
+          'schedule, fees, and development updates.',
+        ctaText: 'Create your account',
+        ctaUrl: signupUrl,
+      }),
+      text: `${clubName} invited you to Dulà HQ. Create your account with ${cleanEmail} at ${signupUrl}`,
+    });
+  } catch (e) {
+    console.error('Could not send guardian invite email', e);
+  }
+
   revalidatePath('/c/[clubSlug]', 'layout');
   return { success: true };
 }
