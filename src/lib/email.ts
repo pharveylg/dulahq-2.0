@@ -1,4 +1,5 @@
 import 'server-only';
+import { serviceClient } from '@/lib/admin-auth';
 
 /**
  * Transactional email via Resend's HTTP API, called directly with fetch rather
@@ -25,13 +26,15 @@ export { escapeHtml, renderEmailHtml } from './email-template';
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
 export type SendEmailInput = {
+  /** Stable name for the kind of email (e.g. guardian_invite) -- stored for usage metering, never the recipient. */
+  template: string;
   to: string;
   subject: string;
   html: string;
   text: string;
 };
 
-export async function sendEmail({ to, subject, html, text }: SendEmailInput): Promise<{ sent: boolean }> {
+export async function sendEmail({ template, to, subject, html, text }: SendEmailInput): Promise<{ sent: boolean }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) {
@@ -52,9 +55,21 @@ export async function sendEmail({ to, subject, html, text }: SendEmailInput): Pr
       console.error('Email send failed', response.status, await response.text().catch(() => ''));
       return { sent: false };
     }
+    recordSend(template);
     return { sent: true };
   } catch (error) {
     console.error('Email send failed', error);
     return { sent: false };
+  }
+}
+
+/** Usage metering only: template name and time, never the recipient. Best-effort. */
+function recordSend(template: string) {
+  try {
+    serviceClient().from('email_send_events').insert({ template }).then(({ error }) => {
+      if (error) console.error('Could not record email send', error);
+    });
+  } catch (error) {
+    console.error('Could not record email send', error);
   }
 }

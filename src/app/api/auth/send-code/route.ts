@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
   }
 
   await sendEmail({
+    template: 'sign_in_code',
     to: email,
     subject: `${code} is your Dulà HQ sign-in code`,
     html: renderEmailHtml({

@@ -53,6 +53,7 @@ export async function requestPasswordReset(email: string) {
   const resetUrl = `${origin}/auth/confirm?token_hash=${data.properties.hashed_token}&type=recovery&next=/reset-password`;
 
   await sendEmail({
+    template: 'password_reset',
     to: cleanEmail,
     subject: 'Reset your Dulà HQ password',
     html: renderEmailHtml({

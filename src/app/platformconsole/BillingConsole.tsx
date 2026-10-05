@@ -55,6 +55,7 @@ const INFRA_REFERENCE: Record<string, { limit: number; label: string; note: stri
   supabase_storage_gb: { limit: 1, label: 'Supabase file storage', note: 'Free tier cap' },
   supabase_auth_mau: { limit: 50000, label: 'Supabase monthly active users', note: 'Free tier cap' },
   r2_storage_gb: { limit: 10, label: 'Cloudflare R2 storage', note: 'Always-free allowance, any plan' },
+  resend_emails_month: { limit: 3000, label: 'Transactional email (Resend)', note: 'Free tier cap per month; also 100 a day' },
 };
 const R2_OVERAGE_USD_PER_GB = 0.015; // Cloudflare's own published flat rate, not plan-dependent
 

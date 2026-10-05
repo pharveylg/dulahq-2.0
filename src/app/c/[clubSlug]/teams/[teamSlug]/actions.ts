@@ -175,6 +175,7 @@ export async function inviteGuardian(clubId: string, teamId: string, guardianId:
     const safeGuardianName = guardian?.name ? escapeHtml(guardian.name) : null;
     const safeEmail = escapeHtml(cleanEmail);
     await sendEmail({
+      template: 'guardian_invite',
       to: cleanEmail,
       subject: `${clubName} invited you to Dulà HQ`,
       html: renderEmailHtml({
