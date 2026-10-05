@@ -4056,7 +4056,7 @@ describe('platform infra metrics (phase16k)', () => {
     const periodStart = new Date().toISOString().slice(0, 8) + '01';
     const { data } = await adminClient.from('platform_infra_metrics').select('metric_key, value, unit').eq('period_start', periodStart);
     const keys = (data ?? []).map((r: any) => r.metric_key).sort();
-    expect(keys).toEqual(['r2_storage_gb', 'supabase_auth_mau', 'supabase_db_size_gb', 'supabase_storage_gb']);
+    expect(keys).toEqual(['r2_storage_gb', 'resend_emails_month', 'supabase_auth_mau', 'supabase_db_size_gb', 'supabase_storage_gb']);
     for (const row of data ?? []) expect(Number(row.value)).toBeGreaterThanOrEqual(0);
   });
 

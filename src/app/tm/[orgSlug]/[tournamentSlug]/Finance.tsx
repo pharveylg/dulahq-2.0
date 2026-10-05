@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { formatMoney } from '@/lib/currency';
 import { recordPayment, reviewPayment, saveInstructions } from './actions';
+import BillingQrField from '@/app/platformconsole/BillingQrField';
 
 export type FinanceInvoice = {
   id: string;
@@ -253,6 +254,7 @@ export default function Finance({
       </div>
 
       <Instructions accountId={accountId} initial={instructions} canManage={canManage} />
+      <BillingQrField accountId={accountId} canEdit={canManage} />
 
       <div className="section-label">Payments to verify ({pendingPayments.length})</div>
       <div className="card" style={{ marginBottom: 20 }}>

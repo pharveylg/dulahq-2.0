@@ -1,5 +1,6 @@
 'use client';
 
+import BillingQrField from './BillingQrField';
 import { useState, useTransition } from 'react';
 import { createPlatformInvoice, reviewPlatformPayment, updatePlatformPaymentInstructions } from './billing-actions';
 import { formatMoney, paymentStatusLabel } from '@/lib/billing';
@@ -191,12 +192,12 @@ export default function BillingConsole({ invoices, payments, orgs, accounts, usa
 
       <div className="card">
         <h2 style={{ fontSize: 18 }}>Manual payment instructions</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Configure the instructions shown to organizations while Dula HQ uses manual QR verification. QR image upload can be added through the existing file storage flow.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>The written instructions and QR image payers see for each organization&apos;s manual payments.</p>
         {accounts.length === 0 ? <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No platform billing accounts yet.</p> : accounts.map((account) => (
           <form key={account.id} action={(fd) => updateInstructions(account.id, fd)} style={{ display: 'grid', gap: 8, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
             <strong style={{ fontSize: 13 }}>{account.orgName}</strong>
             <textarea name="paymentInstructions" rows={2} defaultValue={account.instructions ?? ''} placeholder="Example: Scan the Dula HQ QR code and include the invoice number in the payment note." />
-            <input name="qrStorageKey" defaultValue={account.qrStorageKey ?? ''} placeholder="Optional QR storage key" />
+            <BillingQrField accountId={account.id} canEdit={true} />
             <button className="btn" type="submit" disabled={pending} style={{ justifySelf: 'start' }}>{pending ? 'Saving…' : 'Save instructions'}</button>
           </form>
         ))}

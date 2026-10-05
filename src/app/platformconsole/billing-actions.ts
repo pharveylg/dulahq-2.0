@@ -56,10 +56,12 @@ export async function createPlatformInvoice(formData: FormData) {
 export async function updatePlatformPaymentInstructions(accountId: string, formData: FormData) {
   if (!(await isPlatformAdmin())) return { error: 'Platform admin only.' };
   const supabase = await createClient();
+  // The QR has its own upload control; pass the current key back so saving text never clears it.
+  const { data: account } = await (supabase as any).from('billing_accounts').select('qr_storage_key').eq('id', accountId).maybeSingle();
   const { error } = await (supabase as any).rpc('update_billing_account_instructions', {
     p_account_id: accountId,
     p_payment_instructions: String(formData.get('paymentInstructions') || ''),
-    p_qr_storage_key: String(formData.get('qrStorageKey') || '') || null,
+    p_qr_storage_key: account?.qr_storage_key ?? null,
   });
   if (error) return { error: friendlyError(error) };
   revalidatePath('/platformconsole');

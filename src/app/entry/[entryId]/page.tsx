@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { signBillingQrKey } from '@/lib/billing-qr';
 import { formatMoney } from '@/lib/billing';
 import EntryPaymentForm from './EntryPaymentForm';
 import EntryDocuments, { type PortalDocument } from './EntryDocuments';
@@ -13,6 +14,7 @@ type Portal = {
   entry: { id: string; team_name: string; status: string; tournament_name: string; tournament_poster_url: string | null; host_org_name: string; host_org_accent: string | null; category_name: string | null };
   my_role: string;
   instructions: string | null;
+  qr_storage_key: string | null;
   announcements: { id: string; title: string; body: string; author_name: string | null; created_at: string }[];
   documents: PortalDocument[];
   invoices: Invoice[];
@@ -55,6 +57,7 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
   if (error || !data) notFound();
   const portal = data as Portal;
   const canPay = portal.my_role === 'team_manager';
+  const qrUrl = await signBillingQrKey(portal.qr_storage_key);
   const canUpload = portal.my_role === 'team_manager' || portal.my_role === 'coach';
 
   return (
@@ -123,6 +126,9 @@ export default async function EntryPortalPage({ params }: { params: Promise<{ en
 
               {OPEN.includes(inv.status) && due > 0 && (
                 <>
+                  {qrUrl && (
+                    <img src={qrUrl} alt="Payment QR code" style={{ display: 'block', marginTop: 10, width: 200, maxWidth: '100%', borderRadius: 8, background: '#fff' }} />
+                  )}
                   {portal.instructions && (
                     <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--surface-muted)', fontSize: 13, whiteSpace: 'pre-wrap' }}>
                       {portal.instructions}
