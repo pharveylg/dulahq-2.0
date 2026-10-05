@@ -3482,7 +3482,10 @@ simply returns `auth.uid()`, so existing RPC callers keep working.
 6. ~~Helpers executable by `anon` over REST RPC~~ — **fixed**, `EXECUTE` revoked
    from `anon` on every SECURITY DEFINER function. No anon-facing policy calls a
    function, so this cost nothing.
-7. **Leaked-password protection is still off.** Dashboard → Auth. Free. Open.
+7. **Leaked-password protection is still off, and needs Supabase Pro.** Checked
+   2026-10-05: the org (`g0d3y3`) is on the `free` plan, where the toggle isn't
+   offered. Earlier notes calling it free were wrong. Open until the org is upgraded
+   or the risk is accepted.
 
 ---
 
