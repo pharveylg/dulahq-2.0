@@ -198,3 +198,57 @@ export async function renameOrganization(orgId: string, formData: FormData) {
   revalidatePath('/platformconsole');
   return { success: true };
 }
+
+const CLUB_ROLES = ['club_manager', 'coach', 'team_manager', 'assistant_coach', 'treasurer', 'secretary', 'staff', 'club_it_admin'];
+const TOURNAMENT_ROLES = ['organizer', 'tournament_it_admin', 'team_coordinator', 'secretary', 'treasurer', 'communications', 'referee_coordinator'];
+
+export async function loadTenantDetail(orgId: string) {
+  if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can manage tenants.' };
+  const supabase = await createClient();
+  const [{ data: people, error: peopleError }, { data: clubs }, { data: tournaments }] = await Promise.all([
+    (supabase as any).rpc('org_people_directory', { p_org_id: orgId }),
+    supabase.from('clubs').select('id, name').eq('org_id', orgId).order('name'),
+    supabase.from('tournaments').select('id, name').eq('org_id', orgId).order('name'),
+  ]);
+  if (peopleError) return { error: friendlyError(peopleError) };
+  return {
+    people: (people ?? []) as { user_id: string | null; name: string | null; email: string | null; source: string; role: string }[],
+    clubs: clubs ?? [],
+    tournaments: tournaments ?? [],
+    clubRoles: CLUB_ROLES,
+    tournamentRoles: TOURNAMENT_ROLES,
+  };
+}
+
+export async function setTenantAdmin(orgId: string, email: string, grant: boolean) {
+  if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can change tenant admins.' };
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('platform_set_org_admin', { p_org: orgId, p_email: email, p_grant: grant });
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/platformconsole', 'page');
+  return { success: true };
+}
+
+export async function addTenantStaff(scope: 'club' | 'tournament', scopeId: string, email: string, role: string) {
+  if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can add staff from here.' };
+  const allowed = scope === 'club' ? CLUB_ROLES : TOURNAMENT_ROLES;
+  if (!allowed.includes(role)) return { error: 'Choose a role for that product.' };
+  const supabase = await createClient();
+  const fn = scope === 'club' ? 'add_club_staff' : 'add_tournament_staff';
+  const args = scope === 'club'
+    ? { p_club_id: scopeId, p_email: email, p_role: role }
+    : { p_tournament_id: scopeId, p_email: email, p_role: role };
+  const { error } = await (supabase as any).rpc(fn, args);
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/platformconsole', 'page');
+  return { success: true };
+}
+
+export async function deleteTenant(orgId: string, confirmSlug: string) {
+  if (!(await isPlatformAdmin())) return { error: 'Only a platform admin can delete a tenant.' };
+  const supabase = await createClient();
+  const { error } = await (supabase as any).rpc('platform_delete_organization', { p_org: orgId, p_confirm_slug: confirmSlug });
+  if (error) return { error: friendlyError(error) };
+  revalidatePath('/platformconsole', 'page');
+  return { success: true };
+}
