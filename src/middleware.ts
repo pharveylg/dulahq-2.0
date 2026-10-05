@@ -58,7 +58,7 @@ export async function middleware(request: NextRequest) {
   // /reset-password itself is NOT listed here: by the time the browser lands
   // there, /auth/confirm has already set real session cookies, so it passes
   // the normal signed-in gate like any other page.
-  const PUBLIC_PATHS = ['/login', '/guardian-signup', '/demo', '/forgot-password', '/auth/confirm'];
+  const PUBLIC_PATHS = ['/login', '/guardian-signup', '/demo', '/forgot-password', '/auth/confirm', '/api/auth/send-code'];
   const isPublic =
     PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p)) ||
     request.nextUrl.pathname === '/' ||
