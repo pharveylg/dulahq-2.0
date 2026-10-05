@@ -3484,8 +3484,9 @@ simply returns `auth.uid()`, so existing RPC callers keep working.
    function, so this cost nothing.
 7. **Leaked-password protection is still off, and needs Supabase Pro.** Checked
    2026-10-05: the org (`g0d3y3`) is on the `free` plan, where the toggle isn't
-   offered. Earlier notes calling it free were wrong. Open until the org is upgraded
-   or the risk is accepted.
+   offered. Earlier notes calling it free were wrong. **Risk accepted by the owner
+   (2026-10-05)** rather than upgrading to Pro. Revisit if the org upgrades or real
+   clubs go live.
 
 ---
 
