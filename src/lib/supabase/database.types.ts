@@ -509,6 +509,8 @@ export type Database = {
         Row: {
           about: string | null
           branding: Json
+          contact_email: string | null
+          contact_phone: string | null
           created_at: string
           created_by: string | null
           id: string
@@ -526,6 +528,8 @@ export type Database = {
         Insert: {
           about?: string | null
           branding?: Json
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -543,6 +547,8 @@ export type Database = {
         Update: {
           about?: string | null
           branding?: Json
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -2974,6 +2980,7 @@ export type Database = {
           bio: string | null
           photo_key: string | null
           certifications: Json
+          show_publicly: boolean
           updated_at: string
         }
         Insert: {
@@ -2984,6 +2991,7 @@ export type Database = {
           bio?: string | null
           photo_key?: string | null
           certifications?: Json
+          show_publicly?: boolean
           updated_at?: string
         }
         Update: {
@@ -2994,6 +3002,7 @@ export type Database = {
           bio?: string | null
           photo_key?: string | null
           certifications?: Json
+          show_publicly?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -3113,6 +3122,30 @@ export type Database = {
           scope_type?: string
           temp_expires_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      player_public_profiles: {
+        Row: {
+          org_id: string
+          player_id: string
+          show_publicly: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          org_id: string
+          player_id: string
+          show_publicly?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          org_id?: string
+          player_id?: string
+          show_publicly?: boolean
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -4932,6 +4965,14 @@ export type Database = {
       set_team_primary_coach: {
         Args: { p_team_id: string; p_user_id: string | null }
         Returns: undefined
+      }
+      set_player_public_listing: {
+        Args: { p_player_id: string; p_show: boolean }
+        Returns: undefined
+      }
+      public_club_profile: {
+        Args: { p_club_slug: string }
+        Returns: Json
       }
       create_notification: {
         Args: {

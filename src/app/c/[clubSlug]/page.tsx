@@ -27,15 +27,32 @@ import { computeAttendancePct } from '@/lib/attendance-stats';
  * (the base clubs table has no anon-read policy at all), so showing the
  * same "sign in" prompt for both never leaks which one it is.
  */
+type PublicProfile = {
+  club: {
+    name: string;
+    about: string | null;
+    location: string | null;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    orgName: string;
+  };
+  staff: { name: string; role: string; bio: string | null; teams: string[] }[];
+  teams: { name: string; squadType: string; players: { name: string; jersey: string | null; position: string | null }[] }[];
+};
+
+const STAFF_ROLE_LABEL: Record<string, string> = {
+  club_manager: 'Club manager',
+  coach: 'Coach',
+  assistant_coach: 'Assistant coach',
+  team_manager: 'Team manager',
+};
+
 async function GuestClubOverview({ clubSlug }: { clubSlug: string }) {
   const supabase = await createClient();
-  const { data: club } = await supabase
-    .from('public_clubs')
-    .select('name, about, location, org_name')
-    .eq('slug', clubSlug)
-    .maybeSingle();
+  const { data: raw } = await supabase.rpc('public_club_profile', { p_club_slug: clubSlug });
+  const profile = raw as PublicProfile | null;
 
-  if (!club) {
+  if (!profile) {
     return (
       <main className="page">
         <div className="container" style={{ maxWidth: 480 }}>
@@ -49,17 +66,81 @@ async function GuestClubOverview({ clubSlug }: { clubSlug: string }) {
     );
   }
 
+  const { club, staff, teams } = profile;
+  const hasContact = club.contactEmail || club.contactPhone;
+
   return (
     <main className="page">
       <div className="container" style={{ maxWidth: 640 }}>
         <div className="page-header">
           <div>
             <h1>{club.name}</h1>
-            <p className="subtitle">{club.org_name}{club.location ? ` · ${club.location}` : ''}</p>
+            <p className="subtitle">{club.orgName}{club.location ? ` · ${club.location}` : ''}</p>
           </div>
           <Link href="/login" className="btn btn-primary">Sign in</Link>
         </div>
         {club.about && <div className="card"><p style={{ fontSize: 14 }}>{club.about}</p></div>}
+
+        {hasContact && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="section-label">Contact</div>
+            {club.contactEmail && (
+              <p style={{ fontSize: 14, margin: '4px 0' }}>
+                <a href={`mailto:${club.contactEmail}`}>{club.contactEmail}</a>
+              </p>
+            )}
+            {club.contactPhone && (
+              <p style={{ fontSize: 14, margin: '4px 0' }}>
+                <a href={`tel:${club.contactPhone}`}>{club.contactPhone}</a>
+              </p>
+            )}
+          </div>
+        )}
+
+        {staff.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div className="section-label">Coaches and staff</div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {staff.map((s, i) => (
+                <div key={i} className="card">
+                  <div style={{ fontWeight: 600 }}>{s.name}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                    {STAFF_ROLE_LABEL[s.role] ?? s.role}{s.teams.length ? ` · ${s.teams.join(', ')}` : ''}
+                  </div>
+                  {s.bio && <p style={{ fontSize: 13.5, margin: '8px 0 0' }}>{s.bio}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {teams.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div className="section-label">Teams and rosters</div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {teams.map((t, i) => (
+                <div key={i} className="card">
+                  <div style={{ fontWeight: 600 }}>{t.name}</div>
+                  {t.players.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 0' }}>No players shown yet.</p>
+                  ) : (
+                    <table style={{ width: '100%', fontSize: 13.5, marginTop: 8, borderCollapse: 'collapse' }}>
+                      <tbody>
+                        {t.players.map((p, j) => (
+                          <tr key={j} style={{ borderTop: '1px solid var(--border)' }}>
+                            <td style={{ padding: '6px 0', width: 48, color: 'var(--text-muted)' }}>{p.jersey ?? ''}</td>
+                            <td style={{ padding: '6px 0' }}>{p.name}</td>
+                            <td style={{ padding: '6px 0', color: 'var(--text-muted)', textAlign: 'right' }}>{p.position ?? ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -73,7 +154,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
 
   const { data: club, error: clubError } = await supabase
     .from('clubs')
-    .select('id, slug, name, created_at, about, location, branding, org_id, publicly_listed, listing_blocked, listing_block_reason')
+    .select('id, slug, name, created_at, about, location, contact_email, contact_phone, branding, org_id, publicly_listed, listing_blocked, listing_block_reason')
     .eq('slug', clubSlug)
     .maybeSingle();
 
@@ -172,7 +253,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
   // expires in an hour, so there's nothing worth caching.
   const staffIds = activeStaffRows.map((s) => s.id);
   const { data: profileRows } = staffIds.length
-    ? await supabase.from('staff_profiles').select('club_staff_id, phone, bio, photo_key, certifications').in('club_staff_id', staffIds)
+    ? await supabase.from('staff_profiles').select('club_staff_id, phone, bio, photo_key, certifications, show_publicly').in('club_staff_id', staffIds)
     : { data: [] };
   const profileByStaffId = new Map(
     await Promise.all(
@@ -183,6 +264,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
           bio: p.bio,
           photoUrl: p.photo_key ? await getDownloadUrl(p.photo_key) : null,
           certifications: (p.certifications as any[]) ?? [],
+          showPublicly: p.show_publicly,
         },
       ] as const)
     )
@@ -670,6 +752,8 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
                 initialName={club.name}
                 initialAbout={club.about}
                 initialLocation={club.location}
+                initialContactEmail={club.contact_email}
+                initialContactPhone={club.contact_phone}
                 logoUrl={logoResolved.source === 'club' ? clubLogoUrl : null}
               />
             )}

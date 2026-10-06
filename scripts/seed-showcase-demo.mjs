@@ -259,6 +259,52 @@ async function assignOfficials(org, tournament, officials, roles) {
   return must(admin.from('tournament_officials').insert(rows), `assign officials ${tournament.slug}`);
 }
 
+// Public club page (phase17a): contact details, coaches who opted in, and
+// players opted in. Showcase people are fictional, so opting them all in lets
+// the guest view show what the feature looks like. Opt-ins are written here
+// because every run wipes and recreates the showcase orgs.
+async function seedPublicClubProfiles() {
+  const SHOWCASE_ORG_SLUGS = ['usna-gali', 'cdo-ysc', 'pilipinas-futbol', 'davao-unity-sports'];
+  const { data: orgs } = await admin.from('organizations').select('id, slug').in('slug', SHOWCASE_ORG_SLUGS);
+  const orgIds = (orgs ?? []).map((o) => o.id);
+  if (orgIds.length === 0) return;
+
+  const { data: clubs } = await admin.from('clubs').select('id, slug, org_id').in('org_id', orgIds);
+  for (const club of clubs ?? []) {
+    await must(
+      admin.from('clubs').update({ contact_email: `contact.${club.slug}@${EMAIL_DOMAIN}`, contact_phone: '+63 900 000 0000' }).eq('id', club.id),
+      `club contact ${club.slug}`
+    );
+  }
+
+  const clubIds = (clubs ?? []).map((c) => c.id);
+  const { data: staff } = await admin
+    .from('club_staff')
+    .select('id, club_id, org_id')
+    .in('club_id', clubIds)
+    .in('role', ['club_manager', 'coach', 'assistant_coach', 'team_manager'])
+    .eq('status', 'active');
+  for (const s of staff ?? []) {
+    await must(
+      admin.from('staff_profiles').upsert({
+        club_staff_id: s.id,
+        club_id: s.club_id,
+        org_id: s.org_id,
+        bio: 'Coaches and manages the squads.',
+        show_publicly: true,
+        updated_at: new Date().toISOString(),
+      }),
+      `staff profile ${s.id}`
+    );
+  }
+
+  const { data: players } = await admin.from('players').select('id, org_id').in('org_id', orgIds);
+  const rows = (players ?? []).map((p) => ({ player_id: p.id, org_id: p.org_id, show_publicly: true }));
+  for (let i = 0; i < rows.length; i += 500) {
+    await must(admin.from('player_public_profiles').upsert(rows.slice(i, i + 500)), 'player public profiles');
+  }
+}
+
 async function main() {
   await wipe();
 
@@ -514,6 +560,7 @@ async function main() {
   report.demoPersonas.referee = { name: davaoOfficials[0].full_name, email: refereeEmail };
 
   // ---------- write the doc ----------
+  await seedPublicClubProfiles();
   writeReport(report);
   console.log('\nDone. See docs/demo-data-showcase.md for the full breakdown.');
   console.log(`Shared password for every seeded login: ${PASSWORD}`);

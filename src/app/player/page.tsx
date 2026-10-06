@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import PlayerProfile from '@/components/player-profile/PlayerProfile';
 import NotificationSubscribe from '@/components/NotificationSubscribe';
+import PublicListingToggle from '@/components/PublicListingToggle';
 
 export default async function PlayerHomePage() {
   const supabase = await createClient();
@@ -29,6 +30,13 @@ export default async function PlayerHomePage() {
       </main>
     );
   }
+
+  const { data: publicFlag } = await supabase
+    .from('player_public_profiles')
+    .select('show_publicly')
+    .eq('player_id', player.id)
+    .maybeSingle();
+  const publicShown = publicFlag?.show_publicly ?? false;
 
   const teamId = player.team_id;
   const clubId = (player as any).teams?.club_id ?? null;
@@ -69,6 +77,14 @@ export default async function PlayerHomePage() {
         </div>
 
         <NotificationSubscribe />
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-label">Public club page</div>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
+            Show your name on your club&apos;s public roster. Only first name and last initial are shown.
+          </p>
+          <PublicListingToggle playerId={player.id} playerName={player.name} initial={publicShown} />
+        </div>
 
         <PlayerProfile
           playerId={player.id}

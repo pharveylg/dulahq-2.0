@@ -16,12 +16,16 @@ export default function EditNameForm({
   initialName,
   initialAbout,
   initialLocation,
+  initialContactEmail,
+  initialContactPhone,
   logoUrl,
 }: {
   clubId: string;
   initialName: string;
   initialAbout: string | null;
   initialLocation: string | null;
+  initialContactEmail: string | null;
+  initialContactPhone: string | null;
   logoUrl: string | null;
 }) {
   const [editing, setEditing] = useState(false);
@@ -44,6 +48,8 @@ export default function EditNameForm({
     fd.set('name', initialName);
     fd.set('about', initialAbout ?? '');
     fd.set('location', initialLocation ?? '');
+    fd.set('contactEmail', initialContactEmail ?? '');
+    fd.set('contactPhone', initialContactPhone ?? '');
     fd.set('removeLogo', 'true');
     startTransition(async () => {
       const result = await updateClubProfile(clubId, fd);
@@ -73,6 +79,17 @@ export default function EditNameForm({
         <label style={{ fontSize: 11.5 }}>Location</label>
         <input name="location" defaultValue={initialLocation ?? ''} />
       </div>
+      <div className="form-group">
+        <label style={{ fontSize: 11.5 }}>Public contact email</label>
+        <input name="contactEmail" type="email" defaultValue={initialContactEmail ?? ''} />
+      </div>
+      <div className="form-group">
+        <label style={{ fontSize: 11.5 }}>Public contact phone</label>
+        <input name="contactPhone" type="tel" defaultValue={initialContactPhone ?? ''} />
+      </div>
+      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0 }}>
+        The contact details are shown on the club&apos;s public page once the club is listed.
+      </p>
       <div className="form-group">
         <label style={{ fontSize: 11.5 }}>Logo</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

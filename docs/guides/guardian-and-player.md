@@ -138,6 +138,7 @@ _Generated from the platform permission catalog. Edit the catalog, not this tabl
 | **Acknowledge tournament** | Confirm or decline the player's tournament participation | Their own child |
 | **Manage fees** | View and pay the player's fees | Their own child |
 | **Receive notifications** | Receive notifications about the player | Their own child |
+| **Show on public club page** | Show the player on the club's public roster, as first name and last initial | Their own child |
 | **View attendance** | View the player's attendance history | Their own child |
 | **View development** | View the player's development goals and progress | Their own child |
 | **View documents** | View the player's completed documents | Their own child |

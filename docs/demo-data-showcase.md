@@ -1,6 +1,6 @@
 # Showcase demo data
 
-Seeded by `scripts/seed-showcase-demo.mjs` on 2026-09-08. Replaces every
+Seeded by `scripts/seed-showcase-demo.mjs` on 2026-10-06. Replaces every
 prior ad-hoc demo/test org (`dulahq-rbac-demo`, `dula-demo`, `damilagsc`, `agusan-yd`) with one
 coherent dataset exercising every entitlement combination: club+tournament, club-only, and
 tournament-only (x2, one national-federation flavored, one regional).
@@ -28,6 +28,13 @@ One standing account per RBAC role, all pointed at Usna Gali FC's U15 Girls team
 | Guardian | Mylene Bautista | `demo-guardian.u15-girls.usna-gali-fc@dulahq-showcase.local` |
 | Player | Angelica Alvarado | `demo-player.u15-girls.usna-gali-fc@dulahq-showcase.local` |
 | Tournament organizer (Tiger Cup, Davao Unity Sports — no org membership) | Dennis Manalo | `organizer.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| tournament_it_admin (Tiger Cup, Davao Unity Sports) | Ariel Salazar | `tournamentit.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| team_coordinator (Tiger Cup, Davao Unity Sports) | Camille Ocampo | `teamcoordinator.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| secretary (Tiger Cup, Davao Unity Sports) | Noel Fernandez | `tournamentsecretary.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| treasurer (Tiger Cup, Davao Unity Sports) | Grace Domingo | `tournamenttreasurer.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| communications (Tiger Cup, Davao Unity Sports) | Marcus Pascual | `tournamentcomms.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| referee_coordinator (Tiger Cup, Davao Unity Sports) | Teodoro Navarro | `refereecoordinator.tiger-cup.davao-unity-sports@dulahq-showcase.local` → `/tm/davao-unity-sports/tiger-cup` |
+| Referee (linked official, Davao Unity Sports — org_officials, no console) | Mark Bendijo | `referee.davao-unity-sports@dulahq-showcase.local` → `/official` |
 
 ---
 

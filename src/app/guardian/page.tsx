@@ -3,6 +3,7 @@ import { createClient, getCurrentDulaUser } from '@/lib/supabase/server';
 import SlotTabs from '@/components/motion/SlotTabs';
 import PlayerProfile from '@/components/player-profile/PlayerProfile';
 import NotificationSubscribe from '@/components/NotificationSubscribe';
+import PublicListingToggle from '@/components/PublicListingToggle';
 import GuardianTournaments from './GuardianTournaments';
 import ManualPaymentForm from '@/components/billing/ManualPaymentForm';
 
@@ -40,6 +41,11 @@ export default async function GuardianHomePage() {
     .eq('guardian_id', guardian.id);
 
   const children = (links ?? []).map((l: any) => l.players).filter(Boolean);
+  const childIds = children.map((c: any) => c.id);
+  const { data: publicFlags } = childIds.length
+    ? await supabase.from('player_public_profiles').select('player_id, show_publicly').in('player_id', childIds)
+    : { data: [] };
+  const publicShown = new Set((publicFlags ?? []).filter((f) => f.show_publicly).map((f) => f.player_id));
   const billingDb = supabase as any;
   const { data: familyInvoices } = await billingDb
     .from('billing_invoices')
@@ -132,6 +138,18 @@ export default async function GuardianHomePage() {
         </div>
 
         <NotificationSubscribe />
+
+        {children.length > 0 && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="section-label">Public club page</div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
+              Choose which children appear on their club&apos;s public roster. Only first name and last initial are shown.
+            </p>
+            {children.map((c: any) => (
+              <PublicListingToggle key={c.id} playerId={c.id} playerName={c.name} initial={publicShown.has(c.id)} />
+            ))}
+          </div>
+        )}
 
         {children.length === 0 && (
           <div className="card empty-state">

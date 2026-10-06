@@ -30,6 +30,8 @@ export async function updateClubProfile(clubId: string, formData: FormData) {
   const name = (formData.get('name') as string)?.trim();
   const about = (formData.get('about') as string)?.trim() || null;
   const location = (formData.get('location') as string)?.trim() || null;
+  const contactEmail = (formData.get('contactEmail') as string)?.trim() || null;
+  const contactPhone = (formData.get('contactPhone') as string)?.trim() || null;
   const logoFile = formData.get('logo') as File | null;
   const removeLogo = formData.get('removeLogo') === 'true';
   if (!name) return { error: 'Club name is required.' };
@@ -68,7 +70,7 @@ export async function updateClubProfile(clubId: string, formData: FormData) {
 
   const { error } = await supabase
     .from('clubs')
-    .update({ name, about, location, branding: nextBranding })
+    .update({ name, about, location, contact_email: contactEmail, contact_phone: contactPhone, branding: nextBranding })
     .eq('id', clubId);
 
   if (error) {

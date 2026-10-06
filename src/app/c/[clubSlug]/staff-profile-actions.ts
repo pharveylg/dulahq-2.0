@@ -40,6 +40,7 @@ export async function upsertMyStaffProfile(clubId: string, formData: FormData) {
   const certificationsRaw = (formData.get('certifications') as string) ?? '[]';
   const photoFile = formData.get('photo') as File | null;
   const removePhoto = formData.get('removePhoto') === 'true';
+  const showPublicly = formData.get('showPublicly') === 'on';
 
   let certifications: unknown;
   try {
@@ -88,6 +89,7 @@ export async function upsertMyStaffProfile(clubId: string, formData: FormData) {
     bio,
     photo_key: photoKey,
     certifications,
+    show_publicly: showPublicly,
     updated_at: new Date().toISOString(),
   });
 

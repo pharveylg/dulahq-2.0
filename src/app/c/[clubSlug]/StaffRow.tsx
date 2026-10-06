@@ -17,6 +17,7 @@ type StaffProfile = {
   bio: string | null;
   photoUrl: string | null;
   certifications: Certification[];
+  showPublicly: boolean;
 };
 
 type Team = { id: string; name: string };
@@ -89,6 +90,10 @@ function ProfileEditor({ clubId, staffId, profile }: { clubId: string; staffId: 
       </div>
       <input name="phone" placeholder="Phone" defaultValue={profile?.phone ?? ''} style={{ fontSize: 12.5 }} />
       <textarea name="bio" placeholder="Short bio" defaultValue={profile?.bio ?? ''} rows={2} style={{ fontSize: 12.5, resize: 'vertical' }} />
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>
+        <input name="showPublicly" type="checkbox" defaultChecked={profile?.showPublicly ?? false} />
+        Show my name, role and bio on the club&apos;s public page
+      </label>
 
       <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Certifications</div>
       {certs.map((c, i) => (

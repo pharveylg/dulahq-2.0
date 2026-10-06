@@ -4079,3 +4079,206 @@ describe('platform infra metrics (phase16k)', () => {
     await adminClient.auth.admin.deleteUser(platformAdminUserId);
   });
 });
+
+describe('public club profile (phase17a)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const slug = `rls-pcp-club-${tag}`;
+  const coachEmail = `rls-pcp-coach-${tag}@rls-test.local`;
+  const hiddenCoachEmail = `rls-pcp-hcoach-${tag}@rls-test.local`;
+  const managerEmail = `rls-pcp-manager-${tag}@rls-test.local`;
+  const guardianEmail = `rls-pcp-guardian-${tag}@rls-test.local`;
+  const hiddenGuardianEmail = `rls-pcp-hguardian-${tag}@rls-test.local`;
+  const anonClient = () => createClient(SUPABASE_URL, ANON_KEY);
+
+  let org: { id: string };
+  let club: { id: string };
+  let team: { id: string };
+  let angelica: { id: string };
+  let hiddenKid: { id: string };
+  let coachUserId: string;
+  let hiddenCoachUserId: string;
+  let managerUserId: string;
+  let guardianUserId: string;
+  let hiddenGuardianUserId: string;
+  let coachStaffId: string;
+  let hiddenCoachStaffId: string;
+  let coachClient: ReturnType<typeof createClient>;
+  let managerClient: ReturnType<typeof createClient>;
+  let guardianClient: ReturnType<typeof createClient>;
+  let hiddenGuardianClient: ReturnType<typeof createClient>;
+
+  async function publicProfile(): Promise<any> {
+    const { data, error } = await anonClient().rpc('public_club_profile', { p_club_slug: slug });
+    if (error) throw error;
+    return data;
+  }
+
+  it('sets up a listed club with contact details, two coaches (one opted in), two players and two guardians', async () => {
+    org = must(await adminClient.from('organizations').insert({ slug: `rls-pcp-org-${tag}`, name: 'RLS PCP Org' }).select().single(), 'org');
+    must(await adminClient.from('org_entitlements').insert({ org_id: org.id, product: 'club' }).select().single(), 'entitlement');
+    club = must(await adminClient.from('clubs').insert({
+      org_id: org.id,
+      name: 'PCP Club',
+      slug,
+      publicly_listed: true,
+      about: 'A club for the public profile test',
+      location: 'Davao City',
+      contact_email: 'hello@pcp.example',
+      contact_phone: '+63 900 000 0000',
+    }).select().single(), 'club');
+    team = must(await adminClient.from('teams').insert({
+      org_id: org.id, club_id: club.id, name: 'PCP U15', slug: `pcp-u15-${tag}`, squad_type: 'grassroots',
+    }).select().single(), 'team');
+    angelica = must(await adminClient.from('players').insert({
+      org_id: org.id, team_id: team.id, name: 'Angelica Alvarado', jersey: '1', position: 'GK',
+    }).select().single(), 'angelica');
+    hiddenKid = must(await adminClient.from('players').insert({
+      org_id: org.id, team_id: team.id, name: 'Hidden Kid', jersey: '9', position: 'FW', dob: '2014-03-01',
+    }).select().single(), 'hidden kid');
+
+    const coach = await createTestUser(coachEmail, 'audience');
+    const hiddenCoach = await createTestUser(hiddenCoachEmail, 'audience');
+    const manager = await createTestUser(managerEmail, 'audience');
+    const guardian = await createTestUser(guardianEmail, 'audience');
+    const hiddenGuardian = await createTestUser(hiddenGuardianEmail, 'audience');
+    coachUserId = coach.publicUser.id;
+    hiddenCoachUserId = hiddenCoach.publicUser.id;
+    managerUserId = manager.publicUser.id;
+    guardianUserId = guardian.publicUser.id;
+    hiddenGuardianUserId = hiddenGuardian.publicUser.id;
+
+    await adminClient.from('users').update({ name: 'Carla Ortega' }).eq('id', coachUserId);
+    await adminClient.from('users').update({ name: 'Hidden Coach' }).eq('id', hiddenCoachUserId);
+
+    const coachStaff = must(await adminClient.from('club_staff').insert({ club_id: club.id, user_id: coachUserId, role: 'coach' }).select().single(), 'coach staff');
+    const hiddenCoachStaff = must(await adminClient.from('club_staff').insert({ club_id: club.id, user_id: hiddenCoachUserId, role: 'coach' }).select().single(), 'hidden coach staff');
+    must(await adminClient.from('club_staff').insert({ club_id: club.id, user_id: managerUserId, role: 'club_manager' }).select().single(), 'manager staff');
+    coachStaffId = coachStaff.id;
+    hiddenCoachStaffId = hiddenCoachStaff.id;
+
+    await adminClient.from('user_assigned_teams').insert([
+      { user_id: coachUserId, team_id: team.id },
+      { user_id: hiddenCoachUserId, team_id: team.id },
+    ]);
+
+    must(await adminClient.from('staff_profiles').insert({
+      club_staff_id: coachStaffId, club_id: club.id, org_id: org.id, bio: 'Coach bio', phone: '+63 111 222', show_publicly: true,
+    }).select().single(), 'coach profile');
+    must(await adminClient.from('staff_profiles').insert({
+      club_staff_id: hiddenCoachStaffId, club_id: club.id, org_id: org.id, bio: 'Secret bio', show_publicly: false,
+    }).select().single(), 'hidden coach profile');
+
+    const guardianRecord = must(await adminClient.from('guardians').insert({ user_id: guardianUserId, name: 'PCP Guardian', org_id: org.id }).select().single(), 'guardian');
+    const hiddenGuardianRecord = must(await adminClient.from('guardians').insert({ user_id: hiddenGuardianUserId, name: 'Other Guardian', org_id: org.id }).select().single(), 'hidden guardian');
+    must(await adminClient.from('player_guardians').insert({ player_id: angelica.id, guardian_id: guardianRecord.id, is_primary_contact: true }).select().single(), 'link angelica');
+    must(await adminClient.from('player_guardians').insert({ player_id: hiddenKid.id, guardian_id: hiddenGuardianRecord.id, is_primary_contact: true }).select().single(), 'link hidden kid');
+
+    coachClient = await signInAs(coachEmail);
+    managerClient = await signInAs(managerEmail);
+    guardianClient = await signInAs(guardianEmail);
+    hiddenGuardianClient = await signInAs(hiddenGuardianEmail);
+  });
+
+  it('a guest sees the club contact and only the coach who opted in, named first name and last initial', async () => {
+    const profile = await publicProfile();
+    expect(profile.club.contactEmail).toBe('hello@pcp.example');
+    expect(profile.club.contactPhone).toBe('+63 900 000 0000');
+    expect(profile.staff.map((s: any) => s.name)).toEqual(['Carla O.']);
+    expect(profile.staff[0].bio).toBe('Coach bio');
+    expect(profile.staff[0].teams).toEqual(['PCP U15']);
+  });
+
+  it('nothing outside the opt-ins is returned: no hidden coach, no date of birth, no contact detail beyond the club\'s, no private note', async () => {
+    const raw = JSON.stringify(await publicProfile());
+    expect(raw).not.toContain('Secret bio');
+    expect(raw).not.toContain('Hidden Coach');
+    expect(raw).not.toContain('Hidden Kid');
+    expect(raw).not.toContain('Alvarado');
+    expect(raw).not.toContain('2014-03-01');
+    expect(raw).not.toContain(coachEmail);
+    expect(raw).not.toContain('+63 111 222');
+  });
+
+  it('no player appears until a guardian or the player opts in', async () => {
+    const profile = await publicProfile();
+    const players = profile.teams.flatMap((t: any) => t.players);
+    expect(players).toEqual([]);
+  });
+
+  it('a guardian can opt their child in, and the guest view then shows only that child, as first name and last initial', async () => {
+    const { error } = await guardianClient.rpc('set_player_public_listing', { p_player_id: angelica.id, p_show: true });
+    expect(error).toBeNull();
+    const profile = await publicProfile();
+    const players = profile.teams.flatMap((t: any) => t.players);
+    expect(players).toEqual([{ name: 'Angelica A.', jersey: '1', position: 'GK' }]);
+    expect(JSON.stringify(profile)).not.toContain('Hidden Kid');
+  });
+
+  it('a guardian cannot opt in a child they are not a guardian of, and a club manager cannot opt in anyone', async () => {
+    const other = await hiddenGuardianClient.rpc('set_player_public_listing', { p_player_id: angelica.id, p_show: false });
+    expect(other.error?.code).toBe('42501');
+    const manager = await managerClient.rpc('set_player_public_listing', { p_player_id: hiddenKid.id, p_show: true });
+    expect(manager.error?.code).toBe('42501');
+    const profile = await publicProfile();
+    expect(profile.teams.flatMap((t: any) => t.players).map((p: any) => p.name)).toEqual(['Angelica A.']);
+  });
+
+  it('the opt-in table cannot be written directly, and a guardian reads only their own child\'s row', async () => {
+    const direct = await guardianClient.from('player_public_profiles').insert({ player_id: hiddenKid.id, org_id: org.id, show_publicly: true });
+    expect(direct.error).not.toBeNull();
+    const own = await guardianClient.from('player_public_profiles').select('player_id').eq('player_id', angelica.id);
+    expect(own.data).toHaveLength(1);
+    const other = await hiddenGuardianClient.from('player_public_profiles').select('player_id').eq('player_id', angelica.id);
+    expect(other.data ?? []).toHaveLength(0);
+    const anonRead = await anonClient().from('player_public_profiles').select('player_id');
+    expect(anonRead.data ?? []).toHaveLength(0);
+  });
+
+  it('a coach can change their own listing, and a club manager cannot change another coach\'s', async () => {
+    const own = await coachClient.from('staff_profiles').update({ show_publicly: false }).eq('club_staff_id', coachStaffId);
+    expect(own.error).toBeNull();
+    expect((await publicProfile()).staff).toEqual([]);
+
+    const theirs = await managerClient.from('staff_profiles').update({ show_publicly: true }).eq('club_staff_id', hiddenCoachStaffId);
+    expect(theirs.error).not.toBeNull();
+    expect((await publicProfile()).staff).toEqual([]);
+
+    await coachClient.from('staff_profiles').update({ show_publicly: true }).eq('club_staff_id', coachStaffId);
+    expect((await publicProfile()).staff.map((s: any) => s.name)).toEqual(['Carla O.']);
+  });
+
+  it('an unlisted club, a blocked club, and a suspended org all return nothing to a guest', async () => {
+    await adminClient.from('clubs').update({ publicly_listed: false }).eq('id', club.id);
+    expect(await publicProfile()).toBeNull();
+    await adminClient.from('clubs').update({ publicly_listed: true }).eq('id', club.id);
+
+    await adminClient.from('clubs').update({ listing_blocked: true }).eq('id', club.id);
+    expect(await publicProfile()).toBeNull();
+    await adminClient.from('clubs').update({ listing_blocked: false }).eq('id', club.id);
+
+    await adminClient.from('organizations').update({ status: 'suspended' }).eq('id', org.id);
+    expect(await publicProfile()).toBeNull();
+    await adminClient.from('organizations').update({ status: 'active' }).eq('id', org.id);
+
+    expect((await publicProfile()).club.name).toBe('PCP Club');
+  });
+
+  it('the anonymous lookup is on the allowlist, so the secdef guard still counts zero', async () => {
+    const { data } = await adminClient.rpc('anon_executable_secdef_count' as any);
+    expect(data).toBe(0);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('players').delete().in('id', [angelica.id, hiddenKid.id]);
+    await adminClient.from('guardians').delete().eq('org_id', org.id);
+    await adminClient.from('club_staff').delete().eq('club_id', club.id);
+    await adminClient.from('user_assigned_teams').delete().eq('team_id', team.id);
+    await adminClient.from('teams').delete().eq('id', team.id);
+    await adminClient.from('clubs').delete().eq('id', club.id);
+    await adminClient.from('org_entitlements').delete().eq('org_id', org.id);
+    await adminClient.from('organizations').delete().eq('id', org.id);
+    for (const id of [coachUserId, hiddenCoachUserId, managerUserId, guardianUserId, hiddenGuardianUserId]) {
+      await adminClient.auth.admin.deleteUser(id);
+    }
+  });
+});
