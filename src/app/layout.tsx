@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import './globals.css';
-import { getCurrentDulaUser, claimPendingGuardianInvite, getMyPersonas } from '@/lib/supabase/server';
+import { getCurrentDulaUser, claimPendingGuardianInvite, getMyPersonas, getMyOrgProductAccess } from '@/lib/supabase/server';
 import { personaLinks } from '@/lib/persona-landing';
 import { createClient } from '@/lib/supabase/server';
 import NavActions from './NavActions';
 import RegisterServiceWorker from './RegisterServiceWorker';
+import InstallPrompt from './InstallPrompt';
 import ThemeToggle, { ThemeInitScript } from './ThemeToggle';
 import NotificationBell from '@/components/NotificationBell';
 import { getMyNotifications } from '@/lib/notifications-actions';
@@ -51,6 +52,9 @@ export default async function RootLayout({
   const initialNotifications = authUser ? await getMyNotifications() : [];
   // Guardians and players have a page of their own that nothing else links to.
   const navPersonaLinks = authUser ? personaLinks(await getMyPersonas()) : [];
+  // The install prompt is for people who belong to a registered org, signed in.
+  const orgAccess = authUser ? await getMyOrgProductAccess() : null;
+  const canInstall = !!(orgAccess && (orgAccess.club || orgAccess.tournament));
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -67,6 +71,7 @@ export default async function RootLayout({
         <RegisterServiceWorker />
         {authUser && <ImpersonationBanner />}
         {authUser && <SuspendedOrgBanner />}
+        {canInstall && <InstallPrompt />}
         <nav className="top-nav">
           <div className="container">
             <Link href="/" className="brand">
