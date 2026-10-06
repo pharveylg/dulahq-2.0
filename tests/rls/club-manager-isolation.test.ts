@@ -4282,3 +4282,118 @@ describe('public club profile (phase17a)', () => {
     }
   });
 });
+
+describe('player photos (phase17b)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const slug = `rls-photo-club-${tag}`;
+  const coachEmail = `rls-photo-coach-${tag}@rls-test.local`;
+  const guardianEmail = `rls-photo-guardian-${tag}@rls-test.local`;
+  const strangerEmail = `rls-photo-stranger-${tag}@rls-test.local`;
+  const managerEmail = `rls-photo-manager-${tag}@rls-test.local`;
+  const anonClient = () => createClient(SUPABASE_URL, ANON_KEY);
+
+  let org: { id: string };
+  let club: { id: string };
+  let team: { id: string };
+  let kid: { id: string };
+  let coachUserId: string;
+  let guardianUserId: string;
+  let strangerUserId: string;
+  let managerUserId: string;
+  let coachClient: ReturnType<typeof createClient>;
+  let guardianClient: ReturnType<typeof createClient>;
+  let strangerClient: ReturnType<typeof createClient>;
+  let managerClient: ReturnType<typeof createClient>;
+
+  async function publicPlayers(): Promise<any[]> {
+    const { data, error } = await anonClient().rpc('public_club_profile', { p_club_slug: slug });
+    if (error) throw error;
+    return (data as any)?.teams?.flatMap((t: any) => t.players) ?? [];
+  }
+
+  it('sets up a listed club with a coach on the team, a guardian of the player, and an unrelated stranger', async () => {
+    org = must(await adminClient.from('organizations').insert({ slug: `rls-photo-org-${tag}`, name: 'RLS Photo Org' }).select().single(), 'org');
+    must(await adminClient.from('org_entitlements').insert({ org_id: org.id, product: 'club' }).select().single(), 'entitlement');
+    club = must(await adminClient.from('clubs').insert({ org_id: org.id, name: 'Photo Club', slug, publicly_listed: true }).select().single(), 'club');
+    team = must(await adminClient.from('teams').insert({ org_id: org.id, club_id: club.id, name: 'Photo U12', slug: `photo-u12-${tag}`, squad_type: 'grassroots' }).select().single(), 'team');
+    kid = must(await adminClient.from('players').insert({ org_id: org.id, team_id: team.id, name: 'Lara Mendoza', jersey: '7', position: 'CM' }).select().single(), 'kid');
+
+    const coach = await createTestUser(coachEmail, 'audience');
+    const guardian = await createTestUser(guardianEmail, 'audience');
+    const stranger = await createTestUser(strangerEmail, 'audience');
+    const manager = await createTestUser(managerEmail, 'audience');
+    coachUserId = coach.publicUser.id;
+    guardianUserId = guardian.publicUser.id;
+    strangerUserId = stranger.publicUser.id;
+    managerUserId = manager.publicUser.id;
+
+    must(await adminClient.from('club_staff').insert({ club_id: club.id, user_id: coachUserId, role: 'coach' }).select().single(), 'coach staff');
+    must(await adminClient.from('club_staff').insert({ club_id: club.id, user_id: managerUserId, role: 'club_manager' }).select().single(), 'manager staff');
+    await adminClient.from('user_assigned_teams').insert({ user_id: coachUserId, team_id: team.id });
+
+    const guardianRecord = must(await adminClient.from('guardians').insert({ user_id: guardianUserId, name: 'Lara Parent', org_id: org.id }).select().single(), 'guardian');
+    must(await adminClient.from('player_guardians').insert({ player_id: kid.id, guardian_id: guardianRecord.id, is_primary_contact: true }).select().single(), 'link kid');
+
+    coachClient = await signInAs(coachEmail);
+    guardianClient = await signInAs(guardianEmail);
+    strangerClient = await signInAs(strangerEmail);
+    managerClient = await signInAs(managerEmail);
+  });
+
+  it('the assigned coach, the guardian and the club manager can set the photo; a stranger and anon cannot', async () => {
+    const coachSet = await coachClient.rpc('set_player_photo', { p_player_id: kid.id, p_key: `tenants/${club.id}/profile/coach-photo.png` });
+    expect(coachSet.error).toBeNull();
+    const guardianSet = await guardianClient.rpc('set_player_photo', { p_player_id: kid.id, p_key: `tenants/${club.id}/profile/guardian-photo.png` });
+    expect(guardianSet.error).toBeNull();
+    const managerSet = await managerClient.rpc('set_player_photo', { p_player_id: kid.id, p_key: `tenants/${club.id}/profile/manager-photo.png` });
+    expect(managerSet.error).toBeNull();
+
+    const strangerSet = await strangerClient.rpc('set_player_photo', { p_player_id: kid.id, p_key: 'nope.png' });
+    expect(strangerSet.error?.code).toBe('42501');
+    const anonSet = await anonClient().rpc('set_player_photo', { p_player_id: kid.id, p_key: 'nope.png' });
+    expect(anonSet.error).not.toBeNull();
+
+    const { data } = await adminClient.from('players').select('photo_key').eq('id', kid.id).single();
+    expect(data?.photo_key).toBe(`tenants/${club.id}/profile/manager-photo.png`);
+  });
+
+  it('a photo is not returned to a guest until the player is listed and the photo is shown', async () => {
+    expect((await publicPlayers())[0]?.photoKey ?? null).toBeNull();
+
+    const listed = await guardianClient.rpc('set_player_public_listing', { p_player_id: kid.id, p_show: true });
+    expect(listed.error).toBeNull();
+    expect((await publicPlayers())[0]?.photoKey ?? null).toBeNull();
+
+    const shown = await guardianClient.rpc('set_player_public_photo', { p_player_id: kid.id, p_show: true });
+    expect(shown.error).toBeNull();
+    expect((await publicPlayers())[0].photoKey).toBe(`tenants/${club.id}/profile/manager-photo.png`);
+  });
+
+  it('a stranger cannot change the public photo switch, and the switch is not writable directly', async () => {
+    const refused = await strangerClient.rpc('set_player_public_photo', { p_player_id: kid.id, p_show: false });
+    expect(refused.error?.code).toBe('42501');
+    const direct = await coachClient.from('player_public_profiles').update({ show_photo: false }).eq('player_id', kid.id);
+    expect(direct.error).not.toBeNull();
+    expect((await publicPlayers())[0].photoKey).not.toBeNull();
+  });
+
+  it('a guardian can remove the photo, and the guest view stops showing it', async () => {
+    const removed = await guardianClient.rpc('set_player_photo', { p_player_id: kid.id, p_key: null });
+    expect(removed.error).toBeNull();
+    expect((await publicPlayers())[0].photoKey ?? null).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('players').delete().eq('id', kid.id);
+    await adminClient.from('guardians').delete().eq('org_id', org.id);
+    await adminClient.from('club_staff').delete().eq('club_id', club.id);
+    await adminClient.from('user_assigned_teams').delete().eq('team_id', team.id);
+    await adminClient.from('teams').delete().eq('id', team.id);
+    await adminClient.from('clubs').delete().eq('id', club.id);
+    await adminClient.from('org_entitlements').delete().eq('org_id', org.id);
+    await adminClient.from('organizations').delete().eq('id', org.id);
+    for (const id of [coachUserId, guardianUserId, strangerUserId, managerUserId]) {
+      await adminClient.auth.admin.deleteUser(id);
+    }
+  });
+});

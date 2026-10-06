@@ -26,8 +26,10 @@ export default function Overview({
   latestEvaluationDate,
   upcomingSessions,
   recentActivity,
+  photo,
 }: {
   player: { name: string; jersey: string | null; position: string | null; secondaryPosition: string | null; preferredFoot: string | null; dob: string | null };
+  photo: React.ReactNode;
   teamName: string | null;
   clubName: string | null;
   developmentStatus: string | null;
@@ -46,6 +48,7 @@ export default function Overview({
   return (
     <div>
       <div className="card" style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+        {photo}
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {teamName ?? 'No team'}{clubName ? ` · ${clubName}` : ''}
           {player.jersey ? ` · #${player.jersey}` : ''}

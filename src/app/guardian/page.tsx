@@ -37,15 +37,16 @@ export default async function GuardianHomePage() {
 
   const { data: links } = await supabase
     .from('player_guardians')
-    .select('player_id, relationship, players(id, name, team_id, teams(id, name, club_id, clubs(name)))')
+    .select('player_id, relationship, players(id, name, team_id, photo_key, teams(id, name, club_id, clubs(name)))')
     .eq('guardian_id', guardian.id);
 
   const children = (links ?? []).map((l: any) => l.players).filter(Boolean);
   const childIds = children.map((c: any) => c.id);
   const { data: publicFlags } = childIds.length
-    ? await supabase.from('player_public_profiles').select('player_id, show_publicly').in('player_id', childIds)
+    ? await supabase.from('player_public_profiles').select('player_id, show_publicly, show_photo').in('player_id', childIds)
     : { data: [] };
   const publicShown = new Set((publicFlags ?? []).filter((f) => f.show_publicly).map((f) => f.player_id));
+  const photoShown = new Set((publicFlags ?? []).filter((f) => f.show_photo).map((f) => f.player_id));
   const billingDb = supabase as any;
   const { data: familyInvoices } = await billingDb
     .from('billing_invoices')
@@ -146,7 +147,7 @@ export default async function GuardianHomePage() {
               Choose which children appear on their club&apos;s public roster. Only first name and last initial are shown.
             </p>
             {children.map((c: any) => (
-              <PublicListingToggle key={c.id} playerId={c.id} playerName={c.name} initial={publicShown.has(c.id)} />
+              <PublicListingToggle key={c.id} playerId={c.id} playerName={c.name} initial={publicShown.has(c.id)} initialShowPhoto={photoShown.has(c.id)} hasPhoto={!!c.photo_key} />
             ))}
           </div>
         )}

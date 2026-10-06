@@ -37,7 +37,7 @@ type PublicProfile = {
     orgName: string;
   };
   staff: { name: string; role: string; bio: string | null; teams: string[] }[];
-  teams: { name: string; squadType: string; players: { name: string; jersey: string | null; position: string | null }[] }[];
+  teams: { name: string; squadType: string; players: { name: string; jersey: string | null; position: string | null; photoKey: string | null }[] }[];
 };
 
 const STAFF_ROLE_LABEL: Record<string, string> = {
@@ -66,7 +66,15 @@ async function GuestClubOverview({ clubSlug }: { clubSlug: string }) {
     );
   }
 
-  const { club, staff, teams } = profile;
+  const { club, staff } = profile;
+  const teams = await Promise.all(
+    profile.teams.map(async (t) => ({
+      ...t,
+      players: await Promise.all(
+        t.players.map(async (p) => ({ ...p, photoUrl: p.photoKey ? await getDownloadUrl(p.photoKey) : null }))
+      ),
+    }))
+  );
   const hasContact = club.contactEmail || club.contactPhone;
 
   return (
@@ -129,7 +137,15 @@ async function GuestClubOverview({ clubSlug }: { clubSlug: string }) {
                         {t.players.map((p, j) => (
                           <tr key={j} style={{ borderTop: '1px solid var(--border)' }}>
                             <td style={{ padding: '6px 0', width: 48, color: 'var(--text-muted)' }}>{p.jersey ?? ''}</td>
-                            <td style={{ padding: '6px 0' }}>{p.name}</td>
+                            <td style={{ padding: '6px 0' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                {p.photoUrl && (
+                                  // eslint-disable-next-line @next/next/no-img-element -- a signed R2 URL
+                                  <img src={p.photoUrl} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                                )}
+                                {p.name}
+                              </span>
+                            </td>
                             <td style={{ padding: '6px 0', color: 'var(--text-muted)', textAlign: 'right' }}>{p.position ?? ''}</td>
                           </tr>
                         ))}

@@ -3,6 +3,8 @@ import { formatMoney } from '@/lib/currency';
 import { computeAttendancePct } from '@/lib/attendance-stats';
 import SlotTabs from '@/components/motion/SlotTabs';
 import Overview from './Overview';
+import PlayerPhotoField from './PlayerPhotoField';
+import { getDownloadUrl } from '../../../shared/files/lib/r2';
 import Family from './Family';
 
 // Reusing the coach route's existing Development-tab components rather than
@@ -57,7 +59,7 @@ export default async function PlayerProfile({
   const { data: player, error: playerError } = await supabase
     .from('players')
     .select(
-      'id, name, jersey, position, secondary_position, preferred_foot, dob, development_status, team_id, club_id, org_id, user_id, teams(id, name, slug, club_id, clubs(id, name, slug))'
+      'id, name, jersey, position, secondary_position, preferred_foot, dob, development_status, photo_key, team_id, club_id, org_id, user_id, teams(id, name, slug, club_id, clubs(id, name, slug))'
     )
     .eq('id', playerId)
     .maybeSingle();
@@ -103,6 +105,7 @@ export default async function PlayerProfile({
   // view_team_finance but cannot write them -- fees_write is club-scope
   // only (manage_finances / can_admin_club), matching the Team Manager
   // spec §23, whose finance permissions are all VIEW_/EXPORT_.
+  const photoUrl = player.photo_key ? await getDownloadUrl(player.photo_key) : null;
   const canManageFees = perms.manageFinances;
   const canManageMembership = perms.manageMembership || perms.manageTeamMembership;
   const canManageFamily = perms.viewTeam;
@@ -270,6 +273,14 @@ export default async function PlayerProfile({
       slots={{
         overview: (
           <Overview
+            photo={
+              <PlayerPhotoField
+                playerId={player.id}
+                name={player.name}
+                photoUrl={photoUrl}
+                canEdit={viewer === 'coach' ? perms.editFootballProfile : true}
+              />
+            }
             player={{
               name: player.name, jersey: player.jersey, position: player.position,
               secondaryPosition: player.secondary_position, preferredFoot: player.preferred_foot, dob: player.dob,

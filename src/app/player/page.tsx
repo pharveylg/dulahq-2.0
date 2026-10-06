@@ -14,7 +14,7 @@ export default async function PlayerHomePage() {
 
   const { data: player } = await supabase
     .from('players')
-    .select('id, name, team_id, teams(club_id)')
+    .select('id, name, team_id, photo_key, teams(club_id)')
     .eq('user_id', dulaUser.id)
     .maybeSingle();
 
@@ -33,10 +33,11 @@ export default async function PlayerHomePage() {
 
   const { data: publicFlag } = await supabase
     .from('player_public_profiles')
-    .select('show_publicly')
+    .select('show_publicly, show_photo')
     .eq('player_id', player.id)
     .maybeSingle();
   const publicShown = publicFlag?.show_publicly ?? false;
+  const photoShown = publicFlag?.show_photo ?? false;
 
   const teamId = player.team_id;
   const clubId = (player as any).teams?.club_id ?? null;
@@ -83,7 +84,7 @@ export default async function PlayerHomePage() {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
             Show your name on your club&apos;s public roster. Only first name and last initial are shown.
           </p>
-          <PublicListingToggle playerId={player.id} playerName={player.name} initial={publicShown} />
+          <PublicListingToggle playerId={player.id} playerName={player.name} initial={publicShown} initialShowPhoto={photoShown} hasPhoto={!!player.photo_key} />
         </div>
 
         <PlayerProfile

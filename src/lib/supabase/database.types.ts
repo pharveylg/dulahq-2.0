@@ -2709,7 +2709,7 @@ export type Database = {
           name: string
           notes: string | null
           org_id: string
-          photo_url: string | null
+          photo_key: string | null
           position: string | null
           preferred_foot: string | null
           secondary_position: string | null
@@ -2727,7 +2727,7 @@ export type Database = {
           name: string
           notes?: string | null
           org_id?: string
-          photo_url?: string | null
+          photo_key?: string | null
           position?: string | null
           preferred_foot?: string | null
           secondary_position?: string | null
@@ -2745,7 +2745,7 @@ export type Database = {
           name?: string
           notes?: string | null
           org_id?: string
-          photo_url?: string | null
+          photo_key?: string | null
           position?: string | null
           preferred_foot?: string | null
           secondary_position?: string | null
@@ -3129,6 +3129,7 @@ export type Database = {
         Row: {
           org_id: string
           player_id: string
+          show_photo: boolean
           show_publicly: boolean
           updated_at: string
           updated_by: string | null
@@ -3136,6 +3137,7 @@ export type Database = {
         Insert: {
           org_id: string
           player_id: string
+          show_photo?: boolean
           show_publicly?: boolean
           updated_at?: string
           updated_by?: string | null
@@ -3143,6 +3145,7 @@ export type Database = {
         Update: {
           org_id?: string
           player_id?: string
+          show_photo?: boolean
           show_publicly?: boolean
           updated_at?: string
           updated_by?: string | null
@@ -4973,6 +4976,14 @@ export type Database = {
       public_club_profile: {
         Args: { p_club_slug: string }
         Returns: Json
+      }
+      set_player_photo: {
+        Args: { p_player_id: string; p_key: string | null }
+        Returns: undefined
+      }
+      set_player_public_photo: {
+        Args: { p_player_id: string; p_show: boolean }
+        Returns: undefined
       }
       create_notification: {
         Args: {
