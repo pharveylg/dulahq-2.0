@@ -34,53 +34,57 @@ async function PublicDirectory() {
       </Reveal>
 
       <Reveal index={2}>
-        <details className="dir-section" style={{ marginBottom: 40 }} open>
+        <details className="dir-section" style={{ marginBottom: 40 }}>
           <summary>
-            <h2 style={{ fontSize: 20 }}>Tournaments</h2>
+            <span className="dir-section-heading">
+              <h2 style={{ fontSize: 20 }}>Tournaments</h2>
+              <span className="subtitle">Browse public tournaments, or sign in to manage your own.</span>
+            </span>
             <span className="dir-section-chevron">▸</span>
           </summary>
-          <p className="subtitle" style={{ marginBottom: 14 }}>
-            Browse public tournaments, or sign in to manage your own.
-          </p>
-          {tournamentsError && <p className="error-text">Couldn&apos;t load tournaments: {tournamentsError}</p>}
-          {!tournamentsError && tournaments.length === 0 && (
-            <div className="card empty-state">
-              <p>No tournaments are publicly listed yet.</p>
-            </div>
-          )}
-          {tournaments.length > 0 && <PublicTournamentList tournaments={tournaments} />}
+          <div style={{ marginTop: 14 }}>
+            {tournamentsError && <p className="error-text">Couldn&apos;t load tournaments: {tournamentsError}</p>}
+            {!tournamentsError && tournaments.length === 0 && (
+              <div className="card empty-state">
+                <p>No tournaments are publicly listed yet.</p>
+              </div>
+            )}
+            {tournaments.length > 0 && <PublicTournamentList tournaments={tournaments} />}
+          </div>
         </details>
       </Reveal>
 
       <Reveal index={3}>
-        <details className="dir-section" style={{ marginBottom: 40 }} open>
+        <details className="dir-section" style={{ marginBottom: 40 }}>
           <summary>
-            <h2 style={{ fontSize: 20 }}>Clubs</h2>
+            <span className="dir-section-heading">
+              <h2 style={{ fontSize: 20 }}>Clubs</h2>
+              <span className="subtitle">Browse public clubs, or sign in to manage your own.</span>
+            </span>
             <span className="dir-section-chevron">▸</span>
           </summary>
-          <p className="subtitle" style={{ marginBottom: 14 }}>
-            Browse public clubs, or sign in to manage your own.
-          </p>
-          {clubsError && <p className="error-text">Couldn&apos;t load clubs: {clubsError}</p>}
-          {!clubsError && clubs.length === 0 && (
-            <div className="card empty-state">
-              <p>No clubs are publicly listed yet.</p>
-            </div>
-          )}
-          {clubs.length > 0 && <PublicClubList clubs={clubs} />}
+          <div style={{ marginTop: 14 }}>
+            {clubsError && <p className="error-text">Couldn&apos;t load clubs: {clubsError}</p>}
+            {!clubsError && clubs.length === 0 && (
+              <div className="card empty-state">
+                <p>No clubs are publicly listed yet.</p>
+              </div>
+            )}
+            {clubs.length > 0 && <PublicClubList clubs={clubs} />}
+          </div>
         </details>
       </Reveal>
 
       <Reveal index={4}>
-        <details className="dir-section" open>
+        <details className="dir-section">
           <summary>
-            <h2 style={{ fontSize: 20 }}>Courts</h2>
+            <span className="dir-section-heading">
+              <h2 style={{ fontSize: 20 }}>Courts</h2>
+              <span className="subtitle">Book a court, or join the walk-in queue.</span>
+            </span>
             <span className="dir-section-chevron">▸</span>
           </summary>
-          <p className="subtitle" style={{ marginBottom: 14 }}>
-            Book a court, or join the walk-in queue.
-          </p>
-          <a href={COURTS_URL} className="dir-strip">
+          <a href={COURTS_URL} className="dir-strip" style={{ marginTop: 14 }}>
             <CourtIcon size={44} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="dir-name" style={{ marginTop: 0 }}>Court booking</span>

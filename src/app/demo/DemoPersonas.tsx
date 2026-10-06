@@ -33,14 +33,20 @@ export default function DemoPersonas({ clubSlug }: { clubSlug: string }) {
   function renderGroup(product: Product, title: string, subtitle: string) {
     const group = PERSONAS.filter((p) => p.products.includes(product));
     return (
-      <div style={{ marginBottom: 28 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 2 }}>{title}</h2>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14 }}>{subtitle}</p>
+      <details className="dir-section" style={{ marginBottom: 28 }}>
+        <summary>
+          <span className="dir-section-heading">
+            <h2 style={{ fontSize: 16 }}>{title}</h2>
+            <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{subtitle}</span>
+          </span>
+          <span className="dir-section-chevron">▸</span>
+        </summary>
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
             gap: 14,
+            marginTop: 14,
           }}
         >
           {group.map((persona, i) => (
@@ -70,7 +76,7 @@ export default function DemoPersonas({ clubSlug }: { clubSlug: string }) {
             </Reveal>
           ))}
         </div>
-      </div>
+      </details>
     );
   }
 

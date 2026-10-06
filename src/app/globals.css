@@ -493,10 +493,17 @@ h1, h2, h3, .brand {
 .dir-section > summary::-webkit-details-marker {
   display: none;
 }
+.dir-section-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
 .dir-section-chevron {
   flex-shrink: 0;
+  align-self: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 26px;
+  line-height: 1;
   transition: transform .2s var(--ease-spring);
   transform: rotate(0deg);
 }
