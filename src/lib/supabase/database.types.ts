@@ -2062,6 +2062,12 @@ export type Database = {
           },
         ]
       }
+      org_onboarding_shells: {
+        Row: { org_id: string; expires_at: string; created_at: string }
+        Insert: { org_id: string; expires_at: string; created_at?: string }
+        Update: { org_id?: string; expires_at?: string; created_at?: string }
+        Relationships: []
+      }
       org_entitlements: {
         Row: {
           created_at: string
@@ -5041,6 +5047,14 @@ export type Database = {
       set_player_public_listing: {
         Args: { p_player_id: string; p_show: boolean }
         Returns: undefined
+      }
+      create_self_serve_organization: {
+        Args: { p_name: string; p_slug: string }
+        Returns: Json
+      }
+      expire_onboarding_shells_system: {
+        Args: Record<PropertyKey, never>
+        Returns: number
       }
       public_club_profile: {
         Args: { p_club_slug: string }

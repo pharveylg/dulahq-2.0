@@ -25,7 +25,32 @@ and its own `show_publicly` flag, nothing reads it publicly yet; `trial_policy`
 platform-admin-writable. Verified live: guard counts unchanged, all 5 existing
 `org_members` rows untouched, `anon` has zero grants on the contact table, a non-admin
 org member is refused writing contact details, an org admin can write and read their
-own. Phase 1 (self-serve creation, trial-only) is next.
+own.
+
+**Phase 1 is done** (2026-10-08, `phase18b`): `create_self_serve_organization(name,
+slug)` is one atomic SECURITY DEFINER function -- creates the organization, inserts
+the caller as its first `org_members` admin, and starts a 24-hour
+`org_onboarding_shells` deadline, all in one transaction (a failure partway rolls
+back everything, satisfying the review's "atomic and safe to retry" requirement
+directly). This needed its own bootstrap path because `is_org_admin()`'s only
+bootstrap branch is for a platform admin -- an ordinary self-serve creator has no
+such status, so without this function nobody could ever insert the first admin row
+for their own brand-new org. `expire_onboarding_shells_system()` runs hourly via
+`pg_cron` (`37 * * * *`) and deletes only a shell whose 24 hours have passed AND
+which still has zero `org_entitlements` -- a shell that became a real trial is never
+touched even if its own row wasn't cleared yet. New UI: `/organizations/new` (signed-in
+gate, name + web address) and `/organizations/[orgSlug]` (shell deadline, entitlements
+if any, a link to `/demo` for Test Roles, and a "starting a trial isn't available yet"
+note -- that's Phase 2). A link from the homepage, next to the existing `/demo` link.
+
+Verified live, including a real end-to-end pass through the actual UI (signed in as
+the demo tournament organizer persona, who has no `org_members` row at all): creation,
+first-admin bootstrap, and the 24h shell deadline all work for a user with zero org
+relationships; anon is refused at the grant level; a duplicate slug is refused; a
+different signed-in user cannot see the shell's deadline; the cleanup function deletes
+an expired empty shell and leaves one with an entitlement untouched even when its shell
+row is also stale. Test org and fixtures removed afterward. Phase 2 (product trial
+entitlements with real hard caps) is next.
 
 ## What was checked, and what it confirmed
 

@@ -30,6 +30,7 @@ async function PublicDirectory() {
       <Reveal index={1}>
         <p style={{ textAlign: 'center', marginBottom: 36, fontSize: 12.5, color: 'var(--text-muted)' }}>
           New here? <Link href="/demo">Try it as any role</Link> — one click, no account needed.
+          {' '}Ready to run your own? <Link href="/organizations/new">Create your organization</Link>.
         </p>
       </Reveal>
 

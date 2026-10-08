@@ -4435,3 +4435,65 @@ describe('self-serve onboarding foundation (phase18a)', () => {
     expect(unchanged.data?.limit_value).toBe(1);
   });
 });
+
+describe('self-serve organization creation (phase18b)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const slug = `rls-p1-org-${tag}`;
+  const creatorEmail = `rls-p1-creator-${tag}@rls-test.local`;
+  const strangerEmail = `rls-p1-stranger-${tag}@rls-test.local`;
+  let creatorClient: ReturnType<typeof createClient>;
+  let strangerClient: ReturnType<typeof createClient>;
+  let orgId: string;
+
+  it('sets up two fresh users with no org relationship at all', async () => {
+    await createTestUser(creatorEmail, 'audience');
+    await createTestUser(strangerEmail, 'audience');
+    creatorClient = await signInAs(creatorEmail);
+    strangerClient = await signInAs(strangerEmail);
+  });
+
+  it('a signed-in user with no org can create one and becomes its first admin, with a 24h shell deadline', async () => {
+    const { data, error } = await (creatorClient as any).rpc('create_self_serve_organization', { p_name: 'RLS Phase1 Org', p_slug: slug });
+    expect(error).toBeNull();
+    orgId = data.orgId;
+    expect(data.slug).toBe(slug);
+
+    const member = await adminClient.from('org_members').select('role, user_id').eq('org_id', orgId).eq('email', creatorEmail).single();
+    expect(member.data?.role).toBe('admin');
+
+    const shell = await creatorClient.from('org_onboarding_shells').select('expires_at').eq('org_id', orgId).single();
+    expect(shell.error).toBeNull();
+    const hoursRemaining = (new Date(shell.data!.expires_at).getTime() - Date.now()) / 3_600_000;
+    expect(hoursRemaining).toBeGreaterThan(23);
+    expect(hoursRemaining).toBeLessThanOrEqual(24);
+  });
+
+  it('anon is refused, and a duplicate slug is refused', async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    const anonAttempt = await (anon as any).rpc('create_self_serve_organization', { p_name: 'Nope', p_slug: `${slug}-anon` });
+    expect(anonAttempt.error).not.toBeNull();
+
+    const dup = await (strangerClient as any).rpc('create_self_serve_organization', { p_name: 'Different name', p_slug: slug });
+    expect(dup.error).not.toBeNull();
+  });
+
+  it('a stranger cannot see this org\'s shell deadline', async () => {
+    const stranger = await strangerClient.from('org_onboarding_shells').select('expires_at').eq('org_id', orgId);
+    expect(stranger.data ?? []).toHaveLength(0);
+  });
+
+  it('the cleanup function deletes an expired shell with no entitlement, and never one that has one', async () => {
+    await adminClient.from('org_onboarding_shells').update({ expires_at: new Date(Date.now() - 3_600_000).toISOString() }).eq('org_id', orgId);
+    const { data: deletedCount } = await adminClient.rpc('expire_onboarding_shells_system' as any);
+    expect(deletedCount).toBeGreaterThanOrEqual(1);
+    const gone = await adminClient.from('organizations').select('id').eq('id', orgId).maybeSingle();
+    expect(gone.data).toBeNull();
+  });
+
+  it('cleans up', async () => {
+    const creator = await adminClient.from('users').select('id').eq('email', creatorEmail).maybeSingle();
+    const stranger = await adminClient.from('users').select('id').eq('email', strangerEmail).maybeSingle();
+    if (creator.data) await adminClient.auth.admin.deleteUser(creator.data.id);
+    if (stranger.data) await adminClient.auth.admin.deleteUser(stranger.data.id);
+  });
+});
