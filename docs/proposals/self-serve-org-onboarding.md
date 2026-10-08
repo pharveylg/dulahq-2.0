@@ -49,8 +49,42 @@ first-admin bootstrap, and the 24h shell deadline all work for a user with zero 
 relationships; anon is refused at the grant level; a duplicate slug is refused; a
 different signed-in user cannot see the shell's deadline; the cleanup function deletes
 an expired empty shell and leaves one with an entitlement untouched even when its shell
-row is also stale. Test org and fixtures removed afterward. Phase 2 (product trial
-entitlements with real hard caps) is next.
+row is also stale. Test org and fixtures removed afterward.
+
+**Phase 2 is done** (2026-10-08, `phase18c`): `start_product_trial(org, products[])`
+grants `org_entitlements(status='trial')` + a matching `billing_subscriptions` row per
+chosen product, sharing one trial clock across every product an org ever starts (read
+once from the first trial, reused for any later one -- never reset or stacked).
+Zero `org_entitlements` rows have ever had `valid_until` set, so this was the safe
+moment to fix the date/timestamp mismatch Phase 0 flagged: `valid_until` is now
+`timestamptz`, and `org_has_product()` compares against `now()` instead of
+`current_date` -- no existing org was affected, confirmed live before changing it.
+
+Hard caps are four `BEFORE INSERT` triggers (`clubs`, `teams`, `tournaments`,
+`tournament_entries`), each locking the parent row (`for update`) before counting --
+the standard Postgres answer to the review's own "count-then-insert can be bypassed by
+concurrent requests" warning, since two simultaneous inserts against the same parent
+are forced to take that lock one after another. Each is a no-op once the entitlement
+is `active` rather than `trial`, and a no-op entirely if `trial_caps` has no row for
+that key. `/organizations/[orgSlug]` now shows a real "Start a free trial" form (with
+the actual numbers from `trial_policy`/`trial_caps`, not hand-typed copy) once an org
+has no product yet, and the entitlement's trial end date once it does.
+
+Verified live in a single rolled-back transaction covering every path: the shared
+clock across two products, the shell being cleared once a trial starts, all four caps
+refusing their first over-the-limit insert, and a club flipped to `active` immediately
+allowing a second one. Separately verified that an ordinary org admin's session
+cannot flip `org_entitlements.status` directly (RLS silently filters it -- correct,
+since no "pay now" path exists yet; that's Phase 3). Six more tests added through the
+real Supabase JS client (not raw SQL) covering the same ground, plus a full
+end-to-end pass through the actual UI signed in as a persona with no prior org at
+all: create → start a club trial → status page shows "Club — trial · ends
+10/22/2026" with working links to Clubs/Tournaments. Running the **full** suite
+after this phase surfaced two pre-existing staleness bugs, unrelated to Phase 2 and
+now fixed: a phase17a test asserting the public-profile player shape before
+phase17b added `photoKey` to it, and the anon-secdef-allowlist guard test still
+pinned to its single phase16b entry after phase17a added a second. Full suite: 362
+passed. Phase 3 (upgrade via the existing manual billing path) is next.
 
 ## What was checked, and what it confirmed
 

@@ -909,9 +909,9 @@ describe('no SECURITY DEFINER function is reachable by anon', () => {
     expect(error).not.toBeNull();
   });
 
-  it('the one deliberate exception is exactly entry_login_background (phase16b), nothing else', async () => {
+  it('the only deliberate exceptions are entry_login_background (phase16b) and public_club_profile (phase17a)', async () => {
     const { data } = await adminClient.rpc('anon_executable_secdef_allowlist');
-    expect(data).toEqual(['entry_login_background']);
+    expect(data).toEqual(['entry_login_background', 'public_club_profile']);
   });
 });
 
@@ -4210,7 +4210,7 @@ describe('public club profile (phase17a)', () => {
     expect(error).toBeNull();
     const profile = await publicProfile();
     const players = profile.teams.flatMap((t: any) => t.players);
-    expect(players).toEqual([{ name: 'Angelica A.', jersey: '1', position: 'GK' }]);
+    expect(players).toEqual([{ name: 'Angelica A.', jersey: '1', position: 'GK', photoKey: null }]);
     expect(JSON.stringify(profile)).not.toContain('Hidden Kid');
   });
 
@@ -4495,5 +4495,84 @@ describe('self-serve organization creation (phase18b)', () => {
     const stranger = await adminClient.from('users').select('id').eq('email', strangerEmail).maybeSingle();
     if (creator.data) await adminClient.auth.admin.deleteUser(creator.data.id);
     if (stranger.data) await adminClient.auth.admin.deleteUser(stranger.data.id);
+  });
+});
+
+describe('product trials and hard caps (phase18c)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const orgSlug = `rls-p2-org-${tag}`;
+  const adminEmail = `rls-p2-admin-${tag}@rls-test.local`;
+  let adminC: ReturnType<typeof createClient>;
+  let orgId: string;
+  let clubId: string;
+  let tournamentId: string;
+
+  it('a fresh org starts a club trial, then a tournament trial sharing the same clock', async () => {
+    await createTestUser(adminEmail, 'audience');
+    adminC = await signInAs(adminEmail);
+
+    const created = await (adminC as any).rpc('create_self_serve_organization', { p_name: 'RLS Phase2 Org', p_slug: orgSlug });
+    expect(created.error).toBeNull();
+    orgId = created.data.orgId;
+
+    const clubTrial = await (adminC as any).rpc('start_product_trial', { p_org_id: orgId, p_products: ['club'] });
+    expect(clubTrial.error).toBeNull();
+    expect(clubTrial.data.started).toEqual(['club']);
+
+    const tourTrial = await (adminC as any).rpc('start_product_trial', { p_org_id: orgId, p_products: ['tournament'] });
+    expect(tourTrial.error).toBeNull();
+    expect(tourTrial.data.trialEndsAt).toBe(clubTrial.data.trialEndsAt);
+
+    const shell = await adminC.from('org_onboarding_shells').select('org_id').eq('org_id', orgId);
+    expect(shell.data ?? []).toHaveLength(0);
+  });
+
+  it('the club cap refuses a second club, and the team cap refuses a second team in the same club', async () => {
+    const club1 = await adminC.from('clubs').insert({ org_id: orgId, name: 'P2 Club One', slug: `p2-club-one-${tag}` }).select().single();
+    expect(club1.error).toBeNull();
+    clubId = club1.data!.id;
+
+    const club2 = await adminC.from('clubs').insert({ org_id: orgId, name: 'P2 Club Two', slug: `p2-club-two-${tag}` });
+    expect(club2.error).not.toBeNull();
+    expect(club2.error?.message).toContain('Trial limit reached');
+
+    const team1 = await adminC.from('teams').insert({ org_id: orgId, club_id: clubId, name: 'P2 Team One', slug: `p2-team-one-${tag}`, squad_type: 'grassroots' });
+    expect(team1.error).toBeNull();
+
+    const team2 = await adminC.from('teams').insert({ org_id: orgId, club_id: clubId, name: 'P2 Team Two', slug: `p2-team-two-${tag}`, squad_type: 'grassroots' });
+    expect(team2.error).not.toBeNull();
+  });
+
+  it('the tournament cap refuses a second tournament, and the entry cap refuses a sixth entry', async () => {
+    const tour1 = await adminC.from('tournaments').insert({ org_id: orgId, name: 'P2 Tour One', slug: `p2-tour-one-${tag}` }).select().single();
+    expect(tour1.error).toBeNull();
+    tournamentId = tour1.data!.id;
+
+    const tour2 = await adminC.from('tournaments').insert({ org_id: orgId, name: 'P2 Tour Two', slug: `p2-tour-two-${tag}` });
+    expect(tour2.error).not.toBeNull();
+
+    for (let i = 1; i <= 5; i++) {
+      const entry = await (adminC as any).from('tournament_entries').insert({ tournament_id: tournamentId, host_org_id: orgId, team_name: `Entrant ${i}`, status: 'pending' });
+      expect(entry.error).toBeNull();
+    }
+    const sixth = await (adminC as any).from('tournament_entries').insert({ tournament_id: tournamentId, host_org_id: orgId, team_name: 'Entrant Six', status: 'pending' });
+    expect(sixth.error).not.toBeNull();
+  });
+
+  it('upgrading the club entitlement to active removes its cap', async () => {
+    await adminClient.from('org_entitlements').update({ status: 'active' }).eq('org_id', orgId).eq('product', 'club');
+    const club2 = await adminC.from('clubs').insert({ org_id: orgId, name: 'P2 Club Two Paid', slug: `p2-club-two-paid-${tag}` });
+    expect(club2.error).toBeNull();
+  });
+
+  it('a non-admin cannot start a trial for someone else\'s org', async () => {
+    const refused = await (coachA1Client as any).rpc('start_product_trial', { p_org_id: orgId, p_products: ['club'] });
+    expect(refused.error).not.toBeNull();
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('organizations').delete().eq('id', orgId);
+    const admin = await adminClient.from('users').select('id').eq('email', adminEmail).maybeSingle();
+    if (admin.data) await adminClient.auth.admin.deleteUser(admin.data.id);
   });
 });

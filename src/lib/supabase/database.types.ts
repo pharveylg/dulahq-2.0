@@ -5052,6 +5052,10 @@ export type Database = {
         Args: { p_name: string; p_slug: string }
         Returns: Json
       }
+      start_product_trial: {
+        Args: { p_org_id: string; p_products: string[] }
+        Returns: Json
+      }
       expire_onboarding_shells_system: {
         Args: Record<PropertyKey, never>
         Returns: number
