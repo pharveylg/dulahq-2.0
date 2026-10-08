@@ -4397,3 +4397,41 @@ describe('player photos (phase17b)', () => {
     }
   });
 });
+
+describe('self-serve onboarding foundation (phase18a)', () => {
+  it('organization contact details are refused to anon entirely, and only an org admin can write them', async () => {
+    const anon = createClient(SUPABASE_URL, ANON_KEY);
+    const anonRead = await anon.from('organization_contact_details').select('org_id').eq('org_id', orgA.id);
+    expect(anonRead.data ?? []).toHaveLength(0);
+
+    const nonAdminWrite = await coachA1Client.from('organization_contact_details').upsert({ org_id: orgA.id, contact_email: 'nope@example.com' });
+    expect(nonAdminWrite.error).not.toBeNull();
+
+    const adminWrite = await orgAdminAClient.from('organization_contact_details').upsert({ org_id: orgA.id, contact_email: 'admin@example.com' });
+    expect(adminWrite.error).toBeNull();
+
+    const adminRead = await orgAdminAClient.from('organization_contact_details').select('contact_email').eq('org_id', orgA.id).single();
+    expect(adminRead.data?.contact_email).toBe('admin@example.com');
+
+    await adminClient.from('organization_contact_details').delete().eq('org_id', orgA.id);
+  });
+
+  it('trial_policy and trial_caps are readable by any signed-in user but not writable by one', async () => {
+    const policy = await coachA1Client.from('trial_policy').select('trial_days').eq('id', true).single();
+    expect(policy.data?.trial_days).toBe(14);
+
+    const caps = await coachA1Client.from('trial_caps').select('product, limit_key, limit_value').order('product').order('limit_key');
+    expect(caps.data).toEqual([
+      { product: 'club', limit_key: 'clubs_per_org', limit_value: 1 },
+      { product: 'club', limit_key: 'teams_per_club', limit_value: 1 },
+      { product: 'tournament', limit_key: 'entries_per_tournament', limit_value: 5 },
+      { product: 'tournament', limit_key: 'tournaments_per_org', limit_value: 1 },
+    ]);
+
+    // RLS filters an update matching no writable row rather than raising (§0i/§0y) --
+    // the real proof is that the row is unchanged afterward, not a returned error.
+    await coachA1Client.from('trial_caps').update({ limit_value: 99 }).eq('product', 'club').eq('limit_key', 'teams_per_club');
+    const unchanged = await adminClient.from('trial_caps').select('limit_value').eq('product', 'club').eq('limit_key', 'teams_per_club').single();
+    expect(unchanged.data?.limit_value).toBe(1);
+  });
+});

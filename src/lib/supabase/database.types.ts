@@ -2187,32 +2187,101 @@ export type Database = {
       }
       organizations: {
         Row: {
+          about: string | null
           accent: string
           created_at: string
           id: string
+          location: string | null
           logo_url: string | null
           name: string
           slug: string
           status: string
         }
         Insert: {
+          about?: string | null
           accent?: string
           created_at?: string
           id?: string
+          location?: string | null
           logo_url?: string | null
           name: string
           slug: string
           status?: string
         }
         Update: {
+          about?: string | null
           accent?: string
           created_at?: string
           id?: string
+          location?: string | null
           logo_url?: string | null
           name?: string
           slug?: string
           status?: string
         }
+        Relationships: []
+      }
+      organization_contact_details: {
+        Row: {
+          org_id: string
+          contact_name: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          website: string | null
+          address_line1: string | null
+          address_line2: string | null
+          city: string | null
+          region: string | null
+          postal_code: string | null
+          country: string | null
+          show_publicly: boolean
+          updated_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          org_id: string
+          contact_name?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          website?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          city?: string | null
+          region?: string | null
+          postal_code?: string | null
+          country?: string | null
+          show_publicly?: boolean
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          org_id?: string
+          contact_name?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          website?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          city?: string | null
+          region?: string | null
+          postal_code?: string | null
+          country?: string | null
+          show_publicly?: boolean
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      trial_policy: {
+        Row: { id: boolean; trial_days: number; updated_at: string }
+        Insert: { id?: boolean; trial_days?: number; updated_at?: string }
+        Update: { id?: boolean; trial_days?: number; updated_at?: string }
+        Relationships: []
+      }
+      trial_caps: {
+        Row: { product: string; limit_key: string; limit_value: number; updated_at: string }
+        Insert: { product: string; limit_key: string; limit_value: number; updated_at?: string }
+        Update: { product?: string; limit_key?: string; limit_value?: number; updated_at?: string }
         Relationships: []
       }
       payments: {

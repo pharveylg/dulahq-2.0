@@ -5,12 +5,27 @@ the live schema and `main` at `6d2af36`. Source document:
 `dula-hq-self-serve-org-onboarding-review.md`, supplied by the user. Nothing in this
 file has been built yet; Phase 0 is next._
 
-**Decision (2026-10-08):** negotiated per-org pricing (Phase 5) is confirmed deferred
-— not needed yet. Every published plan stays zero-priced and Platform Admin keeps
-provisioning paid/negotiated deals by hand until a real pilot needs otherwise. The
-phased sequence below is the agreed plan; the remaining decisions it still needs
-(audience/gating, the 14-day/cap numbers, and the Test Roles sandbox choice) block the
-start of Phase 0 and are tracked at the end of this file.
+**Decisions (2026-10-08):**
+- Negotiated per-org pricing (Phase 5) is confirmed deferred — not needed yet. Every
+  published plan stays zero-priced and Platform Admin keeps provisioning paid/
+  negotiated deals by hand until a real pilot needs otherwise.
+- Self-serve audience: any verified account, no invite/allowlist gate. Add
+  rate-limiting only if abuse actually shows up.
+- Trial length and caps: approved exactly as recommended — 14 days; Club 1 club/1
+  team; Tournament 1 tournament/5 entries.
+- Test Roles: reuse `/demo`'s persona-switcher, scoped to the new org, rather than
+  building a separate mock sandbox.
+
+**Phase 0 is done** (2026-10-08, `phase18a`): `org_members`'s missing migration is
+backfilled; `organizations.about`/`location` added (no new exposure — that table was
+already fully public for `name`/`accent`/`logo_url`); a new
+`organization_contact_details` table holds contact/address with zero `anon` access
+and its own `show_publicly` flag, nothing reads it publicly yet; `trial_policy`
+(singleton, 14 days) and `trial_caps` (the four approved numbers) are seeded and
+platform-admin-writable. Verified live: guard counts unchanged, all 5 existing
+`org_members` rows untouched, `anon` has zero grants on the contact table, a non-admin
+org member is refused writing contact details, an org admin can write and read their
+own. Phase 1 (self-serve creation, trial-only) is next.
 
 ## What was checked, and what it confirmed
 
