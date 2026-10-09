@@ -17,7 +17,7 @@ export default async function OrganizationStatusPage({ params }: { params: Promi
   // empty results rather than another org's shell deadline or entitlements.
   const [{ data: shell }, { data: entitlements }, { count: memberCount }, { data: trialPolicy }, { data: trialCaps }] = await Promise.all([
     supabase.from('org_onboarding_shells').select('expires_at').eq('org_id', org.id).maybeSingle(),
-    supabase.from('org_entitlements').select('product, status, valid_until').eq('org_id', org.id),
+    supabase.from('org_entitlements').select('product, status, valid_until, grace_until').eq('org_id', org.id),
     supabase.from('org_members').select('org_id', { count: 'exact', head: true }).eq('org_id', org.id),
     supabase.from('trial_policy').select('trial_days').eq('id', true).maybeSingle(),
     supabase.from('trial_caps').select('product, limit_key, limit_value'),
@@ -71,9 +71,15 @@ export default async function OrganizationStatusPage({ params }: { params: Promi
               {entitlements!.map((e) => (
                 <div key={e.product} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13.5 }}>
                   <span>
-                    {e.product === 'club' ? 'Club' : 'Tournament'} — {e.status}
+                    {e.product === 'club' ? 'Club' : 'Tournament'} — {e.status === 'suspended' ? 'trial expired' : e.status}
                     {e.status === 'trial' && e.valid_until && (
                       <span style={{ color: 'var(--text-muted)' }}> · ends {new Date(e.valid_until).toLocaleDateString()}</span>
+                    )}
+                    {e.status === 'suspended' && e.grace_until && (
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {' '}· new {e.product === 'club' ? 'clubs/teams' : 'tournaments/entries'} are paused · data stays
+                        available read-only until {new Date(e.grace_until).toLocaleDateString()}
+                      </span>
                     )}
                   </span>
                   {e.status !== 'active' && (

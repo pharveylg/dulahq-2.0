@@ -43,6 +43,7 @@ type Utilization = {
   periodEnd: string;
 };
 type InfraMetric = { metricKey: string; value: number; unit: string; periodStart: string };
+type ExpiredGraceOrg = { orgId: string; orgName: string; orgSlug: string; product: string; graceUntil: string };
 
 // Reference points for "how close to a real cost" -- not billed limits inside this
 // app, just the known, stable, publicly-published free-tier ceilings for the infra
@@ -64,7 +65,7 @@ function Status({ value }: { value: string }) {
   return <span className="chip">{paymentStatusLabel(value)}</span>;
 }
 
-export default function BillingConsole({ invoices, payments, orgs, accounts, usageEvents, subscriptions, utilization, infraMetrics }: { invoices: Invoice[]; payments: Payment[]; orgs: Org[]; accounts: BillingAccount[]; usageEvents: UsageEvent[]; subscriptions: Subscription[]; utilization: Utilization[]; infraMetrics: InfraMetric[] }) {
+export default function BillingConsole({ invoices, payments, orgs, accounts, usageEvents, subscriptions, utilization, infraMetrics, expiredGraceOrgs }: { invoices: Invoice[]; payments: Payment[]; orgs: Org[]; accounts: BillingAccount[]; usageEvents: UsageEvent[]; subscriptions: Subscription[]; utilization: Utilization[]; infraMetrics: InfraMetric[]; expiredGraceOrgs: ExpiredGraceOrg[] }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -111,6 +112,29 @@ export default function BillingConsole({ invoices, payments, orgs, accounts, usa
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      {expiredGraceOrgs.length > 0 && (
+        <div className="card">
+          <div className="page-header" style={{ marginBottom: 10 }}>
+            <div>
+              <h2 style={{ fontSize: 18 }}>Past grace period</h2>
+              <p className="subtitle">
+                A trial expired and its 30-day read-only grace period has passed. Nothing
+                is deleted automatically — delete the organization from the Directory if
+                it's eligible.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {expiredGraceOrgs.map((o) => (
+              <div key={`${o.orgId}-${o.product}`} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>{o.orgName} ({o.orgSlug}) — {o.product}</span>
+                <span style={{ color: 'var(--text-muted)' }}>grace ended {new Date(o.graceUntil).toLocaleDateString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="page-header" style={{ marginBottom: 10 }}>
           <div><h2 style={{ fontSize: 18 }}>Infrastructure costs</h2><p className="subtitle">What running Dula HQ itself costs, platform-wide — not billed to any organization</p></div>

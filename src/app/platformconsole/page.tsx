@@ -117,6 +117,7 @@ export default async function PlatformConsolePage({
   let billingSubscriptions: any[] = [];
   let billingUtilization: any[] = [];
   let billingInfraMetrics: any[] = [];
+  let billingExpiredGraceOrgs: any[] = [];
   let listingRows: ListingRow[] = [];
   let loginRows: any[] = [];
   if (activeTab === 'logins') {
@@ -219,6 +220,14 @@ export default async function PlatformConsolePage({
       seenMetric.add(row.metric_key);
       billingInfraMetrics.push({ metricKey: row.metric_key, value: Number(row.value), unit: row.unit, periodStart: row.period_start });
     }
+
+    // Phase 4 of docs/proposals/self-serve-org-onboarding.md: visibility only --
+    // nothing is deleted automatically, this is how Platform Admin finds out an
+    // org is actually eligible for the manual purge step.
+    const { data: graceRows } = await db.rpc('orgs_past_grace_period');
+    billingExpiredGraceOrgs = (graceRows ?? []).map((row: any) => ({
+      orgId: row.org_id, orgName: row.org_name, orgSlug: row.org_slug, product: row.product, graceUntil: row.grace_until,
+    }));
   }
 
   let activeSession = null;
@@ -266,7 +275,7 @@ export default async function PlatformConsolePage({
         {activeTab === 'directory' && <Directory orgs={orgs} />}
         {activeTab === 'provision' && <ProvisionForm />}
         {activeTab === 'support' && <SupportQueue items={supportItems} />}
-        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} utilization={billingUtilization} infraMetrics={billingInfraMetrics} />}
+        {activeTab === 'billing' && <BillingConsole invoices={billingInvoices} payments={billingPayments} orgs={billingOrgs} accounts={billingAccounts} usageEvents={billingUsageEvents} subscriptions={billingSubscriptions} utilization={billingUtilization} infraMetrics={billingInfraMetrics} expiredGraceOrgs={billingExpiredGraceOrgs} />}
         {activeTab === 'listings' && <Listings rows={listingRows} />}
         {activeTab === 'logins' && <ProvisionLoginPanel scope="platform" scopeId={null} logins={loginRows} allowReissueByEmail />}
         {activeTab === 'troubleshoot' && <Troubleshoot orgs={orgs} activeSession={activeSession} />}

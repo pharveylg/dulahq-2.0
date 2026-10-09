@@ -2116,6 +2116,7 @@ export type Database = {
       org_entitlements: {
         Row: {
           created_at: string
+          grace_until: string | null
           org_id: string
           product: string
           status: string
@@ -2124,6 +2125,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          grace_until?: string | null
           org_id: string
           product: string
           status?: string
@@ -2132,6 +2134,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          grace_until?: string | null
           org_id?: string
           product?: string
           status?: string
@@ -2324,9 +2327,9 @@ export type Database = {
         Relationships: []
       }
       trial_policy: {
-        Row: { id: boolean; trial_days: number; updated_at: string }
-        Insert: { id?: boolean; trial_days?: number; updated_at?: string }
-        Update: { id?: boolean; trial_days?: number; updated_at?: string }
+        Row: { id: boolean; trial_days: number; grace_days: number; updated_at: string }
+        Insert: { id?: boolean; trial_days?: number; grace_days?: number; updated_at?: string }
+        Update: { id?: boolean; trial_days?: number; grace_days?: number; updated_at?: string }
         Relationships: []
       }
       trial_caps: {
@@ -5104,6 +5107,10 @@ export type Database = {
       request_org_product_upgrade: {
         Args: { p_org_id: string; p_product: string }
         Returns: Json
+      }
+      orgs_past_grace_period: {
+        Args: Record<PropertyKey, never>
+        Returns: { org_id: string; org_name: string; org_slug: string; product: string; grace_until: string }[]
       }
       expire_onboarding_shells_system: {
         Args: Record<PropertyKey, never>

@@ -4667,3 +4667,93 @@ describe('upgrade via the existing manual billing path (phase18d)', () => {
     if (pa.data) await adminClient.auth.admin.deleteUser(pa.data.id);
   });
 });
+
+describe('trial expiry and the grace period (phase18e)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const orgSlug = `rls-p4-org-${tag}`;
+  const graceOrgSlug = `rls-p4-grace-org-${tag}`;
+  const adminEmail = `rls-p4-admin-${tag}@rls-test.local`;
+  const platformAdminEmail = `rls-p4-platformadmin-${tag}@rls-test.local`;
+  let adminC: ReturnType<typeof createClient>;
+  let platformAdminC: ReturnType<typeof createClient>;
+  let adminUserId: string;
+  let orgId: string;
+  let graceOrgId: string;
+
+  it('sets up an org admin, starts a club trial, and backdates it to already-expired', async () => {
+    const a = await createTestUser(adminEmail, 'audience');
+    adminUserId = a.publicUser.id;
+    adminC = await signInAs(adminEmail);
+    const pa = await createTestUser(platformAdminEmail, 'platform_admin');
+    must(await adminClient.from('platform_admins').insert({ email: platformAdminEmail }).select().single(), 'platform_admins insert');
+    platformAdminC = await signInAs(platformAdminEmail);
+
+    const created = await (adminC as any).rpc('create_self_serve_organization', { p_name: 'RLS Phase4 Org', p_slug: orgSlug });
+    expect(created.error).toBeNull();
+    orgId = created.data.orgId;
+
+    const trial = await (adminC as any).rpc('start_product_trial', { p_org_id: orgId, p_products: ['club'] });
+    expect(trial.error).toBeNull();
+
+    await adminClient.from('org_entitlements').update({ valid_until: new Date(Date.now() - 3_600_000).toISOString() }).eq('org_id', orgId).eq('product', 'club');
+  });
+
+  it('the cron-only expiry function suspends it, stamps a ~30 day grace deadline, and notifies the admin', async () => {
+    const run = await (adminClient as any).rpc('expire_product_trials_system');
+    expect(run.error).toBeNull();
+    expect(run.data).toBeGreaterThanOrEqual(1);
+
+    const ent = await adminClient.from('org_entitlements').select('status, grace_until').eq('org_id', orgId).eq('product', 'club').single();
+    expect(ent.data?.status).toBe('suspended');
+    const daysOut = (new Date(ent.data!.grace_until).getTime() - Date.now()) / 86_400_000;
+    expect(daysOut).toBeGreaterThan(29);
+    expect(daysOut).toBeLessThanOrEqual(30);
+
+    const notif = await adminClient.from('notifications').select('recipient_user_id, template').eq('org_id', orgId).eq('template', 'org.trial.expired');
+    expect(notif.data).toHaveLength(1);
+    expect(notif.data![0].recipient_user_id).toBe(adminUserId);
+
+    const has = await (adminC as any).rpc('org_has_product', { org: orgId, p_product: 'club' });
+    expect(has.data).toBe(false);
+  });
+
+  it('a regular signed-in user cannot call the cron-only function or list orgs past grace', async () => {
+    const cronCall = await (adminC as any).rpc('expire_product_trials_system');
+    expect(cronCall.error).not.toBeNull();
+
+    const listCall = await (adminC as any).rpc('orgs_past_grace_period');
+    expect(listCall.error).not.toBeNull();
+  });
+
+  it('Pay Now still reactivates a suspended (expired) product', async () => {
+    const upgrade = await (adminC as any).rpc('request_org_product_upgrade', { p_org_id: orgId, p_product: 'club' });
+    expect(upgrade.error).toBeNull();
+    expect(upgrade.data.status).toBe('paid');
+
+    const ent = await adminClient.from('org_entitlements').select('status').eq('org_id', orgId).eq('product', 'club').single();
+    expect(ent.data?.status).toBe('active');
+  });
+
+  it('a platform admin sees an org whose grace period has actually passed, scoped correctly', async () => {
+    const created = await (adminC as any).rpc('create_self_serve_organization', { p_name: 'RLS Phase4 Grace Org', p_slug: graceOrgSlug });
+    expect(created.error).toBeNull();
+    graceOrgId = created.data.orgId;
+    await (adminC as any).rpc('start_product_trial', { p_org_id: graceOrgId, p_products: ['tournament'] });
+    await adminClient.from('org_entitlements').update({ status: 'suspended', grace_until: new Date(Date.now() - 86_400_000).toISOString() }).eq('org_id', graceOrgId).eq('product', 'tournament');
+
+    const list = await (platformAdminC as any).rpc('orgs_past_grace_period');
+    expect(list.error).toBeNull();
+    expect(list.data.some((r: any) => r.org_id === graceOrgId)).toBe(true);
+    expect(list.data.some((r: any) => r.org_id === orgId)).toBe(false);
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('organizations').delete().eq('id', orgId);
+    await adminClient.from('organizations').delete().eq('id', graceOrgId);
+    await adminClient.from('platform_admins').delete().eq('email', platformAdminEmail);
+    const admin = await adminClient.from('users').select('id').eq('email', adminEmail).maybeSingle();
+    const pa = await adminClient.from('users').select('id').eq('email', platformAdminEmail).maybeSingle();
+    if (admin.data) await adminClient.auth.admin.deleteUser(admin.data.id);
+    if (pa.data) await adminClient.auth.admin.deleteUser(pa.data.id);
+  });
+});

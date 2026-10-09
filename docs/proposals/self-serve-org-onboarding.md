@@ -123,8 +123,53 @@ signed in as a persona with no prior org: create → Pay now (Club, shown as "fr
 "Activated." → reload shows "Club — active" with Tournament still offering both
 Start Trial and Pay Now. Test org removed afterward. Full suite: 369/369.
 
-Phase 4 (trial expiry and the read-only/export grace period) and Phase 5 (Platform
-Admin plan/negotiated-rate controls, deferred by agreement) remain.
+**Decisions (2026-10-09):** the proposal's own "post-trial grace" item was never
+actually asked before this phase — flagged and confirmed now, not assumed. 30-day
+read-only grace period, approved as recommended. Deletion after the grace period
+stays a **manual** step — no scheduled job deletes anything on its own.
+
+**Phase 4 is done** (2026-10-09, `phase18e`): reuses the existing `'suspended'`
+status on `org_entitlements` rather than adding a new one — the same value Platform
+Admin's own suspend action already uses, and `org_has_product()` already treats it
+as "not entitled," so an hourly `pg_cron` job (`expire_product_trials_system`,
+service-role-only, matching every other cron-callable `_system` twin in this
+project) needs no changes anywhere else to make an expired trial stop admitting new
+clubs/teams/tournaments/entries — Phase 2's own cap triggers already gate on
+`org_has_product()`. Stated plainly, not glossed over: this does **not** yet block
+every write to an *already-existing* resource (renaming a club, adding a player,
+recording a fee) — doing that is a real RLS sweep across many tables, and building
+it quietly under this phase's name would have overclaimed "read-only." Flagged as
+its own follow-up, matching this project's own standing rule about honest scope.
+
+The job stamps `grace_until` (today + the configured `trial_policy.grace_days`,
+default 30 -- a real column, not a hardcoded interval in the function body) and
+writes one in-app notification per real admin login (an invited-but-never-signed-in
+`org_members` row has no `user_id` yet and is skipped, the same guard
+`notifyAboutPlayer`/`notifyStaff` already use). `request_org_product_upgrade`
+needed no change at all to reactivate a suspended product — its existing "already
+active? refuse; otherwise proceed" logic already treats `'suspended'` the same as
+"not yet started." `orgs_past_grace_period()` is Platform-Admin-only visibility,
+nothing more — per the "manual for now" decision, deleting an eligible org is still
+the existing `platform_delete_organization()`, unchanged; a new card on the
+Platform Console's Billing tab lists what's eligible.
+
+Verified live: a rolled-back transaction covering the full cycle (trial → backdated
+→ expired → suspended + ~30-day grace + exactly one notification to the real admin
+→ `org_has_product()` false → Pay Now reactivates it back to active), plus a
+second org proving `orgs_past_grace_period()` returns only what's actually past its
+own deadline, not every suspended entitlement. Six more tests through the real
+Supabase JS client, including confirming an ordinary signed-in user is refused both
+the cron-only expiry function and the grace-period listing. Also surfaced, by
+checking rather than assuming: the showcase persona used for live SQL checks
+earlier in this session had already been recycled by the 30-minute demo-reset
+workflow (new `auth.users` row, same email) — confirms that workflow is actually
+running in production now, not still blocked on missing secrets as §10 once
+recorded. Driven live in the browser as the real platform admin persona: the
+Billing tab renders cleanly with the new section correctly hidden (nothing is
+actually past grace in live data yet). Full suite: 375/375.
+
+Phase 5 (Platform Admin plan/negotiated-rate controls) remains, deferred by
+agreement — the proposal's four build phases are otherwise complete.
 
 ## What was checked, and what it confirmed
 
