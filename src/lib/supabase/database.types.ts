@@ -2062,6 +2062,51 @@ export type Database = {
           },
         ]
       }
+      billing_plans: {
+        Row: {
+          id: string
+          plan_key: string
+          version: number
+          name: string
+          product: string
+          currency: string
+          base_amount: number
+          billing_interval: string
+          status: string
+          effective_from: string
+          effective_until: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          plan_key: string
+          version?: number
+          name: string
+          product: string
+          currency?: string
+          base_amount?: number
+          billing_interval?: string
+          status?: string
+          effective_from?: string
+          effective_until?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          plan_key?: string
+          version?: number
+          name?: string
+          product?: string
+          currency?: string
+          base_amount?: number
+          billing_interval?: string
+          status?: string
+          effective_from?: string
+          effective_until?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       org_onboarding_shells: {
         Row: { org_id: string; expires_at: string; created_at: string }
         Insert: { org_id: string; expires_at: string; created_at?: string }
@@ -5054,6 +5099,10 @@ export type Database = {
       }
       start_product_trial: {
         Args: { p_org_id: string; p_products: string[] }
+        Returns: Json
+      }
+      request_org_product_upgrade: {
+        Args: { p_org_id: string; p_product: string }
         Returns: Json
       }
       expire_onboarding_shells_system: {

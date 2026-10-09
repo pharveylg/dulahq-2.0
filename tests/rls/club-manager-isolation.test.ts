@@ -4576,3 +4576,94 @@ describe('product trials and hard caps (phase18c)', () => {
     if (admin.data) await adminClient.auth.admin.deleteUser(admin.data.id);
   });
 });
+
+describe('upgrade via the existing manual billing path (phase18d)', () => {
+  const tag = crypto.randomUUID().slice(0, 8);
+  const orgSlug = `rls-p3-org-${tag}`;
+  const adminEmail = `rls-p3-admin-${tag}@rls-test.local`;
+  const platformAdminEmail = `rls-p3-platformadmin-${tag}@rls-test.local`;
+  let adminC: ReturnType<typeof createClient>;
+  let platformAdminC: ReturnType<typeof createClient>;
+  let orgId: string;
+  let tourInvoiceId: string;
+
+  it('sets up an org admin and a throwaway platform admin', async () => {
+    await createTestUser(adminEmail, 'audience');
+    adminC = await signInAs(adminEmail);
+    const pa = await createTestUser(platformAdminEmail, 'platform_admin');
+    must(await adminClient.from('platform_admins').insert({ email: platformAdminEmail }).select().single(), 'platform_admins insert');
+    platformAdminC = await signInAs(platformAdminEmail);
+
+    const created = await (adminC as any).rpc('create_self_serve_organization', { p_name: 'RLS Phase3 Org', p_slug: orgSlug });
+    expect(created.error).toBeNull();
+    orgId = created.data.orgId;
+  });
+
+  it('a $0 plan activates immediately, through the real client', async () => {
+    const upgrade = await (adminC as any).rpc('request_org_product_upgrade', { p_org_id: orgId, p_product: 'club' });
+    expect(upgrade.error).toBeNull();
+    expect(upgrade.data.status).toBe('paid');
+
+    const ent = await adminC.from('org_entitlements').select('status').eq('org_id', orgId).eq('product', 'club').single();
+    expect(ent.data?.status).toBe('active');
+
+    const sub = await adminClient.from('billing_subscriptions').select('status').eq('org_id', orgId).eq('product', 'club').maybeSingle();
+    expect(sub.data?.status).toBe('active');
+  });
+
+  it('an already-active product cannot be "upgraded" again', async () => {
+    const again = await (adminC as any).rpc('request_org_product_upgrade', { p_org_id: orgId, p_product: 'club' });
+    expect(again.error).not.toBeNull();
+  });
+
+  it('a priced plan sits awaiting payment, and a second request returns the SAME invoice', async () => {
+    await adminClient.from('billing_plans').update({ base_amount: 250 }).eq('plan_key', 'tournament-basic').eq('version', 1);
+
+    const first = await (adminC as any).rpc('request_org_product_upgrade', { p_org_id: orgId, p_product: 'tournament' });
+    expect(first.error).toBeNull();
+    expect(first.data.status).toBe('awaiting_payment');
+    tourInvoiceId = first.data.invoiceId;
+
+    const entBefore = await adminClient.from('org_entitlements').select('status').eq('org_id', orgId).eq('product', 'tournament').maybeSingle();
+    expect(entBefore.data).toBeNull();
+
+    const second = await (adminC as any).rpc('request_org_product_upgrade', { p_org_id: orgId, p_product: 'tournament' });
+    expect(second.error).toBeNull();
+    expect(second.data.invoiceId).toBe(tourInvoiceId);
+  });
+
+  it('a stranger cannot request an upgrade for someone else\'s org', async () => {
+    const refused = await (coachA1Client as any).rpc('request_org_product_upgrade', { p_org_id: orgId, p_product: 'tournament' });
+    expect(refused.error).not.toBeNull();
+  });
+
+  it('the org admin alone cannot verify their own payment, but the platform admin can -- and that activates the entitlement', async () => {
+    const selfVerify = await (adminC as any).rpc('record_billing_payment', {
+      p_invoice_id: tourInvoiceId, p_amount: 250, p_method: 'bank_transfer', p_reference_number: 'REF-1', p_note: null,
+    });
+    expect(selfVerify.error).not.toBeNull();
+
+    const verified = await (platformAdminC as any).rpc('record_billing_payment', {
+      p_invoice_id: tourInvoiceId, p_amount: 250, p_method: 'bank_transfer', p_reference_number: 'REF-1', p_note: 'rls test',
+    });
+    expect(verified.error).toBeNull();
+
+    const ent = await adminC.from('org_entitlements').select('status').eq('org_id', orgId).eq('product', 'tournament').single();
+    expect(ent.data?.status).toBe('active');
+
+    const sub = await adminClient.from('billing_subscriptions').select('status').eq('org_id', orgId).eq('product', 'tournament').maybeSingle();
+    expect(sub.data?.status).toBe('active');
+  });
+
+  it('cleans up', async () => {
+    await adminClient.from('billing_plans').update({ base_amount: 0 }).eq('plan_key', 'tournament-basic').eq('version', 1);
+    await adminClient.from('billing_payment_allocations').delete().eq('invoice_id', tourInvoiceId);
+    await adminClient.from('billing_payment_submissions').delete().eq('invoice_id', tourInvoiceId);
+    await adminClient.from('organizations').delete().eq('id', orgId);
+    await adminClient.from('platform_admins').delete().eq('email', platformAdminEmail);
+    const admin = await adminClient.from('users').select('id').eq('email', adminEmail).maybeSingle();
+    const pa = await adminClient.from('users').select('id').eq('email', platformAdminEmail).maybeSingle();
+    if (admin.data) await adminClient.auth.admin.deleteUser(admin.data.id);
+    if (pa.data) await adminClient.auth.admin.deleteUser(pa.data.id);
+  });
+});

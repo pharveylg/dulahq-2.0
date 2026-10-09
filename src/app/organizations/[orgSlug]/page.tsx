@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import StartTrialForm from './StartTrialForm';
+import PayNowButton from './PayNowButton';
 
 export default async function OrganizationStatusPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
@@ -21,6 +22,12 @@ export default async function OrganizationStatusPage({ params }: { params: Promi
     supabase.from('trial_policy').select('trial_days').eq('id', true).maybeSingle(),
     supabase.from('trial_caps').select('product, limit_key, limit_value'),
   ]);
+  const { data: plans } = await supabase.from('billing_plans').select('product, currency, base_amount').eq('version', 1).in('plan_key', ['club-basic', 'tournament-basic']);
+  const priceLabel = (product: string) => {
+    const plan = plans?.find((p) => p.product === product);
+    if (!plan) return '';
+    return plan.base_amount === 0 ? 'free' : `${plan.currency} ${plan.base_amount}/mo`;
+  };
 
   if ((memberCount ?? 0) === 0) {
     return (
@@ -37,6 +44,7 @@ export default async function OrganizationStatusPage({ params }: { params: Promi
 
   const hasProduct = (entitlements?.length ?? 0) > 0;
   const capValue = (product: string, key: string) => trialCaps?.find((c) => c.product === product && c.limit_key === key)?.limit_value ?? 0;
+  const missingProducts = (['club', 'tournament'] as const).filter((p) => !entitlements?.some((e) => e.product === p));
 
   return (
     <main className="page">
@@ -59,28 +67,44 @@ export default async function OrganizationStatusPage({ params }: { params: Promi
         {hasProduct && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="section-label">Products</div>
-            {entitlements!.map((e) => (
-              <div key={e.product} style={{ fontSize: 13.5 }}>
-                {e.product === 'club' ? 'Club' : 'Tournament'} — {e.status}
-                {e.status === 'trial' && e.valid_until && (
-                  <span style={{ color: 'var(--text-muted)' }}> · ends {new Date(e.valid_until).toLocaleDateString()}</span>
-                )}
-              </div>
-            ))}
+            <div style={{ display: 'grid', gap: 10 }}>
+              {entitlements!.map((e) => (
+                <div key={e.product} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13.5 }}>
+                  <span>
+                    {e.product === 'club' ? 'Club' : 'Tournament'} — {e.status}
+                    {e.status === 'trial' && e.valid_until && (
+                      <span style={{ color: 'var(--text-muted)' }}> · ends {new Date(e.valid_until).toLocaleDateString()}</span>
+                    )}
+                  </span>
+                  {e.status !== 'active' && (
+                    <PayNowButton orgId={org.id} product={e.product as 'club' | 'tournament'} price={priceLabel(e.product)} />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {!hasProduct && (
+        {missingProducts.length > 0 && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="section-label">Start a free trial</div>
             <StartTrialForm
               orgId={org.id}
               trialDays={trialPolicy?.trial_days ?? 14}
+              products={missingProducts}
               caps={{
                 club: { clubs: capValue('club', 'clubs_per_org'), teams: capValue('club', 'teams_per_club') },
                 tournament: { tournaments: capValue('tournament', 'tournaments_per_org'), entries: capValue('tournament', 'entries_per_tournament') },
               }}
             />
+            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+              {missingProducts.map((p) => (
+                <div key={p} style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  Or skip the trial for {p === 'club' ? 'Club' : 'Tournament'}:{' '}
+                  <PayNowButton orgId={org.id} product={p} price={priceLabel(p)} />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

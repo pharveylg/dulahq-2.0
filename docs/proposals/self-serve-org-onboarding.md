@@ -84,7 +84,47 @@ after this phase surfaced two pre-existing staleness bugs, unrelated to Phase 2 
 now fixed: a phase17a test asserting the public-profile player shape before
 phase17b added `photoKey` to it, and the anon-secdef-allowlist guard test still
 pinned to its single phase16b entry after phase17a added a second. Full suite: 362
-passed. Phase 3 (upgrade via the existing manual billing path) is next.
+passed.
+
+**Phase 3 is done** (2026-10-09, `phase18d`): no new payment infrastructure, exactly
+as planned -- `request_org_product_upgrade(org, product)` is the one piece that was
+actually missing. Checked before building: `ensure_platform_billing_account` and
+`create_billing_invoice('platform', ...)` are both `is_platform_admin()`-only, so an
+org admin had no path at all to request their own invoice; `can_review_billing_invoice`
+has no org-admin branch for `'platform'` context either, confirmed live, so Platform
+Admin verifying payment (via the *unchanged* `review_billing_payment`/
+`record_billing_payment`) was already correctly the only way to approve one. The new
+function ensures the org's platform `billing_account` exists, resolves the real
+published plan (today's `club-basic`/`tournament-basic`, both genuinely $0 -- not a
+placeholder standing in for a real price), and creates one invoice: if the price is
+$0 it's `paid` immediately, otherwise `awaiting_payment`. A second `AFTER INSERT OR
+UPDATE` trigger on `billing_invoices` reacts whenever an `org_product_upgrade`
+invoice reaches `paid` -- however that happens, immediately or through Platform
+Admin's existing review -- and flips the matching `org_entitlements` row to `active`,
+updates or inserts the matching `billing_subscriptions` row, and clears any leftover
+onboarding shell. Calling it again for an already-open invoice returns that same
+invoice rather than issuing a duplicate; calling it for an already-active product is
+refused.
+
+`/organizations/[orgSlug]` now offers "Pay now" next to "Start a free trial" for
+every product that isn't active yet, independently -- a mixed org (one product
+active, the other untouched) correctly keeps offering both options for the second
+product, verified live through the real UI.
+
+Verified live: a rolled-back transaction covering the $0-immediate-activation path,
+the priced-and-awaiting-payment path (temporarily pricing `tournament-basic`,
+confirmed the entitlement does NOT exist until paid), the duplicate-invoice
+idempotency, the already-active refusal, and a stranger's refusal. Seven more tests
+through the real Supabase JS client, including driving the **actual**
+`record_billing_payment` function as a throwaway platform admin (not a raw SQL
+update) to prove the trigger reacts correctly to the real verification path, and
+confirming an org admin cannot verify their own payment. A full end-to-end UI pass
+signed in as a persona with no prior org: create → Pay now (Club, shown as "free") →
+"Activated." → reload shows "Club — active" with Tournament still offering both
+Start Trial and Pay Now. Test org removed afterward. Full suite: 369/369.
+
+Phase 4 (trial expiry and the read-only/export grace period) and Phase 5 (Platform
+Admin plan/negotiated-rate controls, deferred by agreement) remain.
 
 ## What was checked, and what it confirmed
 
