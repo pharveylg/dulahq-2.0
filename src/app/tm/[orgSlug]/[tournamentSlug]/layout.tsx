@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import OrgAccentTheme from '@/components/OrgAccentTheme';
+import TrialStatusBanner from '@/components/TrialStatusBanner';
 
 /**
  * Retints the organizer console with its own host org's accent, same reasoning and
@@ -19,6 +20,11 @@ export default async function TournamentConsoleLayout({
 }) {
   const { orgSlug } = await params;
   const supabase = await createClient();
-  const { data: org } = await supabase.from('organizations').select('accent').eq('slug', orgSlug).maybeSingle();
-  return <OrgAccentTheme accent={org?.accent ?? null}>{children}</OrgAccentTheme>;
+  const { data: org } = await supabase.from('organizations').select('id, accent').eq('slug', orgSlug).maybeSingle();
+  return (
+    <>
+      {org && <TrialStatusBanner orgId={org.id} orgSlug={orgSlug} product="tournament" />}
+      <OrgAccentTheme accent={org?.accent ?? null}>{children}</OrgAccentTheme>
+    </>
+  );
 }

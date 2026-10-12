@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import OrgAccentTheme from '@/components/OrgAccentTheme';
+import TrialStatusBanner from '@/components/TrialStatusBanner';
 
 /**
  * Retints this club's whole page tree with its own org's accent (§0v proposal follow-up:
@@ -25,10 +26,15 @@ export default async function ClubLayout({
   const supabase = await createClient();
   const { data: club } = await supabase
     .from('clubs')
-    .select('organizations(accent)')
+    .select('organizations(id, slug, accent)')
     .eq('slug', clubSlug)
     .maybeSingle();
 
-  const accent = (club?.organizations as unknown as { accent: string | null } | null)?.accent ?? null;
-  return <OrgAccentTheme accent={accent}>{children}</OrgAccentTheme>;
+  const org = club?.organizations as unknown as { id: string; slug: string; accent: string | null } | null;
+  return (
+    <>
+      {org && <TrialStatusBanner orgId={org.id} orgSlug={org.slug} product="club" />}
+      <OrgAccentTheme accent={org?.accent ?? null}>{children}</OrgAccentTheme>
+    </>
+  );
 }
