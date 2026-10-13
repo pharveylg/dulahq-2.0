@@ -1939,9 +1939,11 @@ for all app code, `npm run build` clean, unit tests 20/20.
   targeted policy changes rather than just pages. `tournament_categories` also
   has no fee or capacity column, contrary to what the gap analysis assumed.
 - **Entitlement lifecycle (P1-6) — trial/grace deferred; the latent bug fixed.**
-  The Directory's "delete the row to turn a product off" is a recorded,
-  deliberate choice, and there's no pricing or real usage to design trial/grace
-  against yet. But re-saving the products form used to upsert **every** product
+  **Superseded — trial/grace shipped 2026-10-08/09, see §0zi.** At the time
+  this was written: the Directory's "delete the row to turn a product off" is
+  a recorded, deliberate choice, and there's no pricing or real usage to design
+  trial/grace against yet. But re-saving the products form used to upsert
+  **every** product
   back to `active`, which would have silently undone a `trial` the moment one
   existed. `updateOrgEntitlements` now writes only rows that need it: an
   existing `active`/`trial` row is left alone, and a ticked product whose row is
@@ -4573,3 +4575,100 @@ claim that it works untested. All test mutations (`contact_info`,
 afterward. `npx tsc --noEmit`, `npm run build`, and `npm run test:unit`
 (86/86, unchanged — this is pure UI, no new pure-function logic to test)
 all stayed clean.
+
+---
+
+## 0zi. Self-serve organization onboarding (2026-10-08/09)
+
+Every organization until now was created by Platform Admin
+(`provisionTenant`). `docs/proposals/self-serve-org-onboarding.md` (a
+feasibility check against a source document supplied by the user, not in
+this repo) is the full phase-by-phase build log for a non-admin path — this
+section consolidates it into the project history; read that file for the
+complete verification detail each phase describes, not reproduced here.
+
+**Decisions confirmed before building (2026-10-08):** any verified account
+can self-serve, no invite/allowlist gate — add rate-limiting only if abuse
+shows up. Trial: 14 days; Club 1 club/1 team; Tournament 1 tournament/5
+entries. Negotiated per-org pricing (its own Phase 5) stays deferred —
+every published plan is zero-priced and Platform Admin still provisions
+real deals by hand. Test Roles reuses `/demo`'s existing persona-switcher,
+scoped to the new org, rather than a parallel mock sandbox.
+
+**Phase 0** (`phase18a`) is schema groundwork, no UI: backfills `org_members`'s
+missing `CREATE TABLE` migration (same undocumented-but-live gap as
+phase2h/2i, §0a), adds `organizations.about`/`location` (no new exposure —
+`name`/`accent`/`logo_url` were already public) and a separate
+`organization_contact_details` table (zero `anon` access, its own
+`show_publicly` flag, nothing reads it publicly yet), and seeds
+`trial_policy`/`trial_caps`.
+
+**Phase 1** (`phase18b`): `create_self_serve_organization(name, slug)` is one
+atomic SECURITY DEFINER function — creates the org, inserts the caller as
+its first `org_members` admin, and starts a 24-hour `org_onboarding_shells`
+deadline, all in one transaction. Needed its own bootstrap path because
+`is_org_admin()`'s only bootstrap branch is for a platform admin — an
+ordinary self-serve creator has no such status. `expire_onboarding_shells_system()`
+runs hourly via `pg_cron`, deleting only a shell past its 24 hours **and**
+still holding zero `org_entitlements` — a shell that became a real trial is
+never touched. New UI: `/organizations/new` (name + web address) and
+`/organizations/[orgSlug]` (shell deadline, entitlements if any, a link to
+`/demo` for Test Roles), linked from the homepage next to `/demo`.
+
+**Phase 2** (`phase18c`): `start_product_trial(org, products[])` grants
+`org_entitlements(status='trial')` + a matching `billing_subscriptions` row,
+sharing one trial clock across every product an org ever starts rather than
+resetting or stacking per product. Since zero `org_entitlements` rows had
+ever had `valid_until` set, this was the safe moment to fix a real
+date/timezone mismatch Phase 0 had flagged: `valid_until` moved from `date`
+to `timestamptz`, and `org_has_product()` now compares against `now()`
+instead of `current_date`. Hard caps are four `BEFORE INSERT` triggers
+(`clubs`, `teams`, `tournaments`, `tournament_entries`), each locking the
+parent row (`for update`) first — the standard answer to a concurrent
+double-insert bypassing a count-then-insert check — no-op once the
+entitlement is `active` rather than `trial`.
+
+**Phase 3** (`phase18d`): no new payment infrastructure, as planned.
+`request_org_product_upgrade(org, product)` was the one missing piece —
+`ensure_platform_billing_account`/`create_billing_invoice('platform', ...)`
+were both platform-admin-only, so an org admin had no path to request their
+own invoice. The new function resolves the real published plan (today's
+`club-basic`/`tournament-basic`, both genuinely $0), creates one invoice —
+paid immediately if the price is $0, `awaiting_payment` otherwise — and a
+trigger on `billing_invoices` flips the matching `org_entitlements` row to
+`active` whenever that invoice reaches `paid`, however that happens (Platform
+Admin's existing `review_billing_payment`/`record_billing_payment`, unchanged).
+`/organizations/[orgSlug]` offers "Pay now" next to "Start a free trial" for
+every product not yet active, independently per product.
+
+**Phase 4** (`phase18e`): reuses the existing `'suspended'` status on
+`org_entitlements` — the same value Platform Admin's own suspend action
+already uses, and `org_has_product()` already treats as not-entitled — so an
+hourly `expire_product_trials_system()` cron job needed no other changes to
+make an expired trial stop admitting new clubs/teams/tournaments/entries
+(Phase 2's cap triggers already gate on `org_has_product()`). Stated
+plainly: this does **not** yet block writes to an *already-existing*
+resource (renaming a club, adding a player) — that's a real RLS sweep
+across many tables, flagged as its own follow-up rather than silently
+folded in here. Stamps `grace_until` (today + `trial_policy.grace_days`,
+default 30) and notifies every real admin login once. `orgs_past_grace_period()`
+is Platform-Admin-only visibility; deleting an eligible org stays the
+existing, unchanged, manual `platform_delete_organization()` — a card on
+the Platform Console's Billing tab lists what's eligible.
+
+Phase 5 (Platform Admin plan/negotiated-rate controls) remains, deferred by
+agreement — the other four phases are otherwise complete.
+
+**Verified** (per the proposal doc's own record, each phase in a rolled-back
+transaction plus a real end-to-end UI pass as a persona with no prior org):
+creation/bootstrap/shell-deadline for a user with zero org relationships;
+anon refused; duplicate slugs refused; the shared trial clock across two
+products; all four caps refusing their first over-limit insert; the $0-immediate
+and priced-and-awaiting-payment upgrade paths; duplicate-invoice idempotency;
+the full trial → expire → suspend → grace → reactivate cycle; and that an
+org admin cannot verify their own payment. Full suite grew to 375/375 by
+Phase 4. One follow-up fix landed the same way every other phase in this
+project has used self-verification: running the **full** suite after Phase 2
+surfaced two pre-existing, unrelated staleness bugs (a stale player-shape
+assertion, a stale anon-secdef-allowlist count) and both were fixed in the
+same pass.
