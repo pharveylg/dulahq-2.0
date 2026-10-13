@@ -1,12 +1,17 @@
 # Legacy Candidates — Dulà HQ (dula-hq-2.0)
 
-_Companion to [CURRENT_ARCHITECTURE.md](CURRENT_ARCHITECTURE.md). Built from
-three parallel read-only research passes on 2026-09-28/29 (screens/routes,
-server-actions/RPC surface, docs/migration history), each independently
-re-verifying CLAUDE.md's own claims against current code rather than trusting
-them. Per the audit's own rule: no dependency evidence found is not the same
-as proof something is safe to delete — every item states its confidence and
-what would still need checking before acting on it.
+_Companion to [ARCHITECTURE_SNAPSHOT.md](ARCHITECTURE_SNAPSHOT.md) (renamed
+from CURRENT_ARCHITECTURE.md during a 2026-10-12 docs cleanup — same file,
+same date, same caveat: this is a closed, point-in-time audit, not a living
+list. Anything flagged here as a candidate since 2026-09-29 wouldn't be
+caught by it; check CLAUDE.md for newer work before assuming this is
+exhaustive). Built from three parallel read-only research passes on
+2026-09-28/29 (screens/routes, server-actions/RPC surface, docs/migration
+history), each independently re-verifying CLAUDE.md's own claims against
+current code rather than trusting them. Per the audit's own rule: no
+dependency evidence found is not the same as proof something is safe to
+delete — every item states its confidence and what would still need
+checking before acting on it.
 
 **Update, 2026-09-29: all 9 cleanup steps are done.** Step 7 was initially
 left alone on purpose (no way to confirm with "the billing owner" of the

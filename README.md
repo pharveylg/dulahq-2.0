@@ -19,10 +19,11 @@ assumed. Nothing else in this repo is kept as current. Start there, not here.
 
 Other living references:
 
-- **[`docs/CURRENT_ARCHITECTURE.md`](docs/CURRENT_ARCHITECTURE.md)** — a
-  snapshot overview of the schema, RBAC model and app structure. Faster to
-  read than `CLAUDE.md` for orientation, but `CLAUDE.md` is authoritative
-  where the two ever disagree.
+- **[`docs/ARCHITECTURE_SNAPSHOT.md`](docs/ARCHITECTURE_SNAPSHOT.md)** — a
+  dated (2026-09-28/29) overview of the schema, RBAC model and app
+  structure. Faster to read than `CLAUDE.md` for orientation, but it stopped
+  being updated after that date and says so at the top — `CLAUDE.md` is the
+  only document here that stays current.
 - **[`docs/guides/`](docs/guides/)** — one how-to guide per role (platform
   admin, org admin, club manager, coach, guardian, tournament organizer,
   etc.), written from the live code and database. Each names what it can't

@@ -1,10 +1,29 @@
-# Current Architecture — Dulà HQ (dula-hq-2.0)
+# Architecture snapshot — Dulà HQ (dula-hq-2.0), as of 2026-09-28/29
 
-_Reverse-engineered from the live repository on 2026-09-28/29 by three parallel
-read-only research passes (screens/routes, server actions/RPCs, docs/migration
-history). This is a snapshot, not a design doc — re-verify anything load-bearing
-before acting on it, the same rule CLAUDE.md applies to itself. Companion file:
-[LEGACY_CANDIDATES.md](LEGACY_CANDIDATES.md)._
+**This is a dated snapshot, not a current reference — treat it as "what was
+true on 2026-09-28/29," not "what's true now."** It is reverse-engineered
+from the live repository on that date by three parallel read-only research
+passes (screens/routes, server actions/RPCs, docs/migration history), and
+nothing has kept it in sync since. `CLAUDE.md` is the one document in this
+repo that stays current — read that first, and use this file only for a
+faster-to-skim orientation of what the system looked like at that point.
+Companion file: [LEGACY_CANDIDATES.md](LEGACY_CANDIDATES.md) (same date,
+same caveat).
+
+**Known gaps as of 2026-10-12** (confirmed missing from the screens table
+and sections below, not a full re-audit): the self-serve organization
+onboarding flow (`/organizations/new`, `/organizations/[orgSlug]`, product
+trials with hard caps, trial expiry and a 30-day grace period, console
+trial/grace banners — `docs/proposals/self-serve-org-onboarding.md`); the
+`/official` self-service page and its officiating RPCs (CLAUDE.md
+§0ze–§0zf); `/forgot-password`, `/reset-password` and `/auth/confirm` plus
+email delivery via Resend (CLAUDE.md §0zh — supersedes §8's old "no email
+provider is wired at all" note below); the notification-write authorization
+hardening behind a service-role boundary (CLAUDE.md §0zg); and the
+entrant-portal/login poster-watermark theming (CLAUDE.md §0x). Re-verify
+against `CLAUDE.md` before trusting anything else here too — this list is
+only what was noticed while housekeeping docs, not a guarantee nothing else
+changed.
 
 Scope: `dula-hq-2.0` only (the actively-developed Next.js app). The sibling
 `DulaHQ` repo (frozen single-file Vite tournament engine, proxied at `/t/...`
