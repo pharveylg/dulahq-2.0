@@ -1,8 +1,13 @@
 # Tournament billing integration contract
 
-Status: ready for Tournament Manager integration; payment provider deferred.
+Status: the contract below is live, and this repo's own native organizer
+console (`/tm/...`) is the consumer — not the frozen Tournament Manager
+engine (the separate `dula-hq` repo), which has no billing UI and isn't
+expected to grow one. Payment provider still deferred (manual QR only).
 
-The active Tournament Manager runtime remains in the separate `dula-hq` repository. This document defines the shared Supabase billing contract that the Tournament Manager can consume without importing Club Manager internals.
+This document defines the shared Supabase billing contract so any future
+Tournament-facing surface — this repo's console, or in principle the frozen
+engine — can consume it without importing Club Manager internals.
 
 ## Billing context
 
@@ -140,38 +145,35 @@ Invoice issued
 
 Do not make payment verification automatically change an entry to accepted until the Tournament product explicitly adopts that policy.
 
-## Tournament-facing screens to add
+## Tournament-facing screens
 
-The Tournament Manager should eventually add:
+Built in this repo's own organizer console and entrant portal (not the
+Tournament Manager engine — see CLAUDE.md §0q and §15a):
 
-1. Tournament finance settings
-   - payment instructions;
-   - QR configuration;
-   - currency;
-   - finance staff permissions.
-
-2. Entry billing view
-   - invoice number;
-   - charges;
-   - due date;
-   - payment status;
-   - payment instructions;
-   - proof/reference submission.
-
-3. Organizer finance queue
-   - submitted payments;
-   - verification/rejection;
-   - reviewer notes;
-   - payment history;
-   - outstanding entries.
-
-4. Tournament finance reports
-   - invoiced;
-   - submitted;
-   - verified;
-   - outstanding;
-   - refunded/credited;
-   - totals by category and entrant.
+1. **Tournament finance settings** — payment instructions and QR
+   configuration are editable by the organizer/treasurer or an org admin
+   (`update_billing_account_instructions`). **Not built:** a currency
+   selector (every invoice reads `currency` off the row, defaulting to
+   `PHP` — there's no screen to set it per tournament) or a dedicated
+   finance-staff-permissions screen (staff instead get the existing
+   `manage_tournament_finances`/`view_tournament_finances` permission keys
+   through the Staff tab, which doesn't need its own screen).
+2. **Entry billing view** — built as the entrant portal (`/entry/<id>`):
+   invoice number, charges, due date, payment status, payment instructions,
+   and proof/reference submission are all there.
+3. **Organizer finance queue** — built (the console's Finance tab):
+   submitted payments waiting for verification, verify/reject with a
+   reviewer note, and summary tiles (billed/collected/outstanding/to
+   verify). **Not built:** a dedicated payment-history view or an
+   outstanding-entries list beyond what the tiles and invoice list already
+   show.
+4. **Tournament finance reports** — **not built.** The Finance tab's tiles
+   are a live summary, not a report; there's no breakdown by category or
+   entrant, and no refund/credit workflow at all — `issue_tournament_credit`
+   and `approve_tournament_refund` were two of the six permission keys this
+   document originally proposed and explicitly decided not to add (see
+   "Authorization boundary" below), so there's no permission to gate a
+   refund screen on yet either.
 
 ## Authorization boundary
 

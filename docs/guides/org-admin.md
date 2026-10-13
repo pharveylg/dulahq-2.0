@@ -22,11 +22,34 @@ administrator. That's all it takes; there's nothing to accept.
 
 **You can't:**
 
-- Switch products (Club, Tournament) on or off, rename the organization, or
-  suspend the organization. That's the platform team.
+- Rename the organization or suspend it. That's the platform team.
 - See anything belonging to another organization. Nothing crosses that wall.
 - Run a club's day-to-day from the club page **unless you're also on its staff**.
   This is the part that surprises people, so it has its own section below.
+
+## If you created this organization yourself
+
+Anyone signed in can start a new organization at `/organizations/new` — just
+a name and a web address. You become its admin automatically. From there,
+on `/organizations/[your-org]`:
+
+- **You have 24 hours to pick a product** (Club, Tournament, or both) before
+  the empty organization is cleared out. Starting a trial or paying cancels
+  that countdown.
+- **Start a free trial** — 14 days, with real limits while you're on it (one
+  club and one team; one tournament and five entries). The page shows the
+  real trial length and caps, and the exact date it ends once you've started
+  one.
+- **Pay now** — for a product that's free today, this activates it
+  immediately with no trial limits. For a priced one, it creates an invoice
+  and waits for the platform team to confirm payment.
+- **If a trial runs out unclaimed**, the product is suspended (not
+  deleted) for a 30-day read-only grace period — you'll see a notice and
+  can still use **Pay now** to reactivate it. After that, it's the platform
+  team's call whether to delete the organization.
+
+This is the one way you can switch a product on yourself — the platform
+team still handles turning one off, or any pricing beyond what's published.
 
 ## Your home page
 
