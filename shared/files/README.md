@@ -1,7 +1,7 @@
 # Files (Platform Service)
 
 Backed by **Cloudflare R2** (S3-compatible object storage), not Supabase
-Storage — see `docs/architecture-overview.md`'s hosting/storage decision.
+Storage.
 
 ## Why R2 instead of Supabase Storage
 

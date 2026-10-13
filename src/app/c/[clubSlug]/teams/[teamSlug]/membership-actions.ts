@@ -12,8 +12,7 @@ function friendlyError(error: { code?: string; message: string }) {
 }
 
 // memberships.status has no DB check constraint, but this is the intended
-// set per docs/club-manager-design.md -- enforced here in app code since
-// the database won't.
+// set -- enforced here in app code since the database won't.
 const VALID_STATUSES = ['pending', 'active', 'expired', 'transferred'];
 
 export async function addMembershipPeriod(clubId: string, teamId: string, playerId: string, formData: FormData) {

@@ -1,8 +1,7 @@
 /**
  * Club Manager RLS isolation tests -- rewritten against the REAL shared
  * Dula HQ schema (project zytyakbgwaegvftblkcn), not the earlier
- * tenant-based design. See docs/club-manager-design.md for the full
- * rationale.
+ * tenant-based design. See CLAUDE.md for the full rationale.
  *
  * Key differences from the earlier version of this file:
  *   - No tenants/tenant_users -- this database has none.
@@ -18,16 +17,15 @@
  *
  * Environment note: this suite is written to run against a Supabase
  * BRANCH of the real project, not a local Docker instance -- Docker
- * Desktop was found to be non-functional in this environment (see
- * docs/club-manager-design.md's "Testing strategy" section). Create a
+ * Desktop was found to be non-functional in this environment. Create a
  * branch via the Supabase MCP `create_branch` tool (or the dashboard)
  * and point SUPABASE_URL/keys at the branch, never at production.
  *
- * 2026-08-27: clubs.org_id is now NOT NULL (see "Tenant fencing fix" in
- * club-manager-design.md) -- fixtures below create two throwaway
- * organizations and assign clubA/clubB to them, and a new describe block
- * exercises the org-scoped RLS that migration added (clubs readable
- * within org / org admin can insert clubs / a different org can't).
+ * 2026-08-27: clubs.org_id is now NOT NULL (tenant fencing fix) --
+ * fixtures below create two throwaway organizations and assign
+ * clubA/clubB to them, and a new describe block exercises the org-scoped
+ * RLS that migration added (clubs readable within org / org admin can
+ * insert clubs / a different org can't).
  */
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';

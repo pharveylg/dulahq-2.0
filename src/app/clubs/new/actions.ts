@@ -12,8 +12,8 @@ export async function createClub(formData: FormData) {
   if (!name) {
     return { error: 'Club name is required.' };
   }
-  // clubs.org_id is NOT NULL (added 2026-08-27, see club-manager-design.md
-  // "Tenant fencing fix") -- a club must belong to an organization.
+  // clubs.org_id is NOT NULL (tenant fencing, added 2026-08-27) -- a club
+  // must belong to an organization.
   if (!orgId) {
     return { error: 'Choose which organization this club belongs to.' };
   }
