@@ -278,9 +278,9 @@ platform team's replies appear in the same place.
 
 ## Not available yet
 
-- Emails to guardians, staff or players. Invitations, reminders and payment
-  receipts are shown in the app (and as browser notifications if the person turned
-  them on) but never emailed.
+- Emailed reminders or payment receipts to guardians, staff or players — those
+  stay in-app only (and as browser notifications if the person turned them on).
+  A guardian **invitation** is emailed now (and can be resent if it didn't land).
 - Creating logins or resetting passwords.
 - Changing an individual staff member's permissions.
 - Listing your club in the public directory yourself (you can take it down, but the IT admin or an organization admin lists it).

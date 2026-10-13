@@ -68,11 +68,13 @@ teams they're assigned to. Club managers see every team in their club.
 **Creating an account.** The only sign-up page is for guardians who have been
 invited (`/guardian-signup`). There is no self-service sign-up for staff, org
 admins or organizers: their login has to exist before they can be added to
-anything, and the app links it by email address. Today that login is created
-outside the app.
+anything, and the app links it by email address. A club or tournament IT admin
+(or a platform admin) creates that login for them from inside the app, with a
+temporary password shown once — see the IT admin guide.
 
-**Forgotten password.** There is no "forgot password" link yet. Ask your
-organization's administrator or the Dulà HQ platform team.
+**Forgotten password.** There's a "Forgot password?" link on the sign-in page
+now. If you were given a temporary password and it's expired, ask your club or
+tournament's IT admin to reissue it instead.
 
 ## Try any role without an account
 

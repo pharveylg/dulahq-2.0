@@ -1,9 +1,14 @@
 # Self-serve organization onboarding
 
-_Written 2026-10-08. Status: **approved to build, phased** — feasibility check against
-the live schema and `main` at `6d2af36`. Source document:
-`dula-hq-self-serve-org-onboarding-review.md`, supplied by the user. Nothing in this
-file has been built yet; Phase 0 is next._
+_Written 2026-10-08. Status: **Phases 0–4 built and verified live (2026-10-08/09,
+`phase18a`–`phase18e`)** — see the build log below for each phase. Phase 5
+(Platform Admin plan/negotiated-rate controls) remains, deferred by agreement.
+Feasibility check against the live schema and `main` at `6d2af36`. Source document:
+`dula-hq-self-serve-org-onboarding-review.md`, supplied by the user, not in this
+repo. **Not yet reflected in `CLAUDE.md`** — this file is currently the only
+verified build record for this feature (org creation, product trials with hard
+caps, the upgrade/Pay-now path, trial expiry and grace period); treat it as
+authoritative for this feature until CLAUDE.md catches up.
 
 **Decisions (2026-10-08):**
 - Negotiated per-org pricing (Phase 5) is confirmed deferred — not needed yet. Every

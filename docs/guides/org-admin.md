@@ -158,13 +158,11 @@ contact them.
 | Nothing happens, or *No existing Dula HQ account found*, when adding staff | The person has no login yet. Logins are created outside the app |
 | **New club** is missing | Your organization has no **Club** product |
 | Nothing is under **Tournaments you manage** | Your organization may not have the **Tournament** product, or has no tournaments yet |
-| *No Dula HQ account exists for that email* | The person has no login. Logins are created outside the app today |
+| *No Dula HQ account exists for that email* | The person has no login. A club or tournament IT admin creates one for them from inside the app |
 
 ## Not available yet
 
 - Designating a primary coach, renaming a club and linking teams, which are the club manager's.
-- A screen where you see and pay Dulà HQ's own invoices to your organization. The
-  platform team sends you the payment instructions.
 - Filing a support request yourself. Club managers and club IT admins can; you can
   ask one to file it, or contact the platform team directly.
 - Creating logins or resetting passwords.

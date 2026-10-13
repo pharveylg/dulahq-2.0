@@ -146,8 +146,9 @@ it, and the platform team's replies appear in the same place.
 
 ## Not available yet
 
-- Inviting people by email, "forgot password" emails and multi-factor reset. These need
-  email delivery, which isn't set up. If someone forgets the password they chose, reissue
-  the login you created for them.
+- Multi-factor reset — no MFA exists anywhere in the app to administer. A
+  "forgot password" email is now sent by the app itself when someone resets
+  their own chosen password; if they're still holding the temporary password
+  you issued and it's expired, reissue it rather than waiting on that email.
 - Signing someone out of their open sessions.
 - Changing a person's role or permissions.

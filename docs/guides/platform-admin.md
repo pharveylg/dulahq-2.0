@@ -184,9 +184,8 @@ The page also shows each organization's subscriptions and recent usage events.
 
 ## Not available yet
 
-- A screen for the platform audit log. The records exist and are kept, but there is
-  no page in the console to read them.
-- Inviting people by email and "forgot password" emails (email delivery isn't set up).
-- Trials or grace periods for products. A product is simply on or off.
+- Inviting people by email generically — password reset and guardian
+  invitations are emailed now (see `CLAUDE.md` §0zh), but there's no general
+  "invite anyone by email" surface in this console.
 - Uploading a payment QR image from the Billing tab.
 - Deleting an organization.

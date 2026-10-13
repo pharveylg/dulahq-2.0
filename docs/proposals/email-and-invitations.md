@@ -1,9 +1,13 @@
 # Email and invitations
 
-_Written 2026-09-25. Status: **proposed, not started.** Needs DNS for `dulahq.app`
-first._
+_Written 2026-09-25. Status: **steps 2 and 3 built** (password reset and guardian
+invitations, via Resend rather than the Supabase SMTP settings originally
+proposed — see CLAUDE.md §0zh for what was built and why). Step 1's DNS/sending-
+domain setup is a manual, owner-held step (CLAUDE.md §0zh notes it the same way
+VAPID's own rollout was). Step 4 (a notification email channel, and IT-admin
+password reset / session revocation) is **not built** — still open._
 
-## State when this was written
+## State when this was written (now partly superseded — see status above)
 
 Nothing in the codebase sends email: no mail library, no `inviteUserByEmail`, no
 `resetPasswordForEmail`. Supabase's built-in email is capped at 2 per hour. That blocks:

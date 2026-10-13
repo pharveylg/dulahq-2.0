@@ -177,8 +177,9 @@ players 18 and over get the notifications themselves.
 
 ## Not available yet
 
-- A **forgot password** option. Ask the club to pass it to the platform team.
-- Email of any kind: invitations, reminders and receipts.
+- Emailed reminders or payment receipts — those stay in-app only. (An
+  invitation email and a "Forgot password?" link on the sign-in page are both
+  there now.)
 - Paying a fee charge inside the app. Only QR invoices in **Billing** can be
   reported there.
 - Player self-sign-up.
