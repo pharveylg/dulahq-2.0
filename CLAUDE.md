@@ -3455,6 +3455,13 @@ Vercel team `g0d3y3` (`team_gvz7rTFE9CltHjfH4DBwMTDB`), **plan: hobby**.
 > The proposal document says the Club app is at `dulahq-2.0.vercel.app`. It is
 > not — Vercel subdomains can't contain dots. It is `dulahq-20.vercel.app`.
 
+**The table's "Live URL" row for Club Manager is stale — see §6.A/§0zg.** By
+2026-10-02 the custom domain `dulahq.app` was confirmed `READY` and aliased to
+this same Vercel project (checked directly via the Vercel MCP tools, not
+assumed); `dulahq-20.vercel.app` still works but `dulahq.app` is the real
+production URL now, and app code (§0zh's email links) is written to point at
+it directly.
+
 Both apps share one Supabase project: **`zytyakbgwaegvftblkcn`** ("Dula HQ",
 us-east-1, Postgres 17). The account has 3 Supabase projects, **2 active — the
 free-tier cap**. Supabase branching is therefore unavailable; test RLS with
@@ -3467,6 +3474,17 @@ which is currently taken by a tenant row and collides with the platform name.
 ---
 
 ## 2. Verified ground truth (2026-09-07, post-migration)
+
+**This whole table is a point-in-time snapshot from the day of the wipe, not a
+standing fact — do not read it as describing today's database.** Table/policy
+counts have grown by dozens of migrations since (§0a onward lists 150+ files),
+and the row counts in particular are long gone: `/demo`'s four-org showcase
+dataset (§0r onward) and self-serve organization creation (§0zi) both write
+real orgs/clubs/teams/players, so "Orgs / clubs / teams / players | 0 / 0 / 0 / 0"
+has not been true since shortly after this section was written. Kept here as
+the historical record of what the 2026-09-07 wipe/migration actually produced,
+the way every other dated section in this file is kept — get live counts from
+the Supabase project directly if you need current numbers.
 
 | Fact | Value |
 |---|---|
@@ -3541,11 +3559,23 @@ Helpers available: `is_platform_admin()`, `is_org_member()`, `is_org_admin()`,
 `is_player_self()`, `can_create_fees(org,club)`, `current_user_org_ids()`,
 `current_user_team_ids()`.
 
+**`is_club_admin()` is stale — see §0d.** `phase6k` (2026-09-09) dropped it
+outright (not redefined in place, on purpose, so a missed reference fails
+loudly) and replaced it with `is_club_manager(check_club_id)` — the
+"club_admin" string was renamed because it collided with the Club Admin
+spec's unrelated IT-only meaning (§0d). `can_read_club`/`can_admin_club` call
+the new name internally; nothing in the live schema still defines
+`is_club_admin()`. `can_create_fees(org,club)` is also listed here but is
+dead per §0d: zero policies reference it.
+
 ---
 
 ## 5. The new API surface the app must use
 
-**Inserts.** `org_id` is `NOT NULL` on 53 tables. A `BEFORE INSERT` trigger
+**Inserts.** `org_id` is `NOT NULL` on 53 tables (as of the 2026-09-07 count;
+stale — §0n already recorded 59 `org_id`-carrying tables by 2026-09-19, and
+more have been added since, e.g. `org_storage_events`/`platform_infra_metrics`
+in §0za). A `BEFORE INSERT` trigger
 derives it from the parent row for 31 of them. These have no parent — the app
 must pass `org_id`: `clubs`, `guardians`, `matches`, `registrations`, `referees`,
 `officiating_team`, `access_requests`, `venues`, `org_officials`,
@@ -3563,6 +3593,9 @@ must still be caught.
 Roster consent rows: `subject_type='tournament_roster'`, `subject_id=<entry id>`,
 `player_id=<player>`. Schedule `expire_stale_approvals()`; until it runs,
 `approval_is_granted()` still refuses anything not explicitly approved.
+**Superseded — see §0g.** `expire_stale_approvals()` is now actually scheduled
+(`phase6u`, hourly via `pg_cron`), closing this exact to-do — §0g's own text
+quotes this line directly when recording the fix.
 
 **The port — the only two places data crosses the org fence, both writes:**
 
@@ -3602,6 +3635,12 @@ the `dulahq-2.0` Vercel project (`vercel domains add`, verified
 at `@` → `216.198.79.1` + `64.29.17.1`, or delegating to `ns1.vercel-dns.com` /
 `ns2.vercel-dns.com`; re-check with `vercel domains verify dulahq.app --scope
 g0d3y3`. `dula-hq.vercel.app` is untouched, still the break-glass URL.
+**Superseded — see §0zg/§0zh.** By 2026-10-02 the production deployment was
+confirmed `READY` and aliased to `dulahq.app` via the Vercel MCP tools (§0zg),
+and §0zh's Resend links are built to land straight on `dulahq.app/auth/confirm`
+— the DNS cutover this bullet describes as pending has since happened; this
+paragraph is kept as the historical record of the registration/attachment
+step, not of DNS's current state.
 Rewrites `/t/:slug`, `/t/:slug/:path*`, `/platformconsole` → `dula-hq.vercel.app`
 are live in `next.config.js`; `src/middleware.ts`'s auth gate excludes those
 paths so the proxy isn't intercepted first. DulaHQ's canonical/`og:url` now
@@ -3636,13 +3675,27 @@ queries `public_tournaments` natively — not proxied, the proxy is only for
 opening a specific tournament's actual engine. Login's four dead demo-account
 buttons (referencing the deleted `test-*` accounts) are removed.
 
-**D. Wire the app to §5.** `database.types.ts` is generated and committed
-(`src/lib/supabase/database.types.ts`) but not yet wired into
-`createClient<Database>()` in `client.ts`/`server.ts` — start there.
+**D. Wire the app to §5 — done.** `database.types.ts` is generated and
+committed (`src/lib/supabase/database.types.ts`) and **is** wired into
+`createClient<Database>()` in both `client.ts` and `server.ts` (commit
+"Wire the app to §5's actual backend contract (D)", 2026-09-07 — this
+bullet was never updated afterward). Confirmed directly in the current code:
+`src/lib/supabase/client.ts` and `src/lib/supabase/server.ts` both import
+`Database` from `./database.types` and pass it to
+`createBrowserClient<Database>()`/`createServerClient<Database>()`.
 
-**E. Sports + PWA.** `sports` is seeded (football production; tennis, pickleball,
-basketball `coming_soon`) and `sport_id` is on clubs, teams and tournaments.
-Remaining: manifest, service worker, picker.
+**E. Sports + PWA — the "remaining" items are also done now.** `sports` is
+seeded (football production; tennis, pickleball, basketball `coming_soon`)
+and `sport_id` is on clubs, teams and tournaments. This bullet used to say
+"Remaining: manifest, service worker, picker" — confirmed directly in the
+current code that all three exist: `src/app/manifest.ts` (Next.js's manifest
+file convention, auto-linked), `public/sw.js` (a real service worker,
+registered via `RegisterServiceWorker` in `src/app/layout.tsx` — see §0c
+Phase 5a, which built on top of it rather than creating it from scratch), and
+a sport picker (`<select name="sport_id">` in
+`src/app/clubs/new/NewClubForm.tsx`). No dated section narrates when these
+landed; recorded here from direct inspection rather than left pointing at
+nonexistent work.
 
 **F. Contract steps — audited, none executable yet.** Checked all six against
 the actual app code rather than assuming:
@@ -3722,8 +3775,9 @@ migrations supersede Appendix F entirely — do not run it.
   photos (`media-actions.ts`) and now club logos (`EditNameForm.tsx`, §0j),
   both verified working against the real bucket. Storage is a mix of
   Supabase (1 GB free, small structured blobs like `document_uploads`) and
-  R2 (photos, logos) — not Supabase alone. `wrangler.toml` in this repo is
-  still dead weight; nothing here runs on Workers.
+  R2 (photos, logos) — not Supabase alone. `wrangler.toml` (the dead-weight
+  file this line used to flag) has since been deleted from this repo; nothing
+  here runs on Workers.
 - ~~Supabase built-in email sends 2 per hour — blocks guardian signup, password
   resets and staff invites. Wire custom SMTP before onboarding any real
   club.~~ **Superseded, see §0zh.** Guardian invite delivery and password
