@@ -448,9 +448,8 @@ feature at all yet — building it is in scope, not deferred. Phasing:
   hidden once subscribed) on both `/player` and `/guardian`, calling
   `Notification.requestPermission()` then `pushManager.subscribe()` then a
   new `savePushSubscription()` server action wrapping the RPC. `public/sw.js`
-  (previously fetch-passthrough only, deliberately caching nothing dynamic
-  — see §7's proposal-appendix bug this file already avoided) gained
-  `push`/`notificationclick` listeners; the push payload is exactly what
+  (previously fetch-passthrough only, deliberately caching nothing dynamic)
+  gained `push`/`notificationclick` listeners; the push payload is exactly what
   `notify()` JSON.stringifies (`title`/`body`/`linkPath`), not the Push
   API's own envelope, since there's no template registry yet — `payload`
   must include rendered `title`/`body` directly until Phase 5c wires real
@@ -3450,10 +3449,9 @@ platform admin persona: real numbers, correct progress bars, no console errors.
 | Stack | Vite, single-file `index.html` (~483 KB rendered) | Next.js 15 / React 19, App Router |
 | Auth storage | `localStorage` | `@supabase/ssr` cookies + `src/middleware.ts` |
 
-Vercel team `g0d3y3` (`team_gvz7rTFE9CltHjfH4DBwMTDB`), **plan: hobby**.
-
-> The proposal document says the Club app is at `dulahq-2.0.vercel.app`. It is
-> not — Vercel subdomains can't contain dots. It is `dulahq-20.vercel.app`.
+Vercel team `g0d3y3` (`team_gvz7rTFE9CltHjfH4DBwMTDB`), **plan: hobby**. Note
+Vercel subdomains can't contain dots — the Club app's project slug reads
+`dulahq-20`, not `dulahq-2.0`.
 
 **The table's "Live URL" row for Club Manager is stale — see §6.A/§0zg.** By
 2026-10-02 the custom domain `dulahq.app` was confirmed `READY` and aliased to
@@ -3736,28 +3734,19 @@ page both rendered it correctly, link target was the right `/t/:org/:slug`.
 
 ---
 
-## 7. Do not trust the proposal's appendices
+## 7. (removed 2026-10-14)
 
-`dula-hq-integration-proposal.md` Appendices A, D and F are **unverified and
-contain known defects**. None of that SQL has ever been executed. The applied
-migrations supersede Appendix F entirely — do not run it.
-
-- **`has_permission(capability, scope_type, scope_id)` in D.5 ignores
-  `scope_type` and `scope_id` entirely.** Superseded by `has_role()`.
-- **D.5 keys RBAC on `subject_email`; F.1 on `subject_id`.** Superseded:
-  `role_assignments` keys on `user_id` → `auth.users.id`.
-- `granted_by email text not null` (D.5) — does not parse.
-- `unique (scope_type, scope_id, subject_email, role_id)` with nullable
-  `scope_id` — nulls are distinct, so platform rows duplicate freely. The applied
-  version uses two partial unique indexes instead.
-- No `enable row level security` anywhere in the document.
-- F.2's profiles backfill breaks on duplicate emails; `_identity_missing` uses a
-  predicate that can never be true, so the safety net always reports all-clear.
-- Appendix A's service worker caches `/icons/192.png` while the manifest ships
-  `/icons/icon-192.png` — `addAll` is atomic, so install fails and the worker
-  never activates. Its scope `/` also intercepts `/t/*`, against its own footnote.
-- The `@supabase/ssr` bootstrap destructures `data.user` from `getSession()`,
-  which never returns one — every session reads as signed out. Use `getUser()`.
+This section used to warn against trusting a `dula-hq-integration-proposal.md`
+document's Appendices A, D and F — specific SQL/RBAC/service-worker defects
+found in it. That file has no presence in this repo (not tracked, no git
+history, not even a deletion) and isn't flagged anywhere else as an external
+document the user holds outside the repo, unlike e.g. §0l's "tournament.md" or
+§0zi's self-serve-onboarding source doc. Since nobody can verify its contents
+against anything real, the warning itself was removed rather than kept as an
+unfalsifiable claim. The numbering gap is left in place rather than
+renumbering §8 onward, which are cross-referenced by number throughout this
+file. The underlying rule survives in §9: trust the applied migrations and the
+live schema, never a Markdown appendix.
 
 ---
 
@@ -3794,9 +3783,10 @@ migrations supersede Appendix F entirely — do not run it.
 
 ## 9. How to work on this
 
-- **Run the SQL.** Every defect in §7 would have surfaced on first execution.
-  Migrations live in `supabase/migrations/` as `.sql` files, not in a Markdown
-  appendix.
+- **Run the SQL.** A defect-ridden Markdown appendix of proposed SQL (since
+  removed, §7) would have surfaced its own errors on first execution instead
+  of sitting untrusted for weeks. Migrations live in `supabase/migrations/` as
+  `.sql` files, not in a Markdown appendix.
 - **Ask for a test, not just a fix.** Two that caught real bugs on 2026-09-07:
   an `anon` simulation proved the public directory had gone dark after a policy
   rebuild dropped its policies; a port call with no consent recorded proved the
