@@ -1199,7 +1199,9 @@ policy. Same class of gap as §0e's `it_club_directory()`. Flagged separately.
 
 ## 0j. Club entitlement P0 batch (2026-09-09)
 
-`docs/club-entitlement-gap-analysis.md` scoped 25 recommendations before
+A club-entitlement gap analysis (2026-09-09; superseded by `docs/known-gaps.md`
+once everything in it was resolved or folded elsewhere — the original 25-item
+document is in git history) scoped 25 recommendations before
 Tournament-entitlement work begins. This lands the six P0 items — and, true
 to the pattern of every phase in this session so far, verifying each one live
 surfaced real bugs beyond what was originally scoped.
@@ -1301,7 +1303,7 @@ same limitation recorded in §0f) rather than through the UI.
 
 ## 0k. Club entitlement P1 batch (2026-09-09)
 
-Five of the seven P1 items from `docs/club-entitlement-gap-analysis.md`
+Five of the seven P1 items from that same gap analysis
 (7, 8, 10, 11, 12 — #9 was already covered by §0j's P0-6 settings work; #13,
 IT's club-scoping, is deliberately held for the Tournament/org-hierarchy pass
 per the user's own framing: "it will always be org then club/tournament").
@@ -1596,8 +1598,8 @@ with a permission bundle. Entry-scoped, not tournament-wide.
   `set_tournament_staff_account_status()` (same narrow-RPC pattern already
   proven three times on the club side) already matches this ruling
   exactly, so no further code change follows from it — it closes P1-#13
-  rather than reopening it. `docs/club-entitlement-gap-analysis.md` §11/§13
-  updated to record the resolution.
+  rather than reopening it. The gap analysis's own §11/§13 (closed, now
+  removed — see `docs/known-gaps.md`'s note) is what this closes.
 - **No Tournament Organizer console UI, no external registration form UI.**
   This pass is the authorization layer only — tables, permission catalog,
   resolver functions, RLS. Verified end-to-end via direct RLS/RPC calls
@@ -1713,8 +1715,8 @@ both entitlements**, and this is **additive** — `club_it_admin` keeps its
 own club-scoped view-as exactly as §0e built it, `tournament_it_admin`
 keeps its own tournament-scoped one, unchanged. This is a **third, wider
 tier** of the same proven pattern, not a merge of the other two (the
-opposite of the `org_it_admin` unification the user explicitly rejected in
-`club-entitlement-gap-analysis.md` §13).
+opposite of the `org_it_admin` unification the user explicitly rejected
+when the club-entitlement gap analysis raised it, §13).
 
 `platform_impersonation_sessions` is a separate table from
 `impersonation_sessions`, not a widened version of it — the club-scoped
@@ -1812,9 +1814,11 @@ billing-domain tests from the synced commit).
 
 ## 0n. Closing the gap-analysis findings that didn't need a product decision (2026-09-19)
 
-`docs/platform-club-tournament-gap-analysis.md` left four findings open after
-§0m. This fixes the ones that were purely engineering; the rest are listed at
-the end because each one needs a decision, not a fix.
+A platform/club/tournament gap analysis (2026-09-11; every finding it raised
+was eventually resolved, so the document itself was retired — see
+`docs/known-gaps.md`) left four findings open after §0m. This fixes the ones
+that were purely engineering; the rest are listed at the end because each one
+needs a decision, not a fix.
 
 ### Org suspension now actually suspends (phase9a) — the last open P0
 

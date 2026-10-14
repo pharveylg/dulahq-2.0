@@ -736,11 +736,10 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ clu
     }))
   );
 
-  // Club-vs-org branding precedence (docs/club-entitlement-gap-analysis.md
-  // §2, resolveLogoKey's own doc comment): club branding wins when set,
-  // falls back to the org's. The club's logo is an R2 key (signed per
-  // request, like media above); the org's is a plain URL, entered directly,
-  // not uploaded through this app.
+  // Club-vs-org branding precedence (resolveLogoKey's own doc comment):
+  // club branding wins when set, falls back to the org's. The club's logo
+  // is an R2 key (signed per request, like media above); the org's is a
+  // plain URL, entered directly, not uploaded through this app.
   const hasOwnLogo = !!parseClubBranding(club.branding).logoKey;
   const { data: orgForBranding } = hasOwnLogo
     ? { data: null }

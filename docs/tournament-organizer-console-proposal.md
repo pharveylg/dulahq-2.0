@@ -7,9 +7,11 @@ registration first; `entry_fee`/`capacity` added to categories; Team
 Coordinator "flag for review" skipped in v1; route accepted as
 `/tm/[orgSlug]/[tournamentSlug]`. What was built, and three bugs found only by
 driving it, are in CLAUDE.md §0o. The proposal below is left as written.
-It closes gap analysis P1-10 (`docs/platform-club-tournament-gap-analysis.md`
-§3.2) and is the first native Tournament workspace in this repo. The frozen Vite
-engine (brackets, live scores, matches) stays proxied and is out of scope.
+It closes P1-10 of the platform/club/tournament gap analysis (§3.2; that
+document has since been retired — everything in it was resolved, see
+`docs/known-gaps.md`) and is the first native Tournament workspace in this
+repo. The frozen Vite engine (brackets, live scores, matches) stays proxied
+and is out of scope.
 
 ## The problem, checked against the live database
 
