@@ -7,6 +7,22 @@ before acting on it — this file goes stale.
 
 ---
 
+## Standing rule: subagent delegation and commit/PR attribution (2026-10-14)
+
+These three rules are permanent and govern all future work in this repo:
+
+1. No task in this repo — however small — is ever done directly by the primary/main agent session. Every task must be delegated to a subagent (via the Agent tool) instead.
+2. Every git commit made in this repo must end with this exact line:
+```
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+```
+3. Every pull request description created for this repo must end with this exact line:
+```
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
+---
+
 ## 0. What changed on 2026-09-07 — read this first
 
 **The database consolidation (phases 1–5) is applied and verified.** Nineteen
