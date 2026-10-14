@@ -11,7 +11,7 @@ before acting on it — this file goes stale.
 
 These three rules are permanent and govern all future work in this repo:
 
-1. Non-trivial tasks in this repo are delegated to a subagent (via the Agent tool) rather than done directly by the primary/main agent session. A quick mechanical edit — a one- or two-line fix, a small doc correction — can be done directly; anything involving research, multi-step work, a code change, or a broader review goes through a subagent.
+1. Never do real work in this repo all by yourself — use a subagent (via the Agent tool) for every task that is not trivial. Investigation, code, review and documentation all still get delegated. Only a genuinely trivial edit (a one- or two-line fix, a small wording correction) can be done directly.
 2. Every git commit made in this repo must end with this exact line:
 ```
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
